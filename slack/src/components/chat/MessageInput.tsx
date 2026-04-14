@@ -43,6 +43,11 @@ export default function MessageInput({
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
+  // Item 10: Shift+Enter hint
+  const [showShiftEnterHint, setShowShiftEnterHint] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return !localStorage.getItem('shiftEnterHintDismissed');
+  });
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isComposingRef = useRef(false);
@@ -174,6 +179,30 @@ export default function MessageInput({
       }
       setContent('');
       if (textareaRef.current) textareaRef.current.style.height = 'auto';
+
+      // Item 1: Check for @mentions of non-members in channel messages
+      if (channelId) {
+        const mentionMatches = trimmed.match(/@(\w+)/g);
+        if (mentionMatches) {
+          try {
+            const res = await fetch(`/api/channels/${channelId}/members`);
+            if (res.ok) {
+              const members: Array<{ displayName: string }> = await res.json();
+              const memberNames = new Set(members.map(m => m.displayName.toLowerCase()));
+              const nonMembers = mentionMatches
+                .map(m => m.slice(1))
+                .filter(name => !['channel', 'here', 'everyone'].includes(name.toLowerCase()) && !memberNames.has(name.toLowerCase()));
+              if (nonMembers.length > 0) {
+                const name = nonMembers[0];
+                setEphemeralMessage(`${name} is not in this channel. /invite @${name} to add them.`);
+                setTimeout(() => setEphemeralMessage(null), 8000);
+              }
+            }
+          } catch {
+            // ignore
+          }
+        }
+      }
     } catch {
       // keep content on failure
     } finally {
@@ -309,6 +338,12 @@ export default function MessageInput({
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();
+    }
+
+    // Item 10: Dismiss Shift+Enter hint on first use
+    if (e.key === 'Enter' && e.shiftKey && showShiftEnterHint) {
+      setShowShiftEnterHint(false);
+      localStorage.setItem('shiftEnterHintDismissed', '1');
     }
   }
 
@@ -579,6 +614,13 @@ export default function MessageInput({
           </Button>
         </div>
       </div>
+
+      {/* Item 10: Shift+Enter hint */}
+      {showShiftEnterHint && (
+        <p className="mt-1 px-1 text-[11px] text-slate-600">
+          Tip: <kbd className="bg-white/10 px-1 rounded text-slate-500">Shift+Enter</kbd> for new line
+        </p>
+      )}
     </div>
   );
 }

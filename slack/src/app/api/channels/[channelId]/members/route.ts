@@ -118,6 +118,21 @@ export async function POST(
     .values({ channelId, userId, role: "member" })
     .returning();
 
+  // Fetch channel name for system message
+  const [channelRow] = await db
+    .select({ name: channels.name })
+    .from(channels)
+    .where(eq(channels.id, channelId))
+    .limit(1);
+
+  // Insert system message: "X joined #channel"
+  await db.insert(messages).values({
+    channelId,
+    userId: targetUser.id,
+    content: `${targetUser.displayName} joined #${channelRow?.name ?? channelId}`,
+    contentType: "system",
+  });
+
   return NextResponse.json(newMember, { status: 201 });
 }
 
@@ -192,9 +207,32 @@ export async function DELETE(
     return NextResponse.json({ error: "Cannot remove the channel owner" }, { status: 400 });
   }
 
+  // Fetch user and channel info for system message before deleting
+  const [leavingUser] = await db
+    .select({ displayName: users.displayName })
+    .from(users)
+    .where(eq(users.id, targetUserId))
+    .limit(1);
+
+  const [leaveChannel] = await db
+    .select({ name: channels.name })
+    .from(channels)
+    .where(eq(channels.id, channelId))
+    .limit(1);
+
   await db
     .delete(channelMembers)
     .where(and(eq(channelMembers.channelId, channelId), eq(channelMembers.userId, targetUserId)));
+
+  // Insert system message: "X left #channel"
+  if (leavingUser && leaveChannel) {
+    await db.insert(messages).values({
+      channelId,
+      userId: targetUserId,
+      content: `${leavingUser.displayName} left #${leaveChannel.name}`,
+      contentType: "system",
+    });
+  }
 
   return NextResponse.json({ success: true });
 }

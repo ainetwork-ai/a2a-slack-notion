@@ -40,6 +40,16 @@ export function useNotifications() {
     prevUnreadCountRef.current = unreadCount;
   }, [unreadCount, notifications]);
 
+  // Item 12: Update document title with unread count
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    if (unreadCount > 0) {
+      document.title = `Slack-A2A (${unreadCount})`;
+    } else {
+      document.title = 'Slack-A2A';
+    }
+  }, [unreadCount]);
+
   async function markAsRead(ids: string[]) {
     await fetch('/api/notifications', {
       method: 'PATCH',

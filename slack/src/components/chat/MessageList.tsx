@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useState } from 'react';
 import { format, isToday, isYesterday, isSameDay } from 'date-fns';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import MessageItem from './MessageItem';
@@ -17,6 +17,7 @@ interface MessageListProps {
   onDelete?: (id: string) => void;
   isThreadView?: boolean;
   lastReadAt?: string | null;
+  channelId?: string;
 }
 
 function DateSeparator({ date }: { date: Date }) {
@@ -57,11 +58,13 @@ export default function MessageList({
   onDelete,
   isThreadView,
   lastReadAt,
+  channelId,
 }: MessageListProps) {
   const { user } = useAuth();
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const prevLengthRef = useRef(0);
   const hasScrolledInitially = useRef(false);
+  const [showJumpButton, setShowJumpButton] = useState(false);
 
   // Reset initial scroll flag when message list changes context (e.g. channel switch)
   useEffect(() => {
@@ -91,6 +94,9 @@ export default function MessageList({
         requestAnimationFrame(() => {
           el.scrollTop = el.scrollHeight;
         });
+      } else {
+        // Item 8: Show jump button when new messages arrive while scrolled up
+        setShowJumpButton(true);
       }
     }
     prevLengthRef.current = messages.length;
@@ -102,6 +108,11 @@ export default function MessageList({
       const el = e.currentTarget;
       if (el.scrollTop < 100 && hasMore && onLoadMore) {
         onLoadMore();
+      }
+      // Item 8: Hide jump button if user scrolls near bottom
+      const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+      if (distanceFromBottom <= 150) {
+        setShowJumpButton(false);
       }
     },
     [hasMore, onLoadMore]
@@ -124,6 +135,12 @@ export default function MessageList({
     }
   }
 
+  function scrollToBottom() {
+    const el = scrollAreaRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+    setShowJumpButton(false);
+  }
+
   if (isLoading && messages.length === 0) {
     return (
       <div className="flex-1 overflow-y-auto">
@@ -135,8 +152,9 @@ export default function MessageList({
   }
 
   return (
+    <div className="relative flex-1 overflow-hidden">
     <div
-      className="message-area flex-1 overflow-y-auto scrollbar-slack"
+      className="message-area h-full overflow-y-auto scrollbar-slack"
       onScroll={handleScroll}
       ref={scrollAreaRef}
     >
@@ -176,10 +194,12 @@ export default function MessageList({
                   <MessageItem
                     message={message}
                     currentUserId={user?.id}
+                    currentUserName={user?.displayName}
                     onEdit={onEdit}
                     onDelete={onDelete}
                     isThreadView={isThreadView}
                     isCompact={isCompact}
+                    channelId={channelId}
                   />
                 </div>
               );
@@ -187,6 +207,19 @@ export default function MessageList({
           </div>
         ))}
       </div>
+    </div>
+
+    {/* Item 8: Jump to new messages button */}
+    {showJumpButton && (
+      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20">
+        <button
+          onClick={scrollToBottom}
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-[#4a154b] hover:bg-[#611f6a] text-white text-xs font-medium rounded-full shadow-lg transition-colors"
+        >
+          ↓ New messages
+        </button>
+      </div>
+    )}
     </div>
   );
 }

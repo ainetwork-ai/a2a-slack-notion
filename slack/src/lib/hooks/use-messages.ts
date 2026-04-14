@@ -12,7 +12,7 @@ export interface Reaction {
 export interface Message {
   id: string;
   content: string;
-  contentType: 'text' | 'agent-response' | 'file';
+  contentType: 'text' | 'agent-response' | 'file' | 'system';
   senderId: string;
   senderName: string;
   senderAvatar?: string;

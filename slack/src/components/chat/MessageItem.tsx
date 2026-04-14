@@ -63,6 +63,9 @@ function renderInlineMarkdown(text: string): string {
   html = html.replace(/\*([^*\n]+)\*/g, '<strong class="font-semibold text-white">$1</strong>');
   html = html.replace(/_([^_\n]+)_/g, '<em class="italic">$1</em>');
   html = html.replace(/(https?:\/\/[^\s<>"]+)/g, '<a href="$1" target="_blank" rel="noopener noreferrer" class="text-[#36c5f0] hover:underline">$1</a>');
+  // Item 2 & 13: Style @channel/@here/@everyone and regular @mentions
+  html = html.replace(/@(channel|here|everyone)\b/g, '<span class="bg-[#4a154b]/30 px-1 rounded text-white font-semibold">@$1</span>');
+  html = html.replace(/@(\w+)/g, '<span class="text-[#36c5f0] bg-[#36c5f0]/10 px-0.5 rounded cursor-pointer hover:underline">@$1</span>');
   html = html.replace(/\n/g, '<br>');
   html = html.replace(/\x00BQSTART\x00([\s\S]*?)\x00BQEND\x00/g, '<blockquote class="border-l-4 border-[#4a154b] pl-3 text-slate-400 bg-white/5 my-0.5">$1</blockquote>');
   return html;
@@ -191,21 +194,25 @@ import { useAppStore } from '@/lib/stores/app-store';
 interface MessageItemProps {
   message: Message;
   currentUserId?: string;
+  currentUserName?: string;
   onEdit?: (id: string, content: string) => void;
   onDelete?: (id: string) => void;
   isThreadView?: boolean;
   isCompact?: boolean;
   channelName?: string;
+  channelId?: string;
 }
 
 export default function MessageItem({
   message,
   currentUserId,
+  currentUserName,
   onEdit,
   onDelete,
   isThreadView,
   isCompact,
   channelName,
+  channelId,
 }: MessageItemProps) {
   const { setActiveThread } = useAppStore();
   const [showActions, setShowActions] = useState(false);
@@ -229,6 +236,10 @@ export default function MessageItem({
     .slice(0, 2);
 
   const isAgentResponse = message.contentType === 'agent-response';
+  const isSystemMessage = message.contentType === 'system';
+
+  // Item 3: Check if current user is mentioned
+  const isMentioned = !!(currentUserName && message.content.includes(`@${currentUserName}`));
 
   // Extract first URL for OG preview
   const firstUrl = extractFirstUrl(message.content);
@@ -270,13 +281,37 @@ export default function MessageItem({
     });
   }
 
+  // Item 7: Timestamp permalink
+  const [timestampToast, setTimestampToast] = useState(false);
+  const timestampToastRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  function handleTimestampClick() {
+    const base = typeof window !== 'undefined' ? window.location.origin : '';
+    const path = channelId ? `/workspace/channel/${channelId}` : window.location.pathname;
+    const permalink = `${base}${path}#msg-${message.id}`;
+    navigator.clipboard.writeText(permalink).then(() => {
+      setTimestampToast(true);
+      if (timestampToastRef.current) clearTimeout(timestampToastRef.current);
+      timestampToastRef.current = setTimeout(() => setTimestampToast(false), 2000);
+    });
+  }
+
+  // Item 4: System message rendering
+  if (isSystemMessage) {
+    return (
+      <div id={`msg-${message.id}`} className="flex items-center justify-center py-1 px-4">
+        <span className="text-xs text-slate-500 italic">{message.content}</span>
+      </div>
+    );
+  }
+
   return (
     <div
       id={`msg-${message.id}`}
       className={cn(
         'group relative flex items-start gap-3 px-4 hover:bg-white/[0.03] rounded-lg transition-colors',
         isCompact ? 'py-0.5' : 'py-1.5',
-        isAgentResponse && 'bg-[#36c5f0]/5 border-l-2 border-[#36c5f0]/30'
+        isAgentResponse && 'bg-[#36c5f0]/5 border-l-2 border-[#36c5f0]/30',
+        isMentioned && 'border-l-4 border-yellow-500 bg-yellow-500/5'
       )}
       onMouseEnter={() => setShowActions(true)}
       onMouseLeave={() => setShowActions(false)}
@@ -315,9 +350,18 @@ export default function MessageItem({
               Bot
             </Badge>
           )}
-          <span className="text-xs text-slate-500">
+          <button
+            onClick={handleTimestampClick}
+            className="text-xs text-slate-500 hover:text-slate-300 hover:underline relative"
+            title="Copy link to message"
+          >
             {format(new Date(message.createdAt), 'h:mm a')}
-          </span>
+            {timestampToast && (
+              <span className="absolute left-0 -top-6 bg-[#36c5f0] text-[#1a1d21] text-xs font-medium px-2 py-0.5 rounded shadow-lg whitespace-nowrap pointer-events-none z-20">
+                Link copied!
+              </span>
+            )}
+          </button>
           {message.editedAt && (
             <TooltipProvider>
               <Tooltip>

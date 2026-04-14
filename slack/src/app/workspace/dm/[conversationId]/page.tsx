@@ -134,6 +134,25 @@ export default function DMPage({ params }: { params: Promise<{ conversationId: s
       {/* Messages */}
       <div className="flex flex-1 overflow-hidden">
         <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
+          {/* Item 5: DM welcome banner when no messages */}
+          {!isLoading && messages.length === 0 && otherUser && (
+            <div className="px-6 pt-8 pb-4">
+              <div className="flex items-center gap-3 mb-2">
+                <Avatar className="w-12 h-12">
+                  {otherUser.avatarUrl && (
+                    <AvatarImage src={otherUser.avatarUrl} alt={otherUser.displayName} />
+                  )}
+                  <AvatarFallback className={cn('text-lg font-semibold', isAgent ? 'bg-[#36c5f0]/20 text-[#36c5f0]' : 'bg-[#4a154b] text-white')}>
+                    {isAgent ? <Bot className="w-6 h-6" /> : otherUser.displayName.split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2)}
+                  </AvatarFallback>
+                </Avatar>
+                <span className="text-2xl font-bold text-white">{otherUser.displayName}</span>
+              </div>
+              <p className="text-slate-400 text-sm">
+                This is the very beginning of your direct message history with <span className="font-semibold text-white">{otherUser.displayName}</span>.
+              </p>
+            </div>
+          )}
           <MessageList
             messages={messages}
             isLoading={isLoading}

@@ -301,6 +301,20 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
       {/* Messages */}
       <div className="flex flex-1 overflow-hidden">
         <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
+          {/* Item 11: Channel welcome banner when < 3 messages */}
+          {!isLoading && messages.filter(m => m.contentType !== 'system').length < 3 && channel && (
+            <div className="px-6 pt-6 pb-3 border-b border-white/5">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-3xl font-bold text-white">#{channel.name}</span>
+              </div>
+              <p className="text-slate-300 text-sm">
+                Welcome to <span className="font-semibold text-white">#{channel.name}</span>! This is the beginning of the channel.
+                {channel.description && (
+                  <span className="text-slate-400"> — {channel.description}</span>
+                )}
+              </p>
+            </div>
+          )}
           <MessageList
             messages={messages}
             isLoading={isLoading}
@@ -309,6 +323,7 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
             onEdit={editMessage}
             onDelete={deleteMessage}
             lastReadAt={lastReadAtRef.current}
+            channelId={channelId}
           />
           <TypingIndicator typingUsers={typingUsers} />
           <MessageInput
