@@ -128,3 +128,166 @@
     @apply font-sans;
   }
 }
+
+/* ── Slack-A2A custom styles ─────────────────────────────── */
+
+/* Dark sidebar — always dark regardless of theme */
+.sidebar-dark {
+  background-color: #1a1d21;
+  color: #d1d2d3;
+}
+
+/* Main content area — theme-aware */
+.main-content {
+  background-color: #1a1d21;
+  color: #d1d2d3;
+}
+
+.light .main-content {
+  background-color: #ffffff;
+  color: #1d1c1d;
+}
+
+/* Channel header — theme-aware */
+.light .channel-header {
+  background-color: #ffffff !important;
+  border-color: rgba(0, 0, 0, 0.1) !important;
+}
+
+.light .channel-header .text-white {
+  color: #1d1c1d !important;
+}
+
+.light .channel-header .text-slate-400 {
+  color: #616061 !important;
+}
+
+/* Messages area — light mode overrides */
+.light .message-area {
+  background-color: #ffffff;
+}
+
+.light .message-area .text-white,
+.light .message-area .text-slate-200 {
+  color: #1d1c1d !important;
+}
+
+.light .message-area .text-slate-400,
+.light .message-area .text-slate-500 {
+  color: #616061 !important;
+}
+
+.light .message-area .hover\:bg-white\/\[0\.03\]:hover {
+  background-color: rgba(0, 0, 0, 0.03) !important;
+}
+
+/* Message input — light mode */
+.light .message-input-area {
+  background-color: #ffffff;
+  border-color: rgba(0, 0, 0, 0.15);
+}
+
+.light .message-input-area textarea {
+  color: #1d1c1d;
+  background-color: #f8f8f8;
+}
+
+/* Thread panel — light mode */
+.light .thread-panel {
+  background-color: #f8f8f8;
+  border-color: rgba(0, 0, 0, 0.1);
+}
+
+/* Workspace nav (channel list panel) — light mode */
+.light .workspace-nav {
+  background-color: #3f0e40;
+}
+
+/* Pinned message indicator — always visible */
+.pin-indicator {
+  color: #e8912d;
+}
+
+/* Smooth slack-style scrollbar */
+.scrollbar-slack {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
+}
+
+.scrollbar-slack::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.scrollbar-slack::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scrollbar-slack::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+}
+
+.scrollbar-slack::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+/* Typing indicator dots */
+.typing-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: #bcabbc;
+  animation: typing-bounce 1.2s infinite ease-in-out;
+}
+
+@keyframes typing-bounce {
+  0%, 60%, 100% {
+    transform: translateY(0);
+    opacity: 0.5;
+  }
+  30% {
+    transform: translateY(-4px);
+    opacity: 1;
+  }
+}
+
+/* Message hover actions transition */
+.message-actions {
+  transition: opacity 0.1s ease;
+}
+
+/* Slack-like message timestamp */
+.message-timestamp {
+  font-size: 0.7rem;
+  color: #717274;
+  white-space: nowrap;
+}
+
+/* Smooth channel/DM item transitions */
+.channel-item {
+  transition: background-color 0.1s ease, color 0.1s ease;
+}
+
+/* Agent response subtle highlight */
+.agent-response-bg {
+  background: linear-gradient(
+    to right,
+    rgba(54, 197, 240, 0.05),
+    transparent
+  );
+}
+
+/* Focus ring for inputs */
+.focus-ring-slack:focus-visible {
+  outline: 2px solid #4a154b;
+  outline-offset: 2px;
+}
+
+/* Full height layout */
+html,
+body,
+#__next {
+  height: 100%;
+}
