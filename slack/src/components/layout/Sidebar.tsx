@@ -2,7 +2,8 @@
 
 import { useRouter, usePathname } from 'next/navigation';
 
-import { Home, Search, Bell, MessageSquare, Smile, LogOut, Sun, Moon, Inbox } from 'lucide-react';
+import { Home, Search, Bell, MessageSquare, Smile, LogOut, Sun, Moon, Inbox, MessagesSquare } from 'lucide-react';
+import NotificationPanel from '@/components/modals/NotificationPanel';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import {
@@ -100,16 +101,25 @@ export default function Sidebar() {
         onClick={() => setSearchOpen(true)}
         active={searchOpen}
       />
-      <NavButton
-        icon={<Bell className="w-5 h-5" />}
-        label="Notifications"
-        onClick={() => {}}
-        badge={unreadCount}
-      />
+      {/* Notifications — uses NotificationPanel dropdown */}
+      <div className="flex items-center justify-center">
+        <NotificationPanel />
+      </div>
       <NavButton
         icon={<MessageSquare className="w-5 h-5" />}
         label="Direct Messages"
-        onClick={() => router.push('/workspace')}
+        onClick={() => {
+          // Scroll DM section into view in sidebar
+          const dmSection = document.querySelector('[data-section="dm"]');
+          if (dmSection) dmSection.scrollIntoView({ behavior: 'smooth' });
+          router.push('/workspace');
+        }}
+      />
+      <NavButton
+        icon={<MessagesSquare className="w-5 h-5" />}
+        label="Threads"
+        onClick={() => router.push('/workspace/threads')}
+        active={pathname === '/workspace/threads'}
       />
       <NavButton
         icon={<Inbox className="w-5 h-5" />}

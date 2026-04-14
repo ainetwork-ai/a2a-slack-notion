@@ -48,7 +48,7 @@ export default function DMList() {
   }
 
   return (
-    <div className="px-2 py-1">
+    <div className="px-2 py-1" data-section="dm">
       <div className="flex items-center justify-between px-2 py-1 group">
         <button
           className="flex items-center gap-1 text-[#bcabbc] hover:text-white text-sm font-semibold transition-colors"
