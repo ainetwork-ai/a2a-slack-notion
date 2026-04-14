@@ -3,7 +3,6 @@
 import { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Copy, Check, UserPlus, Users, Settings, Loader2 } from 'lucide-react';
 import useSWR from 'swr';
@@ -18,10 +17,6 @@ interface WorkspaceModalProps {
 
 export default function WorkspaceModal({ open, onOpenChange }: WorkspaceModalProps) {
   const [tab, setTab] = useState<'info' | 'invite' | 'members'>('info');
-  const [inviteAddress, setInviteAddress] = useState('');
-  const [inviteDisplayName, setInviteDisplayName] = useState('');
-  const [isInviting, setIsInviting] = useState(false);
-  const [inviteSuccess, setInviteSuccess] = useState(false);
   const [copied, setCopied] = useState(false);
   const [inviteLink, setInviteLink] = useState('');
   const [isGeneratingLink, setIsGeneratingLink] = useState(false);
@@ -63,33 +58,6 @@ export default function WorkspaceModal({ open, onOpenChange }: WorkspaceModalPro
     navigator.clipboard.writeText(inviteLink);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
-  }
-
-  async function handleInvite() {
-    if (!inviteAddress.trim() || !inviteDisplayName.trim()) return;
-    setIsInviting(true);
-    try {
-      const res = await fetch('/api/auth/verify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          signature: 'invite-bypass',
-          address: inviteAddress.trim(),
-          displayName: inviteDisplayName.trim(),
-          provider: 'invite',
-        }),
-      });
-      if (res.ok) {
-        setInviteSuccess(true);
-        setInviteAddress('');
-        setInviteDisplayName('');
-        setTimeout(() => setInviteSuccess(false), 3000);
-      }
-    } catch {
-      // fail silently
-    } finally {
-      setIsInviting(false);
-    }
   }
 
   const tabs = [
@@ -174,7 +142,7 @@ export default function WorkspaceModal({ open, onOpenChange }: WorkspaceModalPro
           {tab === 'invite' && (
             <div className="space-y-4">
               <p className="text-sm text-slate-400">
-                Share the login link or pre-create an account for someone.
+                Share the invite link to add people to this workspace.
               </p>
 
               <div className="bg-[#222529] rounded-lg p-4 space-y-3">
@@ -194,31 +162,6 @@ export default function WorkspaceModal({ open, onOpenChange }: WorkspaceModalPro
                 <p className="text-xs text-slate-500">Link expires in 7 days</p>
               </div>
 
-              <div className="bg-[#222529] rounded-lg p-4 space-y-3">
-                <p className="text-sm font-medium text-white">Pre-create account</p>
-                <Input
-                  placeholder="Wallet address (0x...)"
-                  value={inviteAddress}
-                  onChange={(e) => setInviteAddress(e.target.value)}
-                  className="bg-black/30 border-white/10 text-white placeholder:text-slate-500"
-                />
-                <Input
-                  placeholder="Display name"
-                  value={inviteDisplayName}
-                  onChange={(e) => setInviteDisplayName(e.target.value)}
-                  className="bg-black/30 border-white/10 text-white placeholder:text-slate-500"
-                />
-                <Button
-                  onClick={handleInvite}
-                  disabled={!inviteAddress.trim() || !inviteDisplayName.trim() || isInviting}
-                  className="w-full bg-[#4a154b] hover:bg-[#611f6a] text-white"
-                >
-                  {isInviting ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Creating...</> : <><UserPlus className="w-4 h-4 mr-2" />Create Account</>}
-                </Button>
-                {inviteSuccess && (
-                  <p className="text-sm text-green-400 text-center">Account created! They can sign in with their wallet.</p>
-                )}
-              </div>
             </div>
           )}
 
