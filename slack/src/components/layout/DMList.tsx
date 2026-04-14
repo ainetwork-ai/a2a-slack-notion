@@ -40,10 +40,10 @@ export default function DMList() {
 
   useEffect(() => {
     const userIds = conversations
-      .filter(c => !c.otherUser.isAgent)
+      .filter(c => c.otherUser && !c.otherUser.isAgent)
       .map(c => c.otherUser.id);
-    fetchPresence(userIds);
-  }, [conversations.map(c => c.otherUser.id).join(',')]);
+    if (userIds.length > 0) fetchPresence(userIds);
+  }, [conversations.filter(c => c.otherUser).map(c => c.otherUser.id).join(',')]);
 
   function isActive(conversationId: string) {
     return pathname === `/workspace/dm/${conversationId}`;
