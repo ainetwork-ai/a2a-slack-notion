@@ -60,25 +60,37 @@ export default function MessageList({
 }: MessageListProps) {
   const { user } = useAuth();
   const scrollAreaRef = useRef<HTMLDivElement>(null);
-  const prevLengthRef = useRef(messages.length);
-  const initialScrollDone = useRef(false);
+  const prevLengthRef = useRef(0);
+  const hasScrolledInitially = useRef(false);
 
-  // Initial scroll to bottom instantly
+  // Reset initial scroll flag when message list changes context (e.g. channel switch)
   useEffect(() => {
-    if (!initialScrollDone.current && scrollAreaRef.current) {
-      scrollAreaRef.current.scrollTop = scrollAreaRef.current.scrollHeight;
-      initialScrollDone.current = true;
-    }
-  }, [messages.length]);
+    hasScrolledInitially.current = false;
+    prevLengthRef.current = 0;
+  }, [lastReadAt]); // lastReadAt changes per channel
 
-  // Auto-scroll to bottom on new messages, only if user is near bottom
+  // Scroll to bottom when messages first load
   useEffect(() => {
     const el = scrollAreaRef.current;
-    if (!el) return;
+    if (!el || messages.length === 0) return;
+
+    if (!hasScrolledInitially.current) {
+      // Use requestAnimationFrame to ensure DOM has rendered
+      requestAnimationFrame(() => {
+        el.scrollTop = el.scrollHeight;
+      });
+      hasScrolledInitially.current = true;
+      prevLengthRef.current = messages.length;
+      return;
+    }
+
+    // Auto-scroll on new messages only if near bottom
     if (messages.length > prevLengthRef.current) {
       const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
       if (distanceFromBottom <= 150) {
-        el.scrollTop = el.scrollHeight;
+        requestAnimationFrame(() => {
+          el.scrollTop = el.scrollHeight;
+        });
       }
     }
     prevLengthRef.current = messages.length;
