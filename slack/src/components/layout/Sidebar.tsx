@@ -9,6 +9,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuGroup,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
@@ -147,12 +148,14 @@ export default function Sidebar() {
           <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-green-400 border-2 border-[#1a1d21]" />
         </DropdownMenuTrigger>
         <DropdownMenuContent side="top" sideOffset={8} className="w-56 bg-[#1a1d21] border-white/10 text-white">
-          <DropdownMenuLabel className="text-white">
-            <div className="font-semibold">{user?.displayName ?? 'You'}</div>
-            <div className="text-xs text-slate-400 truncate">
-              {user?.address ? `${user.address.slice(0, 6)}…${user.address.slice(-4)}` : ''}
-            </div>
-          </DropdownMenuLabel>
+          <DropdownMenuGroup>
+            <DropdownMenuLabel className="text-white">
+              <div className="font-semibold">{user?.displayName ?? 'You'}</div>
+              <div className="text-xs text-slate-400 truncate">
+                {(user as Record<string, unknown>)?.ainAddress ? `${String((user as Record<string, unknown>).ainAddress).slice(0, 6)}…${String((user as Record<string, unknown>).ainAddress).slice(-4)}` : ''}
+              </div>
+            </DropdownMenuLabel>
+          </DropdownMenuGroup>
           <DropdownMenuSeparator className="bg-white/10" />
           <DropdownMenuItem
             className="text-slate-200 focus:bg-white/10 focus:text-white cursor-pointer"

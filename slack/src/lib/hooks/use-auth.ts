@@ -45,7 +45,7 @@ export function useAuth() {
 
   async function logout() {
     await fetch('/api/auth/logout', { method: 'POST' });
-    await mutate(undefined, { revalidate: false });
+    window.location.href = '/login';
   }
 
   return {
