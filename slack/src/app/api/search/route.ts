@@ -144,5 +144,45 @@ export async function GET(request: NextRequest) {
     })
   );
 
-  return NextResponse.json({ results: enriched });
+  // Also search channels by name
+  const channelResults = await db
+    .select({ id: channels.id, name: channels.name, description: channels.description })
+    .from(channels)
+    .where(and(ilike(channels.name, pattern), inArray(channels.id, channelIds)))
+    .limit(10);
+
+  // Also search users by name
+  const userResults = await db
+    .select({ id: users.id, displayName: users.displayName, avatarUrl: users.avatarUrl })
+    .from(users)
+    .where(ilike(users.displayName, pattern))
+    .limit(10);
+
+  const allResults = [
+    ...channelResults.map(ch => ({
+      id: ch.id,
+      type: 'channel' as const,
+      content: ch.name,
+      channelName: ch.name,
+      senderName: null,
+      channelId: ch.id,
+    })),
+    ...enriched.map(msg => ({
+      id: msg.id,
+      type: 'message' as const,
+      content: msg.content,
+      channelId: msg.channelId ?? msg.channel?.id,
+      channelName: msg.channel?.name ?? null,
+      senderName: msg.user?.displayName ?? null,
+      createdAt: msg.createdAt,
+    })),
+    ...userResults.map(u => ({
+      id: u.id,
+      type: 'user' as const,
+      content: u.displayName,
+      senderName: u.displayName,
+    })),
+  ];
+
+  return NextResponse.json({ results: allResults });
 }
