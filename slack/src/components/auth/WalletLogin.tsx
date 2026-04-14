@@ -59,18 +59,19 @@ export default function WalletLogin() {
       if (!address) throw new Error('No account selected');
 
       // Auto-detect existing user by address
-      if (!displayName.trim()) {
+      let resolvedName = displayName.trim();
+      if (!resolvedName) {
         const lookupRes = await fetch(`/api/auth/lookup?address=${encodeURIComponent(address)}`);
         if (lookupRes.ok) {
           const { user: existingUser } = await lookupRes.json();
           if (existingUser?.displayName) {
-            setDisplayName(existingUser.displayName);
+            resolvedName = existingUser.displayName;
           }
         }
       }
 
       // If still no display name, generate from address
-      const finalName = displayName.trim() || `User-${address.slice(0, 6)}`;
+      const finalName = resolvedName || `User-${address.slice(0, 6)}`;
       setDisplayName(finalName);
 
       const message = await getChallenge();
