@@ -23,11 +23,11 @@ export default function WalletLogin() {
     return data.message;
   }
 
-  async function verifyAndRedirect(signature: string, address: string, provider: string) {
+  async function verifyAndRedirect(signature: string, address: string, provider: string, nameOverride?: string) {
     const res = await fetch('/api/auth/verify', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ signature, address, displayName: displayName.trim(), provider }),
+      body: JSON.stringify({ signature, address, displayName: nameOverride || displayName.trim(), provider }),
     });
     if (!res.ok) {
       const errData = await res.json().catch(() => ({ error: `Server error (${res.status})` }));
@@ -40,11 +40,6 @@ export default function WalletLogin() {
   }
 
   async function handleMetaMaskLogin() {
-    if (!displayName.trim()) {
-      setError('Please enter your display name.');
-      return;
-    }
-
     const ethereum = (window as unknown as { ethereum?: {
       request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
       isMetaMask?: boolean;
@@ -63,6 +58,21 @@ export default function WalletLogin() {
       const address = accounts[0];
       if (!address) throw new Error('No account selected');
 
+      // Auto-detect existing user by address
+      if (!displayName.trim()) {
+        const lookupRes = await fetch(`/api/auth/lookup?address=${encodeURIComponent(address)}`);
+        if (lookupRes.ok) {
+          const { user: existingUser } = await lookupRes.json();
+          if (existingUser?.displayName) {
+            setDisplayName(existingUser.displayName);
+          }
+        }
+      }
+
+      // If still no display name, generate from address
+      const finalName = displayName.trim() || `User-${address.slice(0, 6)}`;
+      setDisplayName(finalName);
+
       const message = await getChallenge();
 
       const signature = await ethereum.request({
@@ -70,7 +80,7 @@ export default function WalletLogin() {
         params: [message, address],
       }) as string;
 
-      await verifyAndRedirect(signature, address, 'metamask');
+      await verifyAndRedirect(signature, address, 'metamask', finalName);
     } catch (err: unknown) {
       const msg = err instanceof Error
         ? err.message
