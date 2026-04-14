@@ -10,6 +10,7 @@ export default function WalletLogin() {
   const [displayName, setDisplayName] = useState('');
   const [privateKey, setPrivateKey] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [loadingStep, setLoadingStep] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   async function getChallenge(): Promise<string> {
@@ -59,11 +60,16 @@ export default function WalletLogin() {
 
     try {
       console.log('[Login] Requesting accounts...');
-      const accounts = await ethereum.request({ method: 'eth_requestAccounts' }) as string[];
+      setLoadingStep('Open MetaMask popup...');
+      const accounts = await Promise.race([
+        ethereum.request({ method: 'eth_requestAccounts' }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('MetaMask did not respond. Check if the popup is open or unlock MetaMask.')), 60000)),
+      ]) as string[];
       const address = accounts[0];
       console.log('[Login] Got address:', address);
       if (!address) throw new Error('No account selected');
 
+      setLoadingStep('Checking account...');
       // Auto-detect existing user by address
       let resolvedName = displayName.trim();
       if (!resolvedName) {
@@ -84,14 +90,17 @@ export default function WalletLogin() {
       console.log('[Login] Final name:', finalName);
       setDisplayName(finalName);
 
+      setLoadingStep('Getting challenge...');
       console.log('[Login] Getting challenge...');
       const message = await getChallenge();
+      setLoadingStep('Sign the message in MetaMask...');
       console.log('[Login] Got challenge, requesting signature...');
 
       const signature = await ethereum.request({
         method: 'personal_sign',
         params: [message, address],
       }) as string;
+      setLoadingStep('Verifying signature...');
       console.log('[Login] Got signature, verifying...');
 
       await verifyAndRedirect(signature, address, 'metamask', finalName);
@@ -196,7 +205,7 @@ export default function WalletLogin() {
                 {isLoading ? (
                   <>
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Connecting...
+                    {loadingStep || 'Connecting...'}
                   </>
                 ) : (
                   'Connect MetaMask'
