@@ -30,13 +30,13 @@ export default function DMList() {
   const [newDMOpen, setNewDMOpen] = useState(false);
   const { isOnline, fetchPresence } = usePresence();
 
-  const { data } = useSWR<{ conversations: DMConversation[] }>(
+  const { data } = useSWR<DMConversation[]>(
     '/api/dm',
     fetcher,
     { refreshInterval: 3000, revalidateOnFocus: true }
   );
 
-  const conversations = data?.conversations ?? [];
+  const conversations = Array.isArray(data) ? data : [];
 
   useEffect(() => {
     const userIds = conversations
