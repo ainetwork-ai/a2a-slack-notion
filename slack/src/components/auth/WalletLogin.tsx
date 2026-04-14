@@ -14,8 +14,12 @@ export default function WalletLogin() {
 
   async function getChallenge(): Promise<string> {
     const res = await fetch('/api/auth/challenge');
-    if (!res.ok) throw new Error('Failed to get challenge');
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`Failed to get challenge (${res.status}): ${text}`);
+    }
     const data = await res.json();
+    if (!data.message) throw new Error('Invalid challenge response');
     return data.message;
   }
 
@@ -26,10 +30,13 @@ export default function WalletLogin() {
       body: JSON.stringify({ signature, address, displayName: displayName.trim(), provider }),
     });
     if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.error || 'Verification failed');
+      const errData = await res.json().catch(() => ({ error: `Server error (${res.status})` }));
+      throw new Error(errData.error || `Verification failed (${res.status})`);
     }
+    // Don't setIsLoading(false) — we're navigating away
     window.location.href = '/workspace';
+    // Prevent finally from running setIsLoading(false) before navigation
+    await new Promise(() => {}); // Never resolves — page will navigate
   }
 
   async function handleMetaMaskLogin() {
@@ -64,8 +71,18 @@ export default function WalletLogin() {
       }) as string;
 
       await verifyAndRedirect(signature, address, 'metamask');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'MetaMask login failed.');
+    } catch (err: unknown) {
+      const msg = err instanceof Error
+        ? err.message
+        : typeof err === 'object' && err !== null && 'message' in err
+          ? String((err as { message: unknown }).message)
+          : 'MetaMask login failed. Please try again.';
+      // MetaMask user rejection
+      if (typeof err === 'object' && err !== null && 'code' in err && (err as { code: number }).code === 4001) {
+        setError('Login cancelled by user.');
+      } else {
+        setError(msg);
+      }
     } finally {
       setIsLoading(false);
     }
