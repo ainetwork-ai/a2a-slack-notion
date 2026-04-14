@@ -6,11 +6,16 @@ import { users, channels, channelMembers } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 
 export async function POST(req: NextRequest) {
-  const { signature, address, displayName, provider } = await req.json();
+  const body = await req.json();
+  const { signature, address, displayName, provider } = body;
+  console.log("[Auth:Verify] Request:", { address, displayName, provider, hasSig: !!signature });
+
   const session = await getSession();
+  console.log("[Auth:Verify] Session challenge:", session.challenge ? "present" : "missing");
 
   if (!session.challenge) {
-    return NextResponse.json({ error: "No challenge found" }, { status: 400 });
+    console.error("[Auth:Verify] No challenge in session");
+    return NextResponse.json({ error: "No challenge found. Please try again." }, { status: 400 });
   }
 
   const message = `Sign in to Slack-A2A: ${session.challenge}`;
@@ -18,18 +23,28 @@ export async function POST(req: NextRequest) {
   let valid = false;
 
   if (provider === "metamask" || provider === "eth") {
-    valid = await verifyEthSignature(message, signature, address);
+    console.log("[Auth:Verify] Verifying ETH signature...");
+    try {
+      valid = await verifyEthSignature(message, signature, address);
+    } catch (e) {
+      console.error("[Auth:Verify] ETH verify error:", e);
+      valid = false;
+    }
   } else {
-    // AIN wallet verification
+    console.log("[Auth:Verify] Verifying AIN signature...");
     try {
       const { verifyAinSignature } = await import("@/lib/auth/ain-verify");
       valid = verifyAinSignature(message, signature, address);
-    } catch {
+    } catch (e) {
+      console.error("[Auth:Verify] AIN verify error:", e);
       valid = false;
     }
   }
 
+  console.log("[Auth:Verify] Signature valid:", valid);
+
   if (!valid) {
+    console.error("[Auth:Verify] Invalid signature for address:", address);
     return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
   }
 
@@ -43,8 +58,10 @@ export async function POST(req: NextRequest) {
 
   let user;
   if (existing) {
+    console.log("[Auth:Verify] Existing user found:", existing.id, existing.displayName);
     user = existing;
   } else {
+    console.log("[Auth:Verify] Creating new user:", normalizedAddress, displayName);
     const [created] = await db
       .insert(users)
       .values({
@@ -61,6 +78,7 @@ export async function POST(req: NextRequest) {
       .from(channels)
       .where(eq(channels.isPrivate, false));
 
+    console.log("[Auth:Verify] Auto-joining", publicChannels.length, "channels");
     for (const ch of publicChannels) {
       await db
         .insert(channelMembers)
@@ -74,5 +92,6 @@ export async function POST(req: NextRequest) {
   session.challenge = undefined;
   await session.save();
 
+  console.log("[Auth:Verify] Login success! User:", user.id, user.displayName);
   return NextResponse.json({ user });
 }

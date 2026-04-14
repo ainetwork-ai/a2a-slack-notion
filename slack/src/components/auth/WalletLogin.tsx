@@ -13,12 +13,16 @@ export default function WalletLogin() {
   const [error, setError] = useState<string | null>(null);
 
   async function getChallenge(): Promise<string> {
+    console.log('[Login] Fetching /api/auth/challenge...');
     const res = await fetch('/api/auth/challenge');
+    console.log('[Login] Challenge response status:', res.status);
     if (!res.ok) {
       const text = await res.text().catch(() => '');
+      console.error('[Login] Challenge failed:', text);
       throw new Error(`Failed to get challenge (${res.status}): ${text}`);
     }
     const data = await res.json();
+    console.log('[Login] Challenge data:', data);
     if (!data.message) throw new Error('Invalid challenge response');
     return data.message;
   }
@@ -54,16 +58,21 @@ export default function WalletLogin() {
     setError(null);
 
     try {
+      console.log('[Login] Requesting accounts...');
       const accounts = await ethereum.request({ method: 'eth_requestAccounts' }) as string[];
       const address = accounts[0];
+      console.log('[Login] Got address:', address);
       if (!address) throw new Error('No account selected');
 
       // Auto-detect existing user by address
       let resolvedName = displayName.trim();
       if (!resolvedName) {
+        console.log('[Login] Looking up existing user...');
         const lookupRes = await fetch(`/api/auth/lookup?address=${encodeURIComponent(address)}`);
+        console.log('[Login] Lookup status:', lookupRes.status);
         if (lookupRes.ok) {
           const { user: existingUser } = await lookupRes.json();
+          console.log('[Login] Existing user:', existingUser);
           if (existingUser?.displayName) {
             resolvedName = existingUser.displayName;
           }
@@ -72,17 +81,22 @@ export default function WalletLogin() {
 
       // If still no display name, generate from address
       const finalName = resolvedName || `User-${address.slice(0, 6)}`;
+      console.log('[Login] Final name:', finalName);
       setDisplayName(finalName);
 
+      console.log('[Login] Getting challenge...');
       const message = await getChallenge();
+      console.log('[Login] Got challenge, requesting signature...');
 
       const signature = await ethereum.request({
         method: 'personal_sign',
         params: [message, address],
       }) as string;
+      console.log('[Login] Got signature, verifying...');
 
       await verifyAndRedirect(signature, address, 'metamask', finalName);
     } catch (err: unknown) {
+      console.error('[Login] Error:', err);
       const msg = err instanceof Error
         ? err.message
         : typeof err === 'object' && err !== null && 'message' in err
