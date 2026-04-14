@@ -34,6 +34,31 @@ async function seed() {
 
   console.log("Seeding database...\n");
 
+  // Create default workspace
+  let defaultWorkspace;
+  const [existingWs] = await db
+    .select()
+    .from(schema.workspaces)
+    .where(eq(schema.workspaces.slug, "slack-a2a"))
+    .limit(1);
+
+  if (existingWs) {
+    console.log("  Default workspace already exists, skipping");
+    defaultWorkspace = existingWs;
+  } else {
+    const [ws] = await db
+      .insert(schema.workspaces)
+      .values({
+        name: "Slack-A2A",
+        slug: "slack-a2a",
+        iconText: "A2A",
+        description: "Agent-to-Agent communication on AIN blockchain",
+      })
+      .returning();
+    console.log("  Created default workspace: Slack-A2A");
+    defaultWorkspace = ws;
+  }
+
   // Create agent users
   const agentUsers = [];
   for (const agent of AGENTS) {
@@ -94,7 +119,20 @@ async function seed() {
     agentUsers.push(user);
   }
 
-  // Create default channels
+  // Add all agents to default workspace
+  for (const agent of agentUsers) {
+    await db
+      .insert(schema.workspaceMembers)
+      .values({
+        workspaceId: defaultWorkspace.id,
+        userId: agent.id,
+        role: "member",
+      })
+      .onConflictDoNothing();
+  }
+  console.log("  Added agents to default workspace");
+
+  // Create default channels (assigned to default workspace)
   const channelRecords = [];
   for (const ch of DEFAULT_CHANNELS) {
     const [existing] = await db
@@ -105,7 +143,15 @@ async function seed() {
 
     if (existing) {
       console.log(`  Channel #${ch.name} already exists, skipping`);
-      channelRecords.push(existing);
+      // Assign to workspace if not already set
+      if (!existing.workspaceId) {
+        await db
+          .update(schema.channels)
+          .set({ workspaceId: defaultWorkspace.id })
+          .where(eq(schema.channels.id, existing.id));
+        console.log(`    Assigned #${ch.name} to default workspace`);
+      }
+      channelRecords.push({ ...existing, workspaceId: defaultWorkspace.id });
       continue;
     }
 
@@ -114,6 +160,7 @@ async function seed() {
       .values({
         name: ch.name,
         description: ch.description,
+        workspaceId: defaultWorkspace.id,
       })
       .returning();
 
@@ -145,6 +192,24 @@ async function seed() {
   }
   console.log("\n  Added agents to #market-predictions and #agent-chat");
 
+  // Assign all existing users (non-agents) to the default workspace
+  const allUsers = await db
+    .select({ id: schema.users.id })
+    .from(schema.users)
+    .where(eq(schema.users.isAgent, false));
+
+  for (const user of allUsers) {
+    await db
+      .insert(schema.workspaceMembers)
+      .values({
+        workspaceId: defaultWorkspace.id,
+        userId: user.id,
+        role: "member",
+      })
+      .onConflictDoNothing();
+  }
+  console.log(`  Added ${allUsers.length} users to default workspace`);
+
   // Add welcome messages
   if (generalChannel && agentUsers.length > 0) {
     const techa = agentUsers.find((a) => a.displayName.includes("Techa"));
@@ -165,6 +230,7 @@ async function seed() {
   }
 
   console.log("\nSeed complete!");
+  await pool.end();
 }
 
 seed().catch(console.error);

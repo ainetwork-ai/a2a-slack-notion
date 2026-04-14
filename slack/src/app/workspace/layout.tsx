@@ -6,6 +6,7 @@ import { useAuth } from '@/lib/hooks/use-auth';
 import Sidebar from '@/components/layout/Sidebar';
 import { requestPermission } from '@/lib/notifications/browser-notify';
 import ChannelList from '@/components/layout/ChannelList';
+import { useWorkspaceStore } from '@/lib/stores/workspace-store';
 import DMList from '@/components/layout/DMList';
 import AgentList from '@/components/layout/AgentList';
 import SearchModal from '@/components/modals/SearchModal';
@@ -28,6 +29,7 @@ export default function WorkspaceLayout({
   const { user, isLoading } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [workspaceModalOpen, setWorkspaceModalOpen] = useState(false);
+  const { activeWorkspaceId, workspaces } = useWorkspaceStore();
 
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
     if (typeof window === 'undefined') return SIDEBAR_DEFAULT;
@@ -115,7 +117,7 @@ export default function WorkspaceLayout({
         {/* Workspace name */}
         <div className="flex items-center justify-between px-4 h-12 border-b border-white/5 shrink-0">
           <button onClick={() => setWorkspaceModalOpen(true)} className="flex items-center gap-1 font-bold text-white text-base truncate hover:bg-white/10 rounded px-1 -mx-1 transition-colors">
-            Slack-A2A
+            {workspaces.find((w) => w.id === activeWorkspaceId)?.name ?? 'Slack-A2A'}
             <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
           </button>
           {/* Close button — mobile only */}
@@ -136,7 +138,7 @@ export default function WorkspaceLayout({
             }
           }}
         >
-          <ChannelList />
+          <ChannelList workspaceId={activeWorkspaceId ?? undefined} />
           <Separator className="my-2 bg-white/5" />
           <DMList />
           <Separator className="my-2 bg-white/5" />
@@ -162,7 +164,9 @@ export default function WorkspaceLayout({
           >
             <Menu className="w-5 h-5" />
           </button>
-          <span className="ml-2 text-white font-semibold text-sm">Slack-A2A</span>
+          <span className="ml-2 text-white font-semibold text-sm">
+            {workspaces.find((w) => w.id === activeWorkspaceId)?.name ?? 'Slack-A2A'}
+          </span>
         </div>
 
         {children}

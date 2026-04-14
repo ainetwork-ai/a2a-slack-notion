@@ -8,13 +8,19 @@ export interface Channel {
   description?: string;
   isPrivate: boolean;
   createdAt: string;
+  workspaceId?: string;
   memberCount?: number;
+  unreadCount?: number;
   unread?: boolean;
 }
 
-export function useChannels() {
+export function useChannels(workspaceId?: string) {
+  const url = workspaceId
+    ? `/api/channels?workspaceId=${workspaceId}`
+    : '/api/channels';
+
   const { data, isLoading, mutate } = useSWR<Channel[]>(
-    '/api/channels',
+    url,
     fetcher,
     { refreshInterval: 5000 }
   );
@@ -23,6 +29,7 @@ export function useChannels() {
     name: string;
     description?: string;
     isPrivate?: boolean;
+    workspaceId?: string;
   }) {
     const res = await fetch('/api/channels', {
       method: 'POST',

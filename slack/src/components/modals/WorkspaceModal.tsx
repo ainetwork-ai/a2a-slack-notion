@@ -7,8 +7,9 @@ import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Copy, Check, UserPlus, Users, Settings, Loader2 } from 'lucide-react';
 import useSWR from 'swr';
+import { useWorkspaceStore } from '@/lib/stores/workspace-store';
 
-const fetcher = (url: string) => fetch(url).then(r => r.json());
+const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
 interface WorkspaceModalProps {
   open: boolean;
@@ -22,17 +23,30 @@ export default function WorkspaceModal({ open, onOpenChange }: WorkspaceModalPro
   const [isInviting, setIsInviting] = useState(false);
   const [inviteSuccess, setInviteSuccess] = useState(false);
   const [copied, setCopied] = useState(false);
-
-  const { data: users } = useSWR(open ? '/api/users' : null, fetcher);
-  const allUsers = Array.isArray(users) ? users : [];
-
   const [inviteLink, setInviteLink] = useState('');
   const [isGeneratingLink, setIsGeneratingLink] = useState(false);
+
+  const { activeWorkspaceId, workspaces } = useWorkspaceStore();
+  const activeWorkspace = workspaces.find((w) => w.id === activeWorkspaceId);
+
+  // Fetch workspace members from /api/workspaces/[id] for member count
+  const { data: wsDetail } = useSWR(
+    open && activeWorkspaceId ? `/api/workspaces/${activeWorkspaceId}` : null,
+    fetcher
+  );
+
+  // Fetch all users for members tab
+  const { data: users } = useSWR(open && tab === 'members' ? '/api/users' : null, fetcher);
+  const allUsers = Array.isArray(users) ? users : [];
 
   async function handleGenerateLink() {
     setIsGeneratingLink(true);
     try {
-      const res = await fetch('/api/invite', { method: 'POST' });
+      const res = await fetch('/api/invite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ workspaceId: activeWorkspaceId }),
+      });
       if (res.ok) {
         const data = await res.json();
         setInviteLink(data.link);
@@ -55,7 +69,6 @@ export default function WorkspaceModal({ open, onOpenChange }: WorkspaceModalPro
     if (!inviteAddress.trim() || !inviteDisplayName.trim()) return;
     setIsInviting(true);
     try {
-      // Create user directly in the system
       const res = await fetch('/api/auth/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -85,16 +98,22 @@ export default function WorkspaceModal({ open, onOpenChange }: WorkspaceModalPro
     { id: 'members' as const, label: 'Members', icon: <Users className="w-4 h-4" /> },
   ];
 
+  const workspaceName = activeWorkspace?.name ?? 'Slack-A2A';
+  const workspaceIcon = activeWorkspace?.iconText ?? 'A2A';
+  const workspaceDescription = activeWorkspace?.description ?? 'Agent-to-Agent communication on AIN blockchain';
+  const memberCount = wsDetail?.memberCount ?? allUsers.filter((u: { isAgent?: boolean }) => !u.isAgent).length;
+  const agentCount = allUsers.filter((u: { isAgent?: boolean }) => u.isAgent).length;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="bg-[#1a1d21] border-white/10 text-white sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle className="text-white text-xl">Slack-A2A Workspace</DialogTitle>
+          <DialogTitle className="text-white text-xl">{workspaceName} Workspace</DialogTitle>
         </DialogHeader>
 
         {/* Tabs */}
         <div className="flex gap-1 border-b border-white/10 pb-0 -mb-px">
-          {tabs.map(t => (
+          {tabs.map((t) => (
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
@@ -116,21 +135,21 @@ export default function WorkspaceModal({ open, onOpenChange }: WorkspaceModalPro
             <div className="space-y-4">
               <div className="flex items-center gap-4">
                 <div className="w-16 h-16 rounded-xl bg-[#4a154b] flex items-center justify-center text-white text-2xl font-bold">
-                  A2A
+                  {workspaceIcon}
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold text-white">Slack-A2A</h3>
-                  <p className="text-sm text-slate-400">Agent-to-Agent communication on AIN blockchain</p>
+                  <h3 className="text-lg font-bold text-white">{workspaceName}</h3>
+                  <p className="text-sm text-slate-400">{workspaceDescription}</p>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3 text-sm">
                 <div className="bg-[#222529] rounded-lg p-3">
                   <p className="text-slate-400">Members</p>
-                  <p className="text-white text-lg font-semibold">{allUsers.filter((u: { isAgent?: boolean }) => !u.isAgent).length}</p>
+                  <p className="text-white text-lg font-semibold">{memberCount}</p>
                 </div>
                 <div className="bg-[#222529] rounded-lg p-3">
                   <p className="text-slate-400">Agents</p>
-                  <p className="text-white text-lg font-semibold">{allUsers.filter((u: { isAgent?: boolean }) => u.isAgent).length}</p>
+                  <p className="text-white text-lg font-semibold">{agentCount}</p>
                 </div>
               </div>
               <div className="bg-[#222529] rounded-lg p-3">
@@ -180,13 +199,13 @@ export default function WorkspaceModal({ open, onOpenChange }: WorkspaceModalPro
                 <Input
                   placeholder="Wallet address (0x...)"
                   value={inviteAddress}
-                  onChange={e => setInviteAddress(e.target.value)}
+                  onChange={(e) => setInviteAddress(e.target.value)}
                   className="bg-black/30 border-white/10 text-white placeholder:text-slate-500"
                 />
                 <Input
                   placeholder="Display name"
                   value={inviteDisplayName}
-                  onChange={e => setInviteDisplayName(e.target.value)}
+                  onChange={(e) => setInviteDisplayName(e.target.value)}
                   className="bg-black/30 border-white/10 text-white placeholder:text-slate-500"
                 />
                 <Button
@@ -207,7 +226,7 @@ export default function WorkspaceModal({ open, onOpenChange }: WorkspaceModalPro
           {tab === 'members' && (
             <div className="space-y-1 max-h-64 overflow-y-auto scrollbar-slack">
               {allUsers.map((user: { id: string; displayName: string; avatarUrl?: string; isAgent?: boolean; status?: string; ainAddress?: string }) => {
-                const initials = user.displayName.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+                const initials = user.displayName.split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 2);
                 return (
                   <div key={user.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-white/5">
                     <Avatar className="w-8 h-8">

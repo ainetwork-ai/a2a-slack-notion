@@ -2,13 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth/session";
 import { verifyEthSignature } from "@/lib/auth/eth-verify";
 import { db } from "@/lib/db";
-import { users, channels, channelMembers } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { users, channels, channelMembers, workspaces, workspaceMembers, inviteTokens } from "@/lib/db/schema";
+import { eq, and, gt } from "drizzle-orm";
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { signature, address, displayName, provider } = body;
-  console.log("[Auth:Verify] Request:", { address, displayName, provider, hasSig: !!signature });
+  const { signature, address, displayName, provider, inviteToken } = body;
+  console.log("[Auth:Verify] Request:", { address, displayName, provider, hasSig: !!signature, hasInvite: !!inviteToken });
 
   const session = await getSession();
   console.log("[Auth:Verify] Session challenge:", session.challenge ? "present" : "missing");
@@ -85,6 +85,48 @@ export async function POST(req: NextRequest) {
         .values({ channelId: ch.id, userId: user.id, role: "member" })
         .onConflictDoNothing();
     }
+  }
+
+  // Resolve which workspace to join
+  let targetWorkspaceId: string | null = null;
+
+  if (inviteToken) {
+    // Look up the invite token in DB
+    const [invite] = await db
+      .select({
+        workspaceId: inviteTokens.workspaceId,
+        expiresAt: inviteTokens.expiresAt,
+      })
+      .from(inviteTokens)
+      .where(
+        and(
+          eq(inviteTokens.token, inviteToken),
+          gt(inviteTokens.expiresAt, new Date())
+        )
+      )
+      .limit(1);
+
+    if (invite) {
+      targetWorkspaceId = invite.workspaceId;
+      console.log("[Auth:Verify] Joining workspace from invite token:", targetWorkspaceId);
+    }
+  }
+
+  if (!targetWorkspaceId) {
+    // Fall back to default workspace
+    const [defaultWs] = await db
+      .select({ id: workspaces.id })
+      .from(workspaces)
+      .where(eq(workspaces.slug, "slack-a2a"))
+      .limit(1);
+    targetWorkspaceId = defaultWs?.id ?? null;
+  }
+
+  if (targetWorkspaceId) {
+    await db
+      .insert(workspaceMembers)
+      .values({ workspaceId: targetWorkspaceId, userId: user.id, role: "member" })
+      .onConflictDoNothing();
   }
 
   session.userId = user.id;

@@ -1,15 +1,17 @@
 import { db } from "@/lib/db";
 import { users, channels, channelMembers, messages } from "@/lib/db/schema";
-import { eq, and, desc, lt, sql, inArray, or, ilike } from "drizzle-orm";
+import { eq, and, desc, sql } from "drizzle-orm";
 import { requireAuth } from "@/lib/auth/middleware";
 import { NextRequest, NextResponse } from "next/server";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const auth = await requireAuth();
   if ("error" in auth) return auth.error;
   const { user } = auth;
 
-  const memberships = await db
+  const workspaceId = request.nextUrl.searchParams.get("workspaceId");
+
+  const query = db
     .select({
       channel: channels,
       lastReadAt: channelMembers.lastReadAt,
@@ -17,8 +19,17 @@ export async function GET() {
     })
     .from(channelMembers)
     .innerJoin(channels, eq(channelMembers.channelId, channels.id))
-    .where(eq(channelMembers.userId, user.id))
+    .where(
+      workspaceId
+        ? and(
+            eq(channelMembers.userId, user.id),
+            eq(channels.workspaceId, workspaceId)
+          )
+        : eq(channelMembers.userId, user.id)
+    )
     .orderBy(desc(channels.updatedAt));
+
+  const memberships = await query;
 
   const channelsWithUnread = await Promise.all(
     memberships.map(async ({ channel, lastReadAt, role }) => {
@@ -45,7 +56,7 @@ export async function POST(request: NextRequest) {
   const { user } = auth;
 
   const body = await request.json();
-  const { name, description, isPrivate } = body;
+  const { name, description, isPrivate, workspaceId } = body;
 
   if (!name || typeof name !== "string") {
     return NextResponse.json({ error: "Channel name is required" }, { status: 400 });
@@ -58,6 +69,7 @@ export async function POST(request: NextRequest) {
       description: description || null,
       isPrivate: isPrivate ?? false,
       createdBy: user.id,
+      workspaceId: workspaceId || null,
     })
     .returning();
 

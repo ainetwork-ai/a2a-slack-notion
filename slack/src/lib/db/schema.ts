@@ -10,6 +10,16 @@ import {
   index,
 } from "drizzle-orm/pg-core";
 
+export const workspaces = pgTable("workspaces", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  slug: text("slug").unique().notNull(),
+  iconText: text("icon_text").default("WS").notNull(),
+  description: text("description"),
+  createdBy: uuid("created_by"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
   ainAddress: text("ain_address").unique().notNull(),
@@ -24,12 +34,45 @@ export const users = pgTable("users", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+export const workspaceMembers = pgTable(
+  "workspace_members",
+  {
+    workspaceId: uuid("workspace_id")
+      .references(() => workspaces.id, { onDelete: "cascade" })
+      .notNull(),
+    userId: uuid("user_id")
+      .references(() => users.id, { onDelete: "cascade" })
+      .notNull(),
+    role: text("role").default("member").notNull(),
+    joinedAt: timestamp("joined_at").defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("workspace_members_pk").on(t.workspaceId, t.userId),
+  ]
+);
+
+export const inviteTokens = pgTable("invite_tokens", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  token: text("token").unique().notNull(),
+  workspaceId: uuid("workspace_id")
+    .references(() => workspaces.id, { onDelete: "cascade" })
+    .notNull(),
+  createdBy: uuid("created_by")
+    .references(() => users.id)
+    .notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 export const channels = pgTable("channels", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: text("name").notNull(),
   description: text("description"),
   isPrivate: boolean("is_private").default(false).notNull(),
   createdBy: uuid("created_by").references(() => users.id),
+  workspaceId: uuid("workspace_id").references(() => workspaces.id, {
+    onDelete: "cascade",
+  }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

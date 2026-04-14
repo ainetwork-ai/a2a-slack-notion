@@ -8,13 +8,15 @@ import { Textarea } from '@/components/ui/textarea';
 import { Loader2, Hash, Lock } from 'lucide-react';
 import { useChannels } from '@/lib/hooks/use-channels';
 import { useAppStore } from '@/lib/stores/app-store';
+import { useWorkspaceStore } from '@/lib/stores/workspace-store';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 
 export default function CreateChannelModal() {
   const router = useRouter();
   const { createChannelOpen, setCreateChannelOpen } = useAppStore();
-  const { createChannel } = useChannels();
+  const { activeWorkspaceId } = useWorkspaceStore();
+  const { createChannel } = useChannels(activeWorkspaceId ?? undefined);
 
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -33,7 +35,7 @@ export default function CreateChannelModal() {
     setIsLoading(true);
     setError(null);
     try {
-      const result = await createChannel({ name: slugName, description, isPrivate });
+      const result = await createChannel({ name: slugName, description, isPrivate, workspaceId: activeWorkspaceId ?? undefined });
       setCreateChannelOpen(false);
       setName('');
       setDescription('');

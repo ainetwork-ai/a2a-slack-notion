@@ -3,17 +3,39 @@
 import { useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { Hash, Plus, ChevronDown, ChevronRight, ArrowUpDown, Clock } from 'lucide-react';
-import { useChannels } from '@/lib/hooks/use-channels';
 import { useAppStore } from '@/lib/stores/app-store';
 import { cn } from '@/lib/utils';
+import useSWR from 'swr';
 
-export default function ChannelList() {
+const fetcher = (url: string) => fetch(url).then((r) => r.json());
+
+interface Channel {
+  id: string;
+  name: string;
+  description?: string;
+  isPrivate: boolean;
+  createdAt: string;
+  unreadCount?: number;
+  role?: string;
+}
+
+interface ChannelListProps {
+  workspaceId?: string;
+}
+
+export default function ChannelList({ workspaceId }: ChannelListProps) {
   const router = useRouter();
   const pathname = usePathname();
-  const { channels } = useChannels();
   const { setCreateChannelOpen } = useAppStore();
   const [collapsed, setCollapsed] = useState(false);
   const [sortAlpha, setSortAlpha] = useState(false);
+
+  const url = workspaceId
+    ? `/api/channels?workspaceId=${workspaceId}`
+    : '/api/channels';
+
+  const { data } = useSWR<Channel[]>(url, fetcher, { refreshInterval: 5000 });
+  const channels = Array.isArray(data) ? data : [];
 
   const sortedChannels = sortAlpha
     ? [...channels].sort((a, b) => a.name.localeCompare(b.name))
@@ -40,7 +62,7 @@ export default function ChannelList() {
         </button>
         <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
           <button
-            onClick={() => setSortAlpha(v => !v)}
+            onClick={() => setSortAlpha((v) => !v)}
             className={cn(
               'text-[#bcabbc] hover:text-white p-0.5 rounded transition-colors',
               sortAlpha && 'text-white'
@@ -62,7 +84,7 @@ export default function ChannelList() {
       {/* Channel Items */}
       {!collapsed && (
         <div className="mt-0.5 space-y-px">
-          {sortedChannels.map(channel => (
+          {sortedChannels.map((channel) => (
             <button
               key={channel.id}
               onClick={() => router.push(`/workspace/channel/${channel.id}`)}
@@ -74,10 +96,15 @@ export default function ChannelList() {
               )}
             >
               <Hash className="w-4 h-4 shrink-0 opacity-70" />
-              <span className={cn('truncate', channel.unread && !isActive(channel.id) && 'font-semibold text-white')}>
+              <span
+                className={cn(
+                  'truncate',
+                  channel.unreadCount && channel.unreadCount > 0 && !isActive(channel.id) && 'font-semibold text-white'
+                )}
+              >
                 {channel.name}
               </span>
-              {channel.unread && !isActive(channel.id) && (
+              {channel.unreadCount && channel.unreadCount > 0 && !isActive(channel.id) && (
                 <span className="ml-auto w-2 h-2 rounded-full bg-white shrink-0" />
               )}
             </button>

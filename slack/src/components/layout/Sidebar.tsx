@@ -1,8 +1,9 @@
 'use client';
 
+import { useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 
-import { Home, Search, Bell, MessageSquare, Smile, LogOut, Sun, Moon, Inbox, MessagesSquare } from 'lucide-react';
+import { Home, Search, Bell, MessageSquare, Smile, LogOut, Sun, Moon, Inbox, MessagesSquare, Plus } from 'lucide-react';
 import NotificationPanel from '@/components/modals/NotificationPanel';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -19,6 +20,7 @@ import { useAuth } from '@/lib/hooks/use-auth';
 import { useNotifications } from '@/lib/hooks/use-notifications';
 import { useAppStore } from '@/lib/stores/app-store';
 import { useThemeStore } from '@/lib/stores/theme-store';
+import { useWorkspaceStore } from '@/lib/stores/workspace-store';
 import { cn } from '@/lib/utils';
 
 interface NavButtonProps {
@@ -64,24 +66,78 @@ export default function Sidebar() {
   const { unreadCount } = useNotifications();
   const { setSearchOpen, searchOpen } = useAppStore();
   const { theme, toggleTheme } = useThemeStore();
+  const { workspaces, activeWorkspaceId, setActive, fetchWorkspaces } = useWorkspaceStore();
+
+  useEffect(() => {
+    fetchWorkspaces();
+  }, [fetchWorkspaces]);
 
   const initials = user?.displayName
-    ? user.displayName.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
+    ? user.displayName.split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2)
     : '?';
+
+  const activeWorkspace = workspaces.find((w) => w.id === activeWorkspaceId);
+  const otherWorkspaces = workspaces.filter((w) => w.id !== activeWorkspaceId);
 
   return (
     <div className="sidebar-dark flex flex-col items-center w-16 h-full py-3 gap-1 border-r border-white/5 shrink-0">
-      {/* Workspace Logo */}
+      {/* Active Workspace Icon */}
       <TooltipProvider delay={300}>
         <Tooltip>
           <TooltipTrigger
             className="flex items-center justify-center w-10 h-10 rounded-xl bg-[#4a154b] mb-1 cursor-pointer shadow-md hover:bg-[#611f6a] transition-colors"
             onClick={() => router.push('/workspace')}
           >
-            <span className="text-white font-bold text-xs">A2A</span>
+            <span className="text-white font-bold text-xs">
+              {activeWorkspace?.iconText ?? 'A2A'}
+            </span>
           </TooltipTrigger>
           <TooltipContent side="right" className="bg-[#1a1d21] text-white border-white/10">
-            Slack-A2A
+            {activeWorkspace?.name ?? 'Slack-A2A'}
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+
+      {/* Other workspace icons */}
+      {otherWorkspaces.map((ws) => (
+        <TooltipProvider key={ws.id} delay={300}>
+          <Tooltip>
+            <TooltipTrigger
+              className="flex items-center justify-center w-10 h-10 rounded-xl bg-[#222529] cursor-pointer hover:bg-[#4a154b]/60 transition-colors border border-white/10"
+              onClick={() => setActive(ws.id)}
+            >
+              <span className="text-white font-bold text-xs">{ws.iconText}</span>
+            </TooltipTrigger>
+            <TooltipContent side="right" className="bg-[#1a1d21] text-white border-white/10">
+              {ws.name}
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      ))}
+
+      {/* Add workspace button */}
+      <TooltipProvider delay={300}>
+        <Tooltip>
+          <TooltipTrigger
+            className="flex items-center justify-center w-10 h-10 rounded-xl border border-dashed border-white/20 cursor-pointer hover:border-white/40 hover:bg-white/5 transition-colors text-[#bcabbc] hover:text-white"
+            onClick={async () => {
+              const name = prompt('New workspace name:');
+              if (!name) return;
+              const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+              const res = await fetch('/api/workspaces', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, slug }),
+              });
+              if (res.ok) {
+                await fetchWorkspaces();
+              }
+            }}
+          >
+            <Plus className="w-4 h-4" />
+          </TooltipTrigger>
+          <TooltipContent side="right" className="bg-[#1a1d21] text-white border-white/10">
+            Create workspace
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>
@@ -109,7 +165,6 @@ export default function Sidebar() {
         icon={<MessageSquare className="w-5 h-5" />}
         label="Direct Messages"
         onClick={() => {
-          // Scroll DM section into view in sidebar
           const dmSection = document.querySelector('[data-section="dm"]');
           if (dmSection) dmSection.scrollIntoView({ behavior: 'smooth' });
           router.push('/workspace');

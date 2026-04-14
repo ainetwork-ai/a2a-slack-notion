@@ -18,6 +18,11 @@ export default function WalletLogin() {
   const [error, setError] = useState<string | null>(null);
   const [autoSignTriggered, setAutoSignTriggered] = useState(false);
 
+  // Read invite token from URL
+  const inviteToken = typeof window !== 'undefined'
+    ? new URLSearchParams(window.location.search).get('invite')
+    : null;
+
   // When wallet connects, auto-start the sign flow
   useEffect(() => {
     if (isConnected && address && !autoSignTriggered && !isLoading) {
@@ -67,6 +72,7 @@ export default function WalletLogin() {
           address: walletAddress,
           displayName: finalName,
           provider: 'metamask',
+          inviteToken: inviteToken ?? undefined,
         }),
       });
 
