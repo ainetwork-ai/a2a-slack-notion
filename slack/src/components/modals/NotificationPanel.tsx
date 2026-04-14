@@ -6,7 +6,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuTrigger,
-  DropdownMenuLabel,
 } from '@/components/ui/dropdown-menu';
 import { Bell, AtSign, MessageSquare, Mail } from 'lucide-react';
 import { useNotifications, Notification } from '@/lib/hooks/use-notifications';
@@ -54,9 +53,9 @@ export default function NotificationPanel() {
         className="w-80 bg-[#222529] border-white/10 text-white p-0"
       >
         <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
-          <DropdownMenuLabel className="text-white font-semibold p-0">
+          <p className="text-white font-semibold text-sm">
             Notifications
-          </DropdownMenuLabel>
+          </p>
           {unreadCount > 0 && (
             <button
               onClick={markAllAsRead}

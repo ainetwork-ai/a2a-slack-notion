@@ -5,7 +5,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
@@ -50,7 +49,7 @@ export default function AgentSkillPicker({ skills, selectedSkill, onSelect }: Ag
           className="bg-[#222529] border-white/10 text-white min-w-[280px]"
           align="start"
         >
-          <DropdownMenuLabel className="text-slate-400 text-xs">Agent Skills</DropdownMenuLabel>
+          <p className="px-2 py-1 text-slate-400 text-xs font-medium">Agent Skills</p>
           <DropdownMenuSeparator className="bg-white/10" />
 
           {selectedSkill && (
