@@ -21,13 +21,31 @@ export interface AgentSkill {
   examples?: string[];
 }
 
-export async function fetchAgentCard(baseUrl: string): Promise<AgentCard> {
-  const url = baseUrl.replace(/\/$/, "");
-  const res = await fetch(`${url}/.well-known/agent.json`, {
-    headers: { Accept: "application/json" },
-  });
-  if (!res.ok) throw new Error(`Failed to fetch agent card: ${res.status}`);
-  return res.json();
+export async function fetchAgentCard(inputUrl: string): Promise<AgentCard> {
+  let url = inputUrl.replace(/\/$/, "");
+
+  // If URL already ends with .well-known/agent.json, use as-is
+  if (url.endsWith("/.well-known/agent.json") || url.endsWith("/.well-known/agent-card.json")) {
+    const res = await fetch(url, { headers: { Accept: "application/json" } });
+    if (!res.ok) throw new Error(`Failed to fetch agent card: ${res.status}`);
+    return res.json();
+  }
+
+  // Try /.well-known/agent.json first, then /.well-known/agent-card.json
+  for (const path of ["/.well-known/agent.json", "/.well-known/agent-card.json"]) {
+    try {
+      const res = await fetch(`${url}${path}`, { headers: { Accept: "application/json" } });
+      if (res.ok) return res.json();
+    } catch {
+      continue;
+    }
+  }
+
+  throw new Error("Failed to fetch agent card from any known path");
+}
+
+export function extractBaseUrl(inputUrl: string): string {
+  return inputUrl.replace(/\/?\.well-known\/agent(-card)?\.json$/, "").replace(/\/$/, "");
 }
 
 export async function sendA2AMessage(

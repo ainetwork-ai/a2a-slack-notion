@@ -11,7 +11,8 @@ import AgentList from '@/components/layout/AgentList';
 import SearchModal from '@/components/modals/SearchModal';
 import CreateChannelModal from '@/components/modals/CreateChannelModal';
 import AgentInviteModal from '@/components/agent/AgentInviteModal';
-import { Loader2, Menu, X } from 'lucide-react';
+import WorkspaceModal from '@/components/modals/WorkspaceModal';
+import { Loader2, Menu, X, ChevronDown } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 
 const SIDEBAR_MIN = 200;
@@ -26,6 +27,7 @@ export default function WorkspaceLayout({
   const router = useRouter();
   const { user, isLoading } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [workspaceModalOpen, setWorkspaceModalOpen] = useState(false);
 
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
     if (typeof window === 'undefined') return SIDEBAR_DEFAULT;
@@ -112,7 +114,10 @@ export default function WorkspaceLayout({
       >
         {/* Workspace name */}
         <div className="flex items-center justify-between px-4 h-12 border-b border-white/5 shrink-0">
-          <span className="font-bold text-white text-base truncate">Slack-A2A</span>
+          <button onClick={() => setWorkspaceModalOpen(true)} className="flex items-center gap-1 font-bold text-white text-base truncate hover:bg-white/10 rounded px-1 -mx-1 transition-colors">
+            Slack-A2A
+            <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+          </button>
           {/* Close button — mobile only */}
           <button
             className="md:hidden text-slate-400 hover:text-white p-1"
@@ -167,6 +172,7 @@ export default function WorkspaceLayout({
       <SearchModal />
       <CreateChannelModal />
       <AgentInviteModal />
+      <WorkspaceModal open={workspaceModalOpen} onOpenChange={setWorkspaceModalOpen} />
     </div>
   );
 }

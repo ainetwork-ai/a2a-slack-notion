@@ -38,10 +38,12 @@ export default function AgentInviteModal() {
     setIsInviting(true);
     setError(null);
     try {
+      // Extract base URL (remove .well-known path if present)
+      const a2aUrl = url.trim().replace(/\/?\.well-known\/agent(-card)?\.json$/, '').replace(/\/$/, '');
       const res = await fetch('/api/agents', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: url.trim(), ...agentCard }),
+        body: JSON.stringify({ a2aUrl }),
       });
       if (!res.ok) throw new Error('Failed to invite agent');
       setAgentInviteOpen(false);
