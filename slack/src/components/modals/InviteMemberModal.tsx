@@ -46,7 +46,7 @@ export default function InviteMemberModal({
       const res = await fetch(`/api/users/search?q=${encodeURIComponent(q)}`);
       if (!res.ok) throw new Error('Search failed');
       const data = await res.json();
-      setResults(data.users ?? []);
+      setResults(Array.isArray(data) ? data : data.users ?? []);
     } catch {
       setResults([]);
     } finally {
