@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { Plus, ChevronDown, ChevronRight, Bot } from 'lucide-react';
+import NewDMModal from '@/components/modals/NewDMModal';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { usePresence } from '@/lib/realtime/use-presence';
 import { cn } from '@/lib/utils';
@@ -26,6 +27,7 @@ export default function DMList() {
   const router = useRouter();
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
+  const [newDMOpen, setNewDMOpen] = useState(false);
   const { isOnline, fetchPresence } = usePresence();
 
   const { data } = useSWR<{ conversations: DMConversation[] }>(
@@ -48,6 +50,7 @@ export default function DMList() {
   }
 
   return (
+    <>
     <div className="px-2 py-1" data-section="dm">
       <div className="flex items-center justify-between px-2 py-1 group">
         <button
@@ -62,6 +65,7 @@ export default function DMList() {
           Direct Messages
         </button>
         <button
+          onClick={() => setNewDMOpen(true)}
           className="opacity-0 group-hover:opacity-100 transition-opacity text-[#bcabbc] hover:text-white p-0.5 rounded"
           title="New direct message"
         >
@@ -128,5 +132,7 @@ export default function DMList() {
         </div>
       )}
     </div>
+    <NewDMModal open={newDMOpen} onOpenChange={setNewDMOpen} />
+    </>
   );
 }
