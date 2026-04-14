@@ -46,7 +46,7 @@ interface Channel {
 
 export default function ChannelPage({ params }: { params: Promise<{ channelId: string }> }) {
   const { channelId } = use(params);
-  const { activeThread } = useAppStore();
+  const { activeThread, setActiveThread } = useAppStore();
   const [inviteOpen, setInviteOpen] = useState(false);
   const [detailPanelOpen, setDetailPanelOpen] = useState(false);
   const [editingDescription, setEditingDescription] = useState(false);
@@ -79,6 +79,11 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
     });
     router.push('/workspace');
   }
+
+  // Issue 1: Reset active thread when switching channels
+  useEffect(() => {
+    setActiveThread(null);
+  }, [channelId]);
 
   useEffect(() => {
     // First fetch channel to capture lastReadAt, then mark as read

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Paperclip, Send, Bold, Italic, Strikethrough, Code, List, Quote, Smile, AtSign, Clock } from 'lucide-react';
 import { useTyping } from '@/lib/realtime/use-typing';
@@ -40,12 +40,20 @@ export default function MessageInput({
   const [slashSuggestions, setSlashSuggestions] = useState<typeof commands>([]);
   const [slashIndex, setSlashIndex] = useState(0);
   const [ephemeralMessage, setEphemeralMessage] = useState<string | null>(null);
+  const [scheduleOpen, setScheduleOpen] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isComposingRef = useRef(false);
   const { reportTyping, stopTyping } = useTyping(channelId, conversationId);
+
+  // Issue 3: Focus textarea when sending completes
+  useEffect(() => {
+    if (!isSending) {
+      textareaRef.current?.focus();
+    }
+  }, [isSending]);
 
   function autoResize() {
     const el = textareaRef.current;
@@ -149,7 +157,6 @@ export default function MessageInput({
           // keep content on failure
         } finally {
           setIsSending(false);
-          setTimeout(() => textareaRef.current?.focus(), 300);
         }
         return;
       }
@@ -171,7 +178,6 @@ export default function MessageInput({
       // keep content on failure
     } finally {
       setIsSending(false);
-      setTimeout(() => textareaRef.current?.focus(), 300);
     }
   }
 
@@ -434,7 +440,7 @@ export default function MessageInput({
       )}
 
       <div
-        className={cn('bg-[#222529] border rounded-xl overflow-hidden', isDragging ? 'border-2 border-dashed border-[#4a154b]' : 'border-white/10')}
+        className={cn('message-input-container bg-[#222529] border rounded-xl overflow-hidden', isDragging ? 'border-2 border-dashed border-[#4a154b]' : 'border-white/10')}
         onDragOver={e => { e.preventDefault(); setIsDragging(true); }}
         onDragLeave={() => setIsDragging(false)}
         onDrop={handleDrop}
@@ -518,13 +524,44 @@ export default function MessageInput({
             <AtSign className="w-4 h-4" />
           </button>
 
-          {/* Schedule button (placeholder) */}
-          <button
-            title="Schedule message"
-            className="w-7 h-7 flex items-center justify-center rounded text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
-          >
-            <Clock className="w-4 h-4" />
-          </button>
+          {/* Schedule button */}
+          <div className="relative">
+            <button
+              title="Schedule message"
+              onClick={() => setScheduleOpen(!scheduleOpen)}
+              className="w-7 h-7 flex items-center justify-center rounded text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
+            >
+              <Clock className="w-4 h-4" />
+            </button>
+            {scheduleOpen && (
+              <div className="absolute bottom-full right-0 mb-2 w-48 bg-[#222529] border border-white/10 rounded-lg shadow-xl overflow-hidden z-50">
+                <p className="px-3 py-1.5 text-[11px] text-slate-500 font-semibold uppercase">Schedule send</p>
+                {[
+                  { label: 'In 30 minutes', ms: 30 * 60 * 1000 },
+                  { label: 'In 1 hour', ms: 60 * 60 * 1000 },
+                  { label: 'In 3 hours', ms: 3 * 60 * 60 * 1000 },
+                ].map(opt => (
+                  <button
+                    key={opt.label}
+                    className="w-full text-left px-3 py-2 text-sm text-slate-300 hover:bg-white/10 hover:text-white transition-colors"
+                    onClick={async () => {
+                      const msg = content.trim();
+                      if (!msg) { setScheduleOpen(false); return; }
+                      setScheduleOpen(false);
+                      setContent('');
+                      if (textareaRef.current) textareaRef.current.style.height = 'auto';
+                      const time = new Date(Date.now() + opt.ms);
+                      setEphemeralMessage(`Message scheduled for ${time.toLocaleTimeString()}`);
+                      setTimeout(() => setEphemeralMessage(null), 5000);
+                      setTimeout(async () => { await onSend(replaceShortcodes(msg)); }, opt.ms);
+                    }}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
 
           {/* Send button — always visible */}
           <Button

@@ -123,7 +123,14 @@ export default function WorkspaceLayout({
           </button>
         </div>
 
-        <div className="flex-1 min-h-0 py-3 space-y-1 overflow-y-auto scrollbar-slack">
+        <div
+          className="flex-1 min-h-0 py-3 space-y-1 overflow-y-auto scrollbar-slack"
+          onClick={(e) => {
+            if (window.innerWidth < 768 && (e.target as HTMLElement).closest('a, button[data-nav], button')) {
+              setSidebarOpen(false);
+            }
+          }}
+        >
           <ChannelList />
           <Separator className="my-2 bg-white/5" />
           <DMList />

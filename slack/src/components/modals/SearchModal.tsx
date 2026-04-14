@@ -43,7 +43,7 @@ export default function SearchModal() {
     if (result.type === 'channel') {
       router.push(`/workspace/channel/${result.id}`);
     } else if (result.type === 'message' && result.channelId) {
-      router.push(`/workspace/channel/${result.channelId}`);
+      router.push(`/workspace/channel/${result.channelId}#msg-${result.id}`);
     }
     handleClose();
   }

@@ -6,7 +6,7 @@ import { Plus, ChevronDown, ChevronRight, Bot, Zap } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useAppStore } from '@/lib/stores/app-store';
 import { cn } from '@/lib/utils';
-import useSWR from 'swr';
+import useSWR, { useSWRConfig } from 'swr';
 
 const fetcher = (url: string) => fetch(url).then(r => r.json());
 
@@ -24,6 +24,7 @@ export default function AgentList() {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
   const { setAgentInviteOpen } = useAppStore();
+  const { mutate } = useSWRConfig();
 
   const { data } = useSWR<Agent[]>(
     '/api/agents',
@@ -83,6 +84,7 @@ export default function AgentList() {
                 });
                 if (res.ok) {
                   const conv = await res.json();
+                  mutate('/api/dm');
                   router.push(`/workspace/dm/${conv.id}`);
                 }
               }}

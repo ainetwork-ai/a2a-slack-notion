@@ -192,6 +192,19 @@
   background-color: #f8f8f8;
 }
 
+.light .message-input-container {
+  background: #fff;
+  border-color: #e0e0e0;
+}
+
+.light .message-input-container textarea {
+  color: #1d1c1d;
+}
+
+.light .message-input-container textarea::placeholder {
+  color: #999;
+}
+
 /* Thread panel — light mode */
 .light .thread-panel {
   background-color: #f8f8f8;

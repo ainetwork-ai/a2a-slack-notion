@@ -272,6 +272,7 @@ export default function MessageItem({
 
   return (
     <div
+      id={`msg-${message.id}`}
       className={cn(
         'group relative flex items-start gap-3 px-4 hover:bg-white/[0.03] rounded-lg transition-colors',
         isCompact ? 'py-0.5' : 'py-1.5',
@@ -480,7 +481,7 @@ export default function MessageItem({
 
       {/* Hover Actions */}
       {showActions && !isEditing && (
-        <div className="absolute right-2 -top-3 flex items-center gap-1 bg-[#222529] border border-white/10 rounded-lg shadow-lg p-0.5 z-10">
+        <div className="absolute -top-3 right-4 flex items-center gap-1 bg-[#222529] border border-white/10 rounded-lg shadow-lg p-0.5 z-10">
           <ReactionPicker
             onSelect={handleReaction}
             open={reactionPickerOpen}

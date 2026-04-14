@@ -146,19 +146,28 @@ export async function POST(
     })
     .returning();
 
-  // Parse @mentions from content
+  // Parse @mentions from content — collect full token and first-word variant
   const mentionPattern = /@(\S+)/g;
   const mentionedNames: string[] = [];
   let match;
   while ((match = mentionPattern.exec(content)) !== null) {
-    mentionedNames.push(match[1]);
+    const token = match[1];
+    mentionedNames.push(token);
+    // Also try first word in case display name has spaces (e.g. "Techa" from "@Techa (Bill Gates)")
+    const firstWord = token.split(/[(,]/)[0];
+    if (firstWord && firstWord !== token) mentionedNames.push(firstWord);
   }
 
   if (mentionedNames.length > 0) {
     const mentionedUsers = await db
       .select()
       .from(users)
-      .where(inArray(users.displayName, mentionedNames));
+      .where(
+        or(
+          inArray(users.displayName, mentionedNames),
+          ...mentionedNames.map(n => ilike(users.displayName, `${n}%`))
+        )
+      );
 
     if (mentionedUsers.length > 0) {
       await db.insert(mentions).values(

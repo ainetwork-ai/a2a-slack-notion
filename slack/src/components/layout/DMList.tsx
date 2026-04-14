@@ -31,7 +31,7 @@ export default function DMList() {
   const { data } = useSWR<{ conversations: DMConversation[] }>(
     '/api/dm',
     fetcher,
-    { refreshInterval: 5000 }
+    { refreshInterval: 3000, revalidateOnFocus: true }
   );
 
   const conversations = data?.conversations ?? [];

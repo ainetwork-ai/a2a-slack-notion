@@ -20,10 +20,24 @@ export async function sendToAgent(params: {
 
   const agentName = agent.displayName;
 
-  const response = await sendA2AMessage(agent.a2aUrl, params.text, {
-    agentName,
-    skillId: params.skillId,
-  });
+  let content: string;
+  let metadata: Record<string, unknown>;
+
+  try {
+    const response = await sendA2AMessage(agent.a2aUrl, params.text, {
+      agentName,
+      skillId: params.skillId,
+    });
+    content = response.content;
+    metadata = {
+      a2aTaskId: response.taskId,
+      a2aContextId: response.contextId,
+      agentName,
+    };
+  } catch {
+    content = "I'm currently unavailable. Please try again later.";
+    metadata = { agentName, error: true };
+  }
 
   const [agentMessage] = await db
     .insert(messages)
@@ -31,13 +45,9 @@ export async function sendToAgent(params: {
       channelId: params.channelId || null,
       conversationId: params.conversationId || null,
       userId: agent.id,
-      content: response.content,
+      content,
       contentType: "agent-response",
-      metadata: {
-        a2aTaskId: response.taskId,
-        a2aContextId: response.contextId,
-        agentName,
-      },
+      metadata,
     })
     .returning();
 

@@ -9,6 +9,7 @@ interface Channel {
   id: string;
   name: string;
   unread?: boolean;
+  unreadCount?: number;
   lastReadAt?: string | null;
 }
 
@@ -37,7 +38,7 @@ export default function UnreadsPage() {
         const res = await fetch('/api/channels');
         const channels: Channel[] = await res.json();
         const unreadChannels = Array.isArray(channels)
-          ? channels.filter(c => c.unread)
+          ? channels.filter(c => c.unread || (c.unreadCount != null && c.unreadCount > 0))
           : [];
 
         const results = await Promise.all(
