@@ -75,7 +75,7 @@ export default function DMList() {
 
       {!collapsed && (
         <div className="mt-0.5 space-y-px">
-          {conversations.map(convo => {
+          {conversations.filter(convo => convo.otherUser).map(convo => {
             const online = isOnline(convo.otherUser.id);
             const initials = convo.otherUser.displayName
               .split(' ')
