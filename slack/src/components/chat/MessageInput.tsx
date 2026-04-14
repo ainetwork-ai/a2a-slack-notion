@@ -211,11 +211,9 @@ export default function MessageInput({
   }
 
   async function fetchMentions(query: string) {
-    if (!channelId && !conversationId) return;
     try {
-      const endpoint = channelId
-        ? `/api/channels/${channelId}/members?q=${encodeURIComponent(query)}`
-        : `/api/dm/${conversationId}/participants`;
+      // Search all workspace users, not just channel members
+      const endpoint = `/api/users/search?q=${encodeURIComponent(query)}`;
       const res = await fetch(endpoint);
       if (!res.ok) return;
       const data = await res.json();
