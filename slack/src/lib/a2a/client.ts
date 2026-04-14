@@ -78,7 +78,7 @@ export async function sendA2AMessage(
     (message as Record<string, unknown>).metadata = { skillId: options.skillId };
   }
 
-  const res = await fetch(`${url}/api/a2a`, {
+  const res = await fetch(`${url}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -141,7 +141,7 @@ export async function* streamA2AMessage(
     params.metadata = { agentName: options.agentName };
   }
 
-  const res = await fetch(`${url}/api/a2a`, {
+  const res = await fetch(`${url}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({

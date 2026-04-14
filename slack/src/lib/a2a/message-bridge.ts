@@ -19,12 +19,15 @@ export async function sendToAgent(params: {
   if (!agent?.a2aUrl) throw new Error("Agent not found or no A2A URL");
 
   const agentName = agent.displayName;
+  // Use agent card's url field (JSON-RPC endpoint) if available, fallback to a2aUrl
+  const card = agent.agentCardJson as { url?: string } | null;
+  const rpcUrl = card?.url || agent.a2aUrl;
 
   let content: string;
   let metadata: Record<string, unknown>;
 
   try {
-    const response = await sendA2AMessage(agent.a2aUrl, params.text, {
+    const response = await sendA2AMessage(rpcUrl, params.text, {
       agentName,
       skillId: params.skillId,
     });
