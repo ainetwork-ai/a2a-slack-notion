@@ -26,9 +26,26 @@ export default function WorkspaceModal({ open, onOpenChange }: WorkspaceModalPro
   const { data: users } = useSWR(open ? '/api/users' : null, fetcher);
   const allUsers = Array.isArray(users) ? users : [];
 
-  const inviteLink = typeof window !== 'undefined' ? `${window.location.origin}/login` : '';
+  const [inviteLink, setInviteLink] = useState('');
+  const [isGeneratingLink, setIsGeneratingLink] = useState(false);
+
+  async function handleGenerateLink() {
+    setIsGeneratingLink(true);
+    try {
+      const res = await fetch('/api/invite', { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json();
+        setInviteLink(data.link);
+      }
+    } catch {
+      // fail silently
+    } finally {
+      setIsGeneratingLink(false);
+    }
+  }
 
   function handleCopyLink() {
+    if (!inviteLink) return;
     navigator.clipboard.writeText(inviteLink);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -118,12 +135,18 @@ export default function WorkspaceModal({ open, onOpenChange }: WorkspaceModalPro
               </div>
               <div className="bg-[#222529] rounded-lg p-3">
                 <p className="text-slate-400 text-sm mb-1">Invite Link</p>
-                <div className="flex items-center gap-2">
-                  <code className="flex-1 text-xs text-slate-300 bg-black/30 px-2 py-1 rounded truncate">{inviteLink}</code>
-                  <Button size="sm" variant="ghost" onClick={handleCopyLink} className="text-slate-400 hover:text-white shrink-0">
-                    {copied ? <Check className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4" />}
+                {inviteLink ? (
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 text-xs text-slate-300 bg-black/30 px-2 py-1 rounded truncate">{inviteLink}</code>
+                    <Button size="sm" variant="ghost" onClick={handleCopyLink} className="text-slate-400 hover:text-white shrink-0">
+                      {copied ? <Check className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4" />}
+                    </Button>
+                  </div>
+                ) : (
+                  <Button size="sm" onClick={handleGenerateLink} disabled={isGeneratingLink} className="bg-[#4a154b] hover:bg-[#611f6a] text-white">
+                    {isGeneratingLink ? <><Loader2 className="w-3 h-3 mr-1 animate-spin" />Generating...</> : 'Generate Invite Link'}
                   </Button>
-                </div>
+                )}
               </div>
             </div>
           )}
@@ -137,12 +160,19 @@ export default function WorkspaceModal({ open, onOpenChange }: WorkspaceModalPro
 
               <div className="bg-[#222529] rounded-lg p-4 space-y-3">
                 <p className="text-sm font-medium text-white">Quick invite via link</p>
-                <div className="flex items-center gap-2">
-                  <code className="flex-1 text-xs text-slate-300 bg-black/30 px-2 py-1 rounded truncate">{inviteLink}</code>
-                  <Button size="sm" onClick={handleCopyLink} className="bg-[#4a154b] hover:bg-[#611f6a] text-white shrink-0">
-                    {copied ? <><Check className="w-3 h-3 mr-1" />Copied</> : <><Copy className="w-3 h-3 mr-1" />Copy</>}
+                {inviteLink ? (
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 text-xs text-slate-300 bg-black/30 px-2 py-1 rounded truncate">{inviteLink}</code>
+                    <Button size="sm" onClick={handleCopyLink} className="bg-[#4a154b] hover:bg-[#611f6a] text-white shrink-0">
+                      {copied ? <><Check className="w-3 h-3 mr-1" />Copied</> : <><Copy className="w-3 h-3 mr-1" />Copy</>}
+                    </Button>
+                  </div>
+                ) : (
+                  <Button size="sm" onClick={handleGenerateLink} disabled={isGeneratingLink} className="bg-[#4a154b] hover:bg-[#611f6a] text-white">
+                    {isGeneratingLink ? <><Loader2 className="w-3 h-3 mr-1 animate-spin" />Generating...</> : 'Generate Invite Link'}
                   </Button>
-                </div>
+                )}
+                <p className="text-xs text-slate-500">Link expires in 7 days</p>
               </div>
 
               <div className="bg-[#222529] rounded-lg p-4 space-y-3">
