@@ -4,7 +4,7 @@ const fetcher = (url: string) => fetch(url).then(r => r.json());
 
 export interface User {
   id: string;
-  address: string;
+  ainAddress: string;
   displayName: string;
   avatarUrl?: string;
   createdAt: string;

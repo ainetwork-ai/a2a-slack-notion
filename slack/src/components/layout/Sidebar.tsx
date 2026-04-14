@@ -152,7 +152,7 @@ export default function Sidebar() {
             <DropdownMenuLabel className="text-white">
               <div className="font-semibold">{user?.displayName ?? 'You'}</div>
               <div className="text-xs text-slate-400 truncate">
-                {(user as Record<string, unknown>)?.ainAddress ? `${String((user as Record<string, unknown>).ainAddress).slice(0, 6)}…${String((user as Record<string, unknown>).ainAddress).slice(-4)}` : ''}
+                {user?.ainAddress ? `${user.ainAddress.slice(0, 6)}…${user.ainAddress.slice(-4)}` : ''}
               </div>
             </DropdownMenuLabel>
           </DropdownMenuGroup>

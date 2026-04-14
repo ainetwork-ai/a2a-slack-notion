@@ -1,150 +1,106 @@
 'use client';
 
-import { useState } from 'react';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useState, useEffect } from 'react';
+import { ConnectKitButton } from 'connectkit';
+import { useAccount, useSignMessage, useDisconnect } from 'wagmi';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Loader2, Wallet, Zap } from 'lucide-react';
+import { Loader2, Zap } from 'lucide-react';
 
 export default function WalletLogin() {
+  const { address, isConnected } = useAccount();
+  const { signMessageAsync } = useSignMessage();
+  const { disconnect } = useDisconnect();
+
   const [displayName, setDisplayName] = useState('');
-  const [privateKey, setPrivateKey] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [loadingStep, setLoadingStep] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [autoSignTriggered, setAutoSignTriggered] = useState(false);
 
-  async function getChallenge(): Promise<string> {
-    console.log('[Login] Fetching /api/auth/challenge...');
-    const res = await fetch('/api/auth/challenge');
-    console.log('[Login] Challenge response status:', res.status);
-    if (!res.ok) {
-      const text = await res.text().catch(() => '');
-      console.error('[Login] Challenge failed:', text);
-      throw new Error(`Failed to get challenge (${res.status}): ${text}`);
+  // When wallet connects, auto-start the sign flow
+  useEffect(() => {
+    if (isConnected && address && !autoSignTriggered && !isLoading) {
+      setAutoSignTriggered(true);
+      handleSign(address);
     }
-    const data = await res.json();
-    console.log('[Login] Challenge data:', data);
-    if (!data.message) throw new Error('Invalid challenge response');
-    return data.message;
-  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isConnected, address]);
 
-  async function verifyAndRedirect(signature: string, address: string, provider: string, nameOverride?: string) {
-    const res = await fetch('/api/auth/verify', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ signature, address, displayName: nameOverride || displayName.trim(), provider }),
-    });
-    if (!res.ok) {
-      const errData = await res.json().catch(() => ({ error: `Server error (${res.status})` }));
-      throw new Error(errData.error || `Verification failed (${res.status})`);
-    }
-    // Don't setIsLoading(false) — we're navigating away
-    window.location.href = '/workspace';
-    // Prevent finally from running setIsLoading(false) before navigation
-    await new Promise(() => {}); // Never resolves — page will navigate
-  }
-
-  async function handleMetaMaskLogin() {
-    const ethereum = (window as unknown as { ethereum?: {
-      request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
-      isMetaMask?: boolean;
-    } }).ethereum;
-
-    if (!ethereum) {
-      setError('MetaMask not detected. Please install MetaMask extension.');
-      return;
-    }
-
+  async function handleSign(walletAddress: string) {
     setIsLoading(true);
     setError(null);
 
     try {
-      console.log('[Login] Requesting accounts...');
-      setLoadingStep('Open MetaMask popup...');
-      const accounts = await Promise.race([
-        ethereum.request({ method: 'eth_requestAccounts' }),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('MetaMask did not respond. Check if the popup is open or unlock MetaMask.')), 60000)),
-      ]) as string[];
-      const address = accounts[0];
-      console.log('[Login] Got address:', address);
-      if (!address) throw new Error('No account selected');
-
+      // Auto-detect existing user
       setLoadingStep('Checking account...');
-      // Auto-detect existing user by address
       let resolvedName = displayName.trim();
       if (!resolvedName) {
-        console.log('[Login] Looking up existing user...');
-        const lookupRes = await fetch(`/api/auth/lookup?address=${encodeURIComponent(address)}`);
-        console.log('[Login] Lookup status:', lookupRes.status);
+        const lookupRes = await fetch(`/api/auth/lookup?address=${encodeURIComponent(walletAddress)}`);
         if (lookupRes.ok) {
           const { user: existingUser } = await lookupRes.json();
-          console.log('[Login] Existing user:', existingUser);
           if (existingUser?.displayName) {
             resolvedName = existingUser.displayName;
+            setDisplayName(resolvedName);
           }
         }
       }
+      const finalName = resolvedName || `User-${walletAddress.slice(0, 6)}`;
 
-      // If still no display name, generate from address
-      const finalName = resolvedName || `User-${address.slice(0, 6)}`;
-      console.log('[Login] Final name:', finalName);
-      setDisplayName(finalName);
-
+      // Get challenge
       setLoadingStep('Getting challenge...');
-      console.log('[Login] Getting challenge...');
-      const message = await getChallenge();
-      setLoadingStep('Sign the message in MetaMask...');
-      console.log('[Login] Got challenge, requesting signature...');
+      const challengeRes = await fetch('/api/auth/challenge');
+      if (!challengeRes.ok) throw new Error('Failed to get challenge');
+      const { message } = await challengeRes.json();
 
-      const signature = await ethereum.request({
-        method: 'personal_sign',
-        params: [message, address],
-      }) as string;
-      setLoadingStep('Verifying signature...');
-      console.log('[Login] Got signature, verifying...');
+      // Sign
+      setLoadingStep('Sign the message in your wallet...');
+      const signature = await signMessageAsync({ message });
 
-      await verifyAndRedirect(signature, address, 'metamask', finalName);
+      // Verify
+      setLoadingStep('Verifying...');
+      const verifyRes = await fetch('/api/auth/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          signature,
+          address: walletAddress,
+          displayName: finalName,
+          provider: 'metamask',
+        }),
+      });
+
+      if (!verifyRes.ok) {
+        const errData = await verifyRes.json().catch(() => ({ error: 'Verification failed' }));
+        throw new Error(errData.error || 'Verification failed');
+      }
+
+      window.location.href = '/workspace';
+      await new Promise(() => {}); // Block until navigation
     } catch (err: unknown) {
       console.error('[Login] Error:', err);
       const msg = err instanceof Error
         ? err.message
         : typeof err === 'object' && err !== null && 'message' in err
           ? String((err as { message: unknown }).message)
-          : 'MetaMask login failed. Please try again.';
-      // MetaMask user rejection
-      if (typeof err === 'object' && err !== null && 'code' in err && (err as { code: number }).code === 4001) {
-        setError('Login cancelled by user.');
+          : 'Login failed. Please try again.';
+
+      if (typeof err === 'object' && err !== null && 'code' in err) {
+        const code = (err as { code: number }).code;
+        if (code === 4001) {
+          setError('Signature rejected. Please try again.');
+        } else {
+          setError(msg);
+        }
       } else {
         setError(msg);
       }
+
+      disconnect();
+      setAutoSignTriggered(false);
     } finally {
       setIsLoading(false);
-    }
-  }
-
-  async function handlePrivateKeyLogin(e: React.FormEvent) {
-    e.preventDefault();
-    if (!privateKey.trim() || !displayName.trim()) {
-      setError('Please enter both your private key and display name.');
-      return;
-    }
-    setIsLoading(true);
-    setError(null);
-    try {
-      const message = await getChallenge();
-
-      const Ain = (await import('@ainblockchain/ain-js')).default;
-      const ain = new Ain('https://devnet-api.ainetwork.ai', null, 0);
-      const address = ain.wallet.add(privateKey.trim().replace(/^0x/, ''));
-      if (!address) throw new Error('Invalid private key');
-      ain.wallet.setDefaultAccount(address);
-      const signature = ain.wallet.sign(message);
-
-      await verifyAndRedirect(signature, address, 'ain');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Login failed. Please try again.');
-    } finally {
-      setIsLoading(false);
+      setLoadingStep('');
     }
   }
 
@@ -165,92 +121,45 @@ export default function WalletLogin() {
           <label className="block text-sm font-medium text-slate-300 mb-2">Display Name</label>
           <Input
             type="text"
-            placeholder="Your name in the workspace"
+            placeholder="Your name (optional for returning users)"
             value={displayName}
             onChange={e => setDisplayName(e.target.value)}
+            disabled={isLoading}
             className="bg-[#222529] border-white/10 text-white placeholder:text-slate-500 focus:border-[#4a154b] focus:ring-[#4a154b]"
           />
         </div>
 
-        <Tabs defaultValue="metamask" className="w-full">
-          <TabsList className="w-full bg-[#222529] border border-white/10 mb-6">
-            <TabsTrigger
-              value="metamask"
-              className="flex-1 data-[state=active]:bg-[#4a154b] data-[state=active]:text-white text-slate-400"
-            >
-              <Wallet className="w-4 h-4 mr-2" />
-              MetaMask
-            </TabsTrigger>
-            <TabsTrigger
-              value="privatekey"
-              className="flex-1 data-[state=active]:bg-[#4a154b] data-[state=active]:text-white text-slate-400"
-            >
-              <Zap className="w-4 h-4 mr-2" />
-              AIN Key
-            </TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="metamask">
-            <div className="space-y-4">
-              <div className="bg-[#222529] border border-white/10 rounded-lg p-4">
-                <p className="text-sm text-slate-300">
-                  Sign in using MetaMask. A signature request will appear — no transaction or gas fee required.
-                </p>
-              </div>
+        {isLoading ? (
+          <Button disabled className="w-full bg-[#f6851b] text-white font-semibold py-2.5">
+            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            {loadingStep || 'Connecting...'}
+          </Button>
+        ) : (
+          <ConnectKitButton.Custom>
+            {({ show }) => (
               <Button
-                onClick={handleMetaMaskLogin}
-                disabled={isLoading}
+                onClick={show}
                 className="w-full bg-[#f6851b] hover:bg-[#e2761b] text-white font-semibold py-2.5"
               >
-                {isLoading ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    {loadingStep || 'Connecting...'}
-                  </>
-                ) : (
-                  'Connect MetaMask'
-                )}
+                {isConnected ? `Connected: ${address?.slice(0, 6)}...${address?.slice(-4)}` : 'Connect Wallet'}
               </Button>
-            </div>
-          </TabsContent>
-
-          <TabsContent value="privatekey">
-            <form onSubmit={handlePrivateKeyLogin} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">AIN Private Key</label>
-                <Input
-                  type="password"
-                  placeholder="0x..."
-                  value={privateKey}
-                  onChange={e => setPrivateKey(e.target.value)}
-                  className="bg-[#222529] border-white/10 text-white placeholder:text-slate-500 font-mono text-sm focus:border-[#4a154b]"
-                />
-                <p className="text-xs text-slate-500 mt-1">
-                  Your key never leaves your browser. Signing happens locally.
-                </p>
-              </div>
-              <Button
-                type="submit"
-                disabled={isLoading}
-                className="w-full bg-[#4a154b] hover:bg-[#611f6a] text-white font-semibold py-2.5"
-              >
-                {isLoading ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Signing in...
-                  </>
-                ) : (
-                  'Sign in with AIN Key'
-                )}
-              </Button>
-            </form>
-          </TabsContent>
-        </Tabs>
+            )}
+          </ConnectKitButton.Custom>
+        )}
 
         {error && (
           <div className="mt-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
             <p className="text-sm text-red-400">{error}</p>
           </div>
+        )}
+
+        {isConnected && !isLoading && (
+          <button
+            onClick={() => { disconnect(); setAutoSignTriggered(false); }}
+            className="mt-3 w-full text-center text-xs text-slate-500 hover:text-slate-300"
+          >
+            Disconnect wallet
+          </button>
         )}
       </div>
 
