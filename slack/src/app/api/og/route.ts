@@ -8,11 +8,16 @@ export async function GET(request: NextRequest) {
 
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 3000);
+    const timeout = setTimeout(() => controller.abort(), 8000);
 
     const res = await fetch(url, {
       signal: controller.signal,
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; SlackA2A/1.0; +https://github.com/slack-a2a)' },
+      redirect: 'follow',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml',
+        'Accept-Language': 'en-US,en;q=0.9',
+      },
     });
     clearTimeout(timeout);
 
@@ -23,10 +28,25 @@ export async function GET(request: NextRequest) {
     const html = await res.text();
 
     function extractMeta(property: string): string | null {
-      const match =
+      // og:property via property= attribute
+      const ogProp =
         html.match(new RegExp(`<meta[^>]+property=["']og:${property}["'][^>]+content=["']([^"']+)["']`, 'i')) ||
         html.match(new RegExp(`<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:${property}["']`, 'i'));
-      return match ? match[1] : null;
+      if (ogProp) return ogProp[1];
+
+      // og:property via name= attribute (some sites use name instead of property)
+      const ogName =
+        html.match(new RegExp(`<meta[^>]+name=["']og:${property}["'][^>]+content=["']([^"']+)["']`, 'i')) ||
+        html.match(new RegExp(`<meta[^>]+content=["']([^"']+)["'][^>]+name=["']og:${property}["']`, 'i'));
+      if (ogName) return ogName[1];
+
+      // twitter:property fallback
+      const twitter =
+        html.match(new RegExp(`<meta[^>]+(?:name|property)=["']twitter:${property}["'][^>]+content=["']([^"']+)["']`, 'i')) ||
+        html.match(new RegExp(`<meta[^>]+content=["']([^"']+)["'][^>]+(?:name|property)=["']twitter:${property}["']`, 'i'));
+      if (twitter) return twitter[1];
+
+      return null;
     }
 
     function extractTitle(): string | null {
@@ -36,9 +56,26 @@ export async function GET(request: NextRequest) {
       return titleMatch ? titleMatch[1].trim() : null;
     }
 
+    function extractDescription(): string | null {
+      const ogDesc = extractMeta('description');
+      if (ogDesc) return ogDesc;
+      // Fallback to <meta name="description">
+      const descMatch =
+        html.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["']/i) ||
+        html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+name=["']description["']/i);
+      return descMatch ? descMatch[1] : null;
+    }
+
     const title = extractTitle();
-    const description = extractMeta('description');
-    const image = extractMeta('image');
+    const description = extractDescription();
+    let image = extractMeta('image');
+
+    // Resolve relative image URLs
+    if (image && !image.startsWith('http')) {
+      try {
+        image = new URL(image, url).href;
+      } catch { /* ignore invalid URLs */ }
+    }
 
     return NextResponse.json({ title, description, image });
   } catch {

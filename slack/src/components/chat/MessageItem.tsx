@@ -42,6 +42,11 @@ function CodeBlock({ lang, code }: { lang: string; code: string }) {
   );
 }
 
+function cleanUrlTail(url: string): string {
+  // Strip trailing punctuation that's likely not part of the URL (like Slack does)
+  return url.replace(/[.,;:!?)]+$/, '');
+}
+
 function renderInlineMarkdown(text: string): string {
   // Process block quotes before HTML escaping
   const lines = text.split('\n');
@@ -53,7 +58,20 @@ function renderInlineMarkdown(text: string): string {
       processedLines.push(line);
     }
   }
-  let html = processedLines.join('\n')
+  let joined = processedLines.join('\n');
+
+  // Extract URLs BEFORE HTML escaping to preserve & and other special chars
+  const urlPlaceholders: string[] = [];
+  joined = joined.replace(/(https?:\/\/[^\s<>"]+)/g, (_match, rawUrl: string) => {
+    const url = cleanUrlTail(rawUrl);
+    const trailing = rawUrl.slice(url.length);
+    const idx = urlPlaceholders.length;
+    urlPlaceholders.push(url);
+    return `\x00URL${idx}\x00${trailing}`;
+  });
+
+  // HTML escape
+  let html = joined
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
@@ -62,7 +80,14 @@ function renderInlineMarkdown(text: string): string {
   html = html.replace(/`([^`]+)`/g, '<code class="bg-white/10 rounded px-1 font-mono text-sm text-slate-200">$1</code>');
   html = html.replace(/\*([^*\n]+)\*/g, '<strong class="font-semibold text-white">$1</strong>');
   html = html.replace(/_([^_\n]+)_/g, '<em class="italic">$1</em>');
-  html = html.replace(/(https?:\/\/[^\s<>"]+)/g, '<a href="$1" target="_blank" rel="noopener noreferrer" class="text-[#36c5f0] hover:underline">$1</a>');
+
+  // Restore URLs with proper links (original URL in href, escaped version for display)
+  html = html.replace(/\x00URL(\d+)\x00/g, (_match, idxStr: string) => {
+    const url = urlPlaceholders[parseInt(idxStr)];
+    const displayUrl = url.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    return `<a href="${url}" target="_blank" rel="noopener noreferrer" class="text-[#36c5f0] hover:underline">${displayUrl}</a>`;
+  });
+
   // Item 2 & 13: Style @channel/@here/@everyone and regular @mentions
   html = html.replace(/@(channel|here|everyone)\b/g, '<span class="bg-[#4a154b]/30 px-1 rounded text-white font-semibold">@$1</span>');
   html = html.replace(/@(\w+)/g, '<span class="text-[#36c5f0] bg-[#36c5f0]/10 px-0.5 rounded cursor-pointer hover:underline">@$1</span>');
@@ -94,7 +119,7 @@ function renderMessageContent(content: string): React.ReactNode {
 
 function extractFirstUrl(content: string): string | null {
   const match = content.match(/(https?:\/\/[^\s<>"]+)/);
-  return match ? match[1] : null;
+  return match ? cleanUrlTail(match[1]) : null;
 }
 
 interface OGData {
