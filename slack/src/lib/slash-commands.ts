@@ -29,8 +29,8 @@ export const commands: SlashCommand[] = [
 /lenny [message] — Append ( ͡° ͜ʖ ͡°)
 /date — Show current date and time
 /remind me in <N> minutes/hours to <msg> — Set a server-persisted reminder
-/polymarket trending | search <query> — Prediction market data
-/news search <query> | trending | topic <category> — News articles`,
+/mcp — List available MCP integrations and their commands
+Type /<server> <tool> [args] for any enabled MCP integration`,
       ephemeral: true,
     }),
   },
@@ -343,34 +343,92 @@ export const commands: SlashCommand[] = [
     },
   },
   {
-    name: '/polymarket',
-    description: 'Polymarket prediction markets',
-    usage: '/polymarket trending | /polymarket search <query>',
+    name: '/mcp',
+    description: 'MCP integrations — /mcp <server> <tool> [args]',
+    usage: '/mcp [server] [tool] [args]',
     execute: async (args, context) => {
       if (!context.channelId) return { response: 'This command only works in channels.', ephemeral: true };
-      const parts = args.trim().split(/\s+/);
-      const subcommand = parts[0]?.toLowerCase();
 
-      if (!subcommand || subcommand === 'help') {
+      const parts = args.trim().split(/\s+/);
+      const serverId = parts[0]?.toLowerCase();
+
+      // No args or "list" → show available servers
+      if (!serverId || serverId === 'list' || serverId === 'help') {
+        try {
+          const [serversRes, integrationsRes] = await Promise.all([
+            fetch('/api/mcp/servers'),
+            fetch(`/api/channels/${context.channelId}/mcp`),
+          ]);
+          if (!serversRes.ok) return { response: 'Failed to load MCP servers.', ephemeral: true };
+          const servers: Array<{ id: string; name: string; icon: string; description: string; tools: Array<{ name: string; description: string }> }> = await serversRes.json();
+          const integrations: Array<{ serverId: string; enabled: boolean }> = integrationsRes.ok ? await integrationsRes.json() : [];
+          const enabledIds = new Set(integrations.filter(i => i.enabled).map(i => i.serverId));
+
+          if (servers.length === 0) return { response: 'No MCP servers configured.', ephemeral: true };
+
+          const lines = servers.map(s => {
+            const status = enabledIds.has(s.id) ? '✅' : '⬜';
+            const toolList = s.tools.map(t => `   • /mcp ${s.id} ${t.name} — ${t.description}`).join('\n');
+            return `${status} ${s.icon} *${s.name}* (\`${s.id}\`) — ${s.description}\n${toolList}`;
+          });
+
+          return {
+            response: `*MCP Integrations*\n\n${lines.join('\n\n')}\n\n_Enable/disable in Channel Settings > MCP tab._`,
+            ephemeral: true,
+          };
+        } catch {
+          return { response: 'Failed to load MCP integrations.', ephemeral: true };
+        }
+      }
+
+      // Fetch servers to validate serverId
+      let servers: Array<{ id: string; name: string; icon: string; tools: Array<{ name: string; description: string; parameters?: Record<string, { type: string; description: string; required?: boolean }> }> }>;
+      try {
+        const res = await fetch('/api/mcp/servers');
+        if (!res.ok) return { response: 'Failed to load MCP servers.', ephemeral: true };
+        servers = await res.json();
+      } catch {
+        return { response: 'Failed to load MCP servers.', ephemeral: true };
+      }
+
+      const server = servers.find(s => s.id === serverId);
+      if (!server) {
+        const available = servers.map(s => s.id).join(', ');
+        return { response: `Unknown server "${serverId}". Available: ${available}`, ephemeral: true };
+      }
+
+      const toolName = parts[1]?.toLowerCase();
+
+      // No tool → show server help
+      if (!toolName || toolName === 'help') {
+        const toolList = server.tools
+          .map(t => `• /mcp ${server.id} ${t.name} — ${t.description}`)
+          .join('\n');
         return {
-          response: `📊 *Polymarket Commands*
-• /polymarket trending — Show trending prediction markets
-• /polymarket search <query> — Search markets by keyword`,
+          response: `${server.icon} *${server.name} Commands*\n${toolList}`,
           ephemeral: true,
         };
       }
 
-      const toolParams: Record<string, unknown> = {};
-      let toolName = subcommand;
+      // Find the tool
+      const tool = server.tools.find(t => t.name === toolName);
+      if (!tool) {
+        const available = server.tools.map(t => t.name).join(', ');
+        return { response: `Unknown tool "${toolName}" for ${server.id}. Available: ${available}`, ephemeral: true };
+      }
 
-      if (subcommand === 'search') {
-        const query = parts.slice(1).join(' ');
-        if (!query) return { response: 'Usage: /polymarket search <query>', ephemeral: true };
-        toolParams.query = query;
-      } else if (subcommand !== 'trending') {
-        // Treat unknown subcommand as search query
-        toolName = 'search';
-        toolParams.query = args.trim();
+      // Build params from remaining args
+      const remainingArgs = parts.slice(2).join(' ');
+      const params: Record<string, unknown> = {};
+      if (tool.parameters) {
+        const paramDefs = Object.entries(tool.parameters);
+        const requiredParam = paramDefs.find(([, def]) => def.required);
+        if (requiredParam && remainingArgs) {
+          params[requiredParam[0]] = remainingArgs;
+        } else if (paramDefs.length > 0 && remainingArgs) {
+          const firstStringParam = paramDefs.find(([, def]) => def.type === 'string');
+          if (firstStringParam) params[firstStringParam[0]] = remainingArgs;
+        }
       }
 
       try {
@@ -378,9 +436,9 @@ export const commands: SlashCommand[] = [
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            serverId: 'polymarket',
+            serverId: server.id,
             toolName,
-            params: toolParams,
+            params,
             channelId: context.channelId,
           }),
         });
@@ -388,63 +446,7 @@ export const commands: SlashCommand[] = [
         if (!res.ok) return { response: result.error || 'Failed to execute command.', ephemeral: true };
         return { response: result.content };
       } catch {
-        return { response: 'Failed to reach Polymarket.', ephemeral: true };
-      }
-    },
-  },
-  {
-    name: '/news',
-    description: 'Search news articles and trending topics',
-    usage: '/news search <query> | /news trending [geo] | /news topic <category>',
-    execute: async (args, context) => {
-      if (!context.channelId) return { response: 'This command only works in channels.', ephemeral: true };
-      const parts = args.trim().split(/\s+/);
-      const subcommand = parts[0]?.toLowerCase();
-
-      if (!subcommand || subcommand === 'help') {
-        return {
-          response: `📰 *News Commands*
-• /news search <query> — Search news articles
-• /news trending [US|KR|...] — Trending news by country
-• /news topic <category> — News by topic (world, business, technology, science, sports, health, entertainment)`,
-          ephemeral: true,
-        };
-      }
-
-      const toolParams: Record<string, unknown> = {};
-      let toolName = subcommand;
-
-      if (subcommand === 'search') {
-        const query = parts.slice(1).join(' ');
-        if (!query) return { response: 'Usage: /news search <query>', ephemeral: true };
-        toolParams.query = query;
-      } else if (subcommand === 'trending') {
-        if (parts[1]) toolParams.geo = parts[1].toUpperCase();
-      } else if (subcommand === 'topic') {
-        if (!parts[1]) return { response: 'Usage: /news topic <category>\nCategories: world, business, technology, science, sports, health, entertainment', ephemeral: true };
-        toolParams.topic = parts[1].toLowerCase();
-      } else {
-        // Treat unknown subcommand as search query
-        toolName = 'search';
-        toolParams.query = args.trim();
-      }
-
-      try {
-        const res = await fetch('/api/mcp/execute', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            serverId: 'news',
-            toolName,
-            params: toolParams,
-            channelId: context.channelId,
-          }),
-        });
-        const result = await res.json();
-        if (!res.ok) return { response: result.error || 'Failed to execute command.', ephemeral: true };
-        return { response: result.content };
-      } catch {
-        return { response: 'Failed to fetch news.', ephemeral: true };
+        return { response: `Failed to execute /mcp ${server.id} ${toolName}.`, ephemeral: true };
       }
     },
   },

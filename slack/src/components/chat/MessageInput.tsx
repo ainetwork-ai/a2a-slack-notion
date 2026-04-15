@@ -7,7 +7,7 @@ import { Paperclip, Send, Bold, Italic, Strikethrough, Code, List, Quote, Smile,
 import { useTyping } from '@/lib/realtime/use-typing';
 import { cn } from '@/lib/utils';
 import { replaceShortcodes, emojiMap } from '@/lib/emoji-map';
-import { commands, findCommand, findCustomCommand, findMcpCommand } from '@/lib/slash-commands';
+import { commands, findCommand, findCustomCommand } from '@/lib/slash-commands';
 import { useWorkspaceStore } from '@/lib/stores/workspace-store';
 import ReactionPicker from './ReactionPicker';
 import GifPicker from './GifPicker';
@@ -55,7 +55,6 @@ export default function MessageInput({
   const [emojiSuggestions, setEmojiSuggestions] = useState<Array<{ shortcode: string; emoji: string }>>([]);
   const [emojiQuery, setEmojiQuery] = useState('');
   const [emojiIndex, setEmojiIndex] = useState(0);
-  const [mcpCommandsCache, setMcpCommandsCache] = useState<Array<{ name: string; description: string }>>([]);
   const [ephemeralMessage, setEphemeralMessage] = useState<string | null>(null);
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -81,22 +80,6 @@ export default function MessageInput({
       textareaRef.current?.focus();
     }
   }, [isSending]);
-
-  // Fetch MCP server commands for autocomplete
-  useEffect(() => {
-    if (!channelId) return;
-    (async () => {
-      try {
-        const res = await fetch('/api/mcp/servers');
-        if (!res.ok) return;
-        const servers: Array<{ id: string; name: string; icon: string; tools: Array<{ name: string; description: string }> }> = await res.json();
-        const mcpCmds = servers.flatMap(s =>
-          [{ name: `/${s.id}`, description: `${s.icon} ${s.name}` }]
-        );
-        setMcpCommandsCache(mcpCmds);
-      } catch { /* ignore */ }
-    })();
-  }, [channelId]);
 
   function autoResize() {
     const el = textareaRef.current;
@@ -194,8 +177,7 @@ export default function MessageInput({
     // Slash command interception
     if (trimmed.startsWith('/')) {
       const match = findCommand(trimmed) ||
-        (activeWorkspaceId ? await findCustomCommand(trimmed, activeWorkspaceId) : null) ||
-        await findMcpCommand(trimmed, channelId);
+        (activeWorkspaceId ? await findCustomCommand(trimmed, activeWorkspaceId) : null);
       if (match) {
         setIsSending(true);
         try {
@@ -291,9 +273,8 @@ export default function MessageInput({
     // Slash command detection (only when input starts with /)
     if (val.startsWith('/') && !val.includes(' ')) {
       const query = val.toLowerCase();
-      const builtIn = commands.filter(cmd => cmd.name.startsWith(query));
-      const mcpMatches = mcpCommandsCache.filter(cmd => cmd.name.startsWith(query));
-      setSlashSuggestions([...builtIn, ...mcpMatches]);
+      const matches = commands.filter(cmd => cmd.name.startsWith(query));
+      setSlashSuggestions(matches);
       setSlashIndex(0);
       setMentionSuggestions([]);
       setMentionQuery('');
