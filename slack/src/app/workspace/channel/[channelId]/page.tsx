@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, use, useEffect, useRef } from 'react';
-import { Hash, Users, Settings, Pin, LogOut, Search, X } from 'lucide-react';
+import { Hash, Users, Settings, Pin, LogOut, Search, X, Bell, BellOff, BellRing } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -57,6 +57,7 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
   const [searchResults, setSearchResults] = useState<Message[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const [notifPref, setNotifPref] = useState<'all' | 'mentions' | 'none'>('all');
   const router = useRouter();
   const { mutate } = useSWRConfig();
 
@@ -115,6 +116,24 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
       })
       .catch(() => {});
   }, [channelId]);
+
+  useEffect(() => {
+    fetch(`/api/channels/${channelId}/notifications`)
+      .then(r => r.json())
+      .then((data: { pref?: string }) => {
+        if (data.pref) setNotifPref(data.pref as 'all' | 'mentions' | 'none');
+      })
+      .catch(() => {});
+  }, [channelId]);
+
+  async function updateNotifPref(pref: 'all' | 'mentions' | 'none') {
+    setNotifPref(pref);
+    await fetch(`/api/channels/${channelId}/notifications`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pref }),
+    });
+  }
 
   useEffect(() => {
     if (!searchOpen) {
@@ -289,6 +308,28 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
               <Settings className="w-4 h-4" />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="bg-[#222529] border-white/10 text-white">
+              <DropdownMenuItem
+                onClick={() => updateNotifPref('all')}
+                className={`cursor-pointer ${notifPref === 'all' ? 'text-white bg-white/10' : 'text-slate-400'}`}
+              >
+                <BellRing className="w-4 h-4 mr-2" />
+                All messages
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => updateNotifPref('mentions')}
+                className={`cursor-pointer ${notifPref === 'mentions' ? 'text-white bg-white/10' : 'text-slate-400'}`}
+              >
+                <Bell className="w-4 h-4 mr-2" />
+                Mentions only
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => updateNotifPref('none')}
+                className={`cursor-pointer ${notifPref === 'none' ? 'text-white bg-white/10' : 'text-slate-400'}`}
+              >
+                <BellOff className="w-4 h-4 mr-2" />
+                Muted
+              </DropdownMenuItem>
+              <div className="my-1 border-t border-white/10" />
               <DropdownMenuItem
                 onClick={handleLeaveChannel}
                 className="text-red-400 hover:bg-red-500/10 hover:text-red-400 cursor-pointer"
