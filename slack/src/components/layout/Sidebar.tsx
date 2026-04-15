@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 
-import { Home, Search, Bell, MessageSquare, Smile, LogOut, Sun, Moon, Inbox, MessagesSquare, Plus, Bookmark } from 'lucide-react';
+import { Home, Search, Bell, MessageSquare, Smile, LogOut, Sun, Moon, Inbox, MessagesSquare, Plus, Bookmark, BellOff, Volume2, VolumeX } from 'lucide-react';
 import NotificationPanel from '@/components/modals/NotificationPanel';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -21,6 +21,8 @@ import { useNotifications } from '@/lib/hooks/use-notifications';
 import { useAppStore } from '@/lib/stores/app-store';
 import { useThemeStore } from '@/lib/stores/theme-store';
 import { useWorkspaceStore } from '@/lib/stores/workspace-store';
+import { usePresence } from '@/lib/realtime/use-presence';
+import { isNotificationSoundEnabled, setNotificationSoundEnabled } from '@/lib/notifications/notification-sound';
 import { cn } from '@/lib/utils';
 
 interface NavButtonProps {
@@ -67,10 +69,41 @@ export default function Sidebar() {
   const { setSearchOpen, searchOpen } = useAppStore();
   const { theme, toggleTheme } = useThemeStore();
   const { workspaces, activeWorkspaceId, setActive, fetchWorkspaces } = useWorkspaceStore();
+  const { myStatus, setDnd, isDndEnabled } = usePresence();
+  const [dndActive, setDndActive] = useState(false);
+  const [soundEnabled, setSoundEnabled] = useState(true);
 
   useEffect(() => {
     fetchWorkspaces();
   }, [fetchWorkspaces]);
+
+  // Sync DND and sound state from localStorage on mount
+  useEffect(() => {
+    setDndActive(isDndEnabled());
+    setSoundEnabled(isNotificationSoundEnabled());
+  }, []);
+
+  function handleToggleDnd() {
+    const next = !dndActive;
+    setDndActive(next);
+    setDnd(next);
+  }
+
+  function handleToggleSound() {
+    const next = !soundEnabled;
+    setSoundEnabled(next);
+    setNotificationSoundEnabled(next);
+  }
+
+  function statusDotClass(): string {
+    switch (myStatus) {
+      case 'online': return 'bg-green-400';
+      case 'dnd': return 'bg-red-500';
+      case 'away':
+      case 'idle': return 'bg-yellow-400';
+      default: return 'bg-slate-500';
+    }
+  }
 
   const initials = user?.displayName
     ? user.displayName.split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2)
