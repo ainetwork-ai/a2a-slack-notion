@@ -24,12 +24,28 @@ export default function CreateChannelModal() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const slugName = name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+  // Auto-convert: lowercase, spaces→hyphens, strip invalid chars, max 80 chars
+  const slugName = name
+    .toLowerCase()
+    .replace(/\s+/g, '-')
+    .replace(/[^a-z0-9\-_]/g, '')
+    .slice(0, 80);
+
+  const nameValidationError =
+    name.trim() === ''
+      ? null
+      : slugName.length === 0
+      ? 'Channel name must contain letters, numbers, hyphens, or underscores.'
+      : null;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim()) {
       setError('Channel name is required.');
+      return;
+    }
+    if (nameValidationError) {
+      setError(nameValidationError);
       return;
     }
     setIsLoading(true);
@@ -81,8 +97,14 @@ export default function CreateChannelModal() {
                 autoFocus
               />
             </div>
-            {name && slugName !== name && (
+            {name && slugName !== name.toLowerCase() && slugName.length > 0 && (
               <p className="text-xs text-slate-500 mt-1">Will be created as #{slugName}</p>
+            )}
+            {nameValidationError && (
+              <p className="text-xs text-red-400 mt-1">{nameValidationError}</p>
+            )}
+            {slugName.length >= 70 && (
+              <p className="text-xs text-slate-500 mt-1">{slugName.length}/80 characters</p>
             )}
           </div>
 

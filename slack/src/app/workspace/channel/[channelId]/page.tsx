@@ -75,6 +75,10 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
   }
 
   async function handleLeaveChannel() {
+    const confirmed = window.confirm(
+      `Leave #${channel?.name ?? 'this channel'}? You can rejoin if it's public.`
+    );
+    if (!confirmed) return;
     await fetch(`/api/channels/${channelId}/members`, {
       method: 'DELETE',
     });
@@ -197,6 +201,14 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
                 {channel.description}
               </span>
             </>
+          ) : channel ? (
+            <span
+              className="text-slate-600 text-sm truncate cursor-pointer hover:text-slate-400 italic"
+              onClick={() => { setDescriptionDraft(''); setEditingDescription(true); }}
+              title="Add a description"
+            >
+              Add a description
+            </span>
           ) : null}
         </div>
         <div className="flex items-center gap-1 shrink-0">
