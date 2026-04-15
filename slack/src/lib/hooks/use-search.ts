@@ -15,6 +15,7 @@ export function useSearch() {
   const [results, setResults] = useState<SearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [query, setQuery] = useState('');
+  const [textQuery, setTextQuery] = useState('');
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const search = useCallback((q: string) => {
@@ -26,6 +27,7 @@ export function useSearch() {
 
     if (!q.trim()) {
       setResults([]);
+      setTextQuery('');
       setIsSearching(false);
       return;
     }
@@ -38,8 +40,10 @@ export function useSearch() {
         if (!res.ok) throw new Error('Search failed');
         const data = await res.json();
         setResults(data.results ?? []);
+        setTextQuery(data.textQuery ?? q.trim());
       } catch {
         setResults([]);
+        setTextQuery('');
       } finally {
         setIsSearching(false);
       }
@@ -49,9 +53,10 @@ export function useSearch() {
   function clearSearch() {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     setQuery('');
+    setTextQuery('');
     setResults([]);
     setIsSearching(false);
   }
 
-  return { results, isSearching, query, search, clearSearch };
+  return { results, isSearching, query, textQuery, search, clearSearch };
 }
