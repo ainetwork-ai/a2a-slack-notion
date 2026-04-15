@@ -2,11 +2,12 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Paperclip, Send, Bold, Italic, Strikethrough, Code, List, Quote, Smile, AtSign, Clock, Eye, EyeOff, Link, ListOrdered, CodeSquare } from 'lucide-react';
 import { useTyping } from '@/lib/realtime/use-typing';
 import { cn } from '@/lib/utils';
-import { replaceShortcodes } from '@/lib/emoji-map';
-import { commands, findCommand, findCustomCommand } from '@/lib/slash-commands';
+import { replaceShortcodes, emojiMap } from '@/lib/emoji-map';
+import { commands, findCommand, findCustomCommand, findMcpCommand } from '@/lib/slash-commands';
 import { useWorkspaceStore } from '@/lib/stores/workspace-store';
 import ReactionPicker from './ReactionPicker';
 import GifPicker from './GifPicker';
@@ -24,7 +25,14 @@ interface MentionSuggestion {
   id: string;
   displayName: string;
   avatarUrl?: string;
+  statusMessage?: string;
+  isOnline?: boolean;
 }
+
+// Build emoji suggestions list from the emoji map
+const EMOJI_SHORTCODES: Array<{ shortcode: string; emoji: string }> = Object.entries(emojiMap).map(
+  ([key, emoji]) => ({ shortcode: key.slice(1, -1), emoji }) // strip leading/trailing ':'
+);
 
 export default function MessageInput({
   onSend,
@@ -42,8 +50,12 @@ export default function MessageInput({
   const [mentionSuggestions, setMentionSuggestions] = useState<MentionSuggestion[]>([]);
   const [mentionQuery, setMentionQuery] = useState('');
   const [mentionIndex, setMentionIndex] = useState(0);
-  const [slashSuggestions, setSlashSuggestions] = useState<typeof commands>([]);
+  const [slashSuggestions, setSlashSuggestions] = useState<Array<{ name: string; description: string }>>([]);
   const [slashIndex, setSlashIndex] = useState(0);
+  const [emojiSuggestions, setEmojiSuggestions] = useState<Array<{ shortcode: string; emoji: string }>>([]);
+  const [emojiQuery, setEmojiQuery] = useState('');
+  const [emojiIndex, setEmojiIndex] = useState(0);
+  const [mcpCommandsCache, setMcpCommandsCache] = useState<Array<{ name: string; description: string }>>([]);
   const [ephemeralMessage, setEphemeralMessage] = useState<string | null>(null);
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -69,6 +81,22 @@ export default function MessageInput({
       textareaRef.current?.focus();
     }
   }, [isSending]);
+
+  // Fetch MCP server commands for autocomplete
+  useEffect(() => {
+    if (!channelId) return;
+    (async () => {
+      try {
+        const res = await fetch('/api/mcp/servers');
+        if (!res.ok) return;
+        const servers: Array<{ id: string; name: string; icon: string; tools: Array<{ name: string; description: string }> }> = await res.json();
+        const mcpCmds = servers.flatMap(s =>
+          [{ name: `/${s.id}`, description: `${s.icon} ${s.name}` }]
+        );
+        setMcpCommandsCache(mcpCmds);
+      } catch { /* ignore */ }
+    })();
+  }, [channelId]);
 
   function autoResize() {
     const el = textareaRef.current;
@@ -166,7 +194,8 @@ export default function MessageInput({
     // Slash command interception
     if (trimmed.startsWith('/')) {
       const match = findCommand(trimmed) ||
-        (activeWorkspaceId ? await findCustomCommand(trimmed, activeWorkspaceId) : null);
+        (activeWorkspaceId ? await findCustomCommand(trimmed, activeWorkspaceId) : null) ||
+        await findMcpCommand(trimmed, channelId);
       if (match) {
         setIsSending(true);
         try {
@@ -244,7 +273,9 @@ export default function MessageInput({
       setMentionSuggestions(suggestions.map((u: Record<string, unknown>) => ({
         id: u.id || u.userId,
         displayName: u.displayName,
-        avatarUrl: u.avatarUrl,
+        avatarUrl: u.avatarUrl as string | undefined,
+        statusMessage: u.statusMessage as string | undefined,
+        isOnline: u.isOnline as boolean | undefined,
       })));
     } catch {
       setMentionSuggestions([]);
@@ -260,8 +291,9 @@ export default function MessageInput({
     // Slash command detection (only when input starts with /)
     if (val.startsWith('/') && !val.includes(' ')) {
       const query = val.toLowerCase();
-      const matches = commands.filter(cmd => cmd.name.startsWith(query));
-      setSlashSuggestions(matches);
+      const builtIn = commands.filter(cmd => cmd.name.startsWith(query));
+      const mcpMatches = mcpCommandsCache.filter(cmd => cmd.name.startsWith(query));
+      setSlashSuggestions([...builtIn, ...mcpMatches]);
       setSlashIndex(0);
       setMentionSuggestions([]);
       setMentionQuery('');
@@ -279,9 +311,24 @@ export default function MessageInput({
       setMentionQuery(query);
       setMentionIndex(0);
       fetchMentions(query);
+      setEmojiSuggestions([]);
+      setEmojiQuery('');
     } else {
       setMentionSuggestions([]);
       setMentionQuery('');
+    }
+
+    // Emoji shortcode detection: colon followed by 2+ word chars
+    const emojiMatch = textBefore.match(/:(\w{2,})$/);
+    if (emojiMatch && !mentionMatch) {
+      const query = emojiMatch[1].toLowerCase();
+      setEmojiQuery(query);
+      setEmojiIndex(0);
+      const matches = EMOJI_SHORTCODES.filter(e => e.shortcode.includes(query)).slice(0, 8);
+      setEmojiSuggestions(matches);
+    } else if (!emojiMatch) {
+      setEmojiSuggestions([]);
+      setEmojiQuery('');
     }
   }
 
@@ -299,7 +346,24 @@ export default function MessageInput({
     }, 0);
   }
 
-  function insertSlashCommand(cmd: typeof commands[number]) {
+  function insertEmoji(item: { shortcode: string; emoji: string }) {
+    const cursor = textareaRef.current?.selectionStart ?? content.length;
+    const before = content.slice(0, cursor);
+    const after = content.slice(cursor);
+    // Replace the partial :shortcode with the emoji character
+    const newBefore = before.replace(/:[\w]*$/, item.emoji);
+    setContent(newBefore + after);
+    setEmojiSuggestions([]);
+    setEmojiQuery('');
+    setTimeout(() => {
+      textareaRef.current?.focus();
+      const pos = newBefore.length;
+      textareaRef.current?.setSelectionRange(pos, pos);
+      autoResize();
+    }, 0);
+  }
+
+  function insertSlashCommand(cmd: { name: string; description: string }) {
     setContent(cmd.name + ' ');
     setSlashSuggestions([]);
     setTimeout(() => {
@@ -330,6 +394,28 @@ export default function MessageInput({
       }
       if (e.key === 'Escape') {
         setSlashSuggestions([]);
+        return;
+      }
+    }
+
+    if (emojiSuggestions.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setEmojiIndex(i => Math.min(i + 1, emojiSuggestions.length - 1));
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setEmojiIndex(i => Math.max(i - 1, 0));
+        return;
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault();
+        insertEmoji(emojiSuggestions[emojiIndex]);
+        return;
+      }
+      if (e.key === 'Escape') {
+        setEmojiSuggestions([]);
         return;
       }
     }
@@ -551,21 +637,64 @@ export default function MessageInput({
         </div>
       )}
 
+      {/* Emoji suggestions */}
+      {emojiSuggestions.length > 0 && (
+        <div className="absolute bottom-full left-4 right-4 mb-1 bg-[#222529] border border-white/10 rounded-lg shadow-xl overflow-hidden z-50">
+          <p className="px-3 py-1 text-[10px] text-slate-500 font-semibold uppercase tracking-wide border-b border-white/5">Emoji matching :{emojiQuery}</p>
+          {emojiSuggestions.map((item, i) => (
+            <button
+              key={item.shortcode}
+              onClick={() => insertEmoji(item)}
+              className={cn(
+                'w-full flex items-center gap-3 px-3 py-1.5 text-sm text-left transition-colors',
+                i === emojiIndex ? 'bg-[#4a154b]/50 text-white' : 'text-slate-300 hover:bg-white/5'
+              )}
+            >
+              <span className="text-lg w-7 text-center shrink-0">{item.emoji}</span>
+              <span className="text-slate-400 font-mono text-xs">:{item.shortcode}:</span>
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Mention suggestions */}
       {mentionSuggestions.length > 0 && (
         <div className="absolute bottom-full left-4 right-4 mb-1 bg-[#222529] border border-white/10 rounded-lg shadow-xl overflow-hidden z-50">
-          {mentionSuggestions.map((user, i) => (
-            <button
-              key={user.id}
-              onClick={() => insertMention(user)}
-              className={cn(
-                'w-full flex items-center gap-2 px-3 py-2 text-sm text-left transition-colors',
-                i === mentionIndex ? 'bg-[#4a154b]/50 text-white' : 'text-slate-300 hover:bg-white/5'
-              )}
-            >
-              <span className="font-medium">@{user.displayName}</span>
-            </button>
-          ))}
+          {mentionSuggestions.map((user, i) => {
+            const initials = (user.displayName || '?')
+              .split(' ')
+              .map((w: string) => w[0])
+              .join('')
+              .toUpperCase()
+              .slice(0, 2);
+            return (
+              <button
+                key={user.id}
+                onClick={() => insertMention(user)}
+                className={cn(
+                  'w-full flex items-center gap-2.5 px-3 py-2 text-sm text-left transition-colors',
+                  i === mentionIndex ? 'bg-[#4a154b]/50 text-white' : 'text-slate-300 hover:bg-white/5'
+                )}
+              >
+                <div className="relative shrink-0">
+                  <Avatar className="w-7 h-7">
+                    {user.avatarUrl && <AvatarImage src={user.avatarUrl} alt={user.displayName} />}
+                    <AvatarFallback className="text-[10px] bg-[#4a154b] text-white">{initials}</AvatarFallback>
+                  </Avatar>
+                  <span className={cn(
+                    'absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-[#222529]',
+                    user.isOnline ? 'bg-[#2eb67d]' : 'bg-slate-600'
+                  )} />
+                </div>
+                <div className="min-w-0">
+                  <span className="font-medium block truncate">@{user.displayName}</span>
+                  {user.statusMessage && (
+                    <span className="text-xs text-slate-500 truncate block">{user.statusMessage}</span>
+                  )}
+                </div>
+              </button>
+            );
+          })}
         </div>
       )}
 

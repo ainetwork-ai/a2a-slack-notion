@@ -3,10 +3,14 @@ export const emojiMap: Record<string, string> = {
   ':fire:': '🔥', ':rocket:': '🚀', ':eyes:': '👀',
   ':100:': '💯', ':check:': '✅', ':x:': '❌',
   ':wave:': '👋', ':clap:': '👏', ':pray:': '🙏',
-  ':laugh:': '😂', ':smile:': '😊', ':thinking:': '🤔',
+  ':laugh:': '😂', ':laughing:': '😂', ':smile:': '😊', ':thinking:': '🤔',
   ':tada:': '🎉', ':star:': '⭐', ':warning:': '⚠️',
   ':bulb:': '💡', ':zap:': '⚡', ':gem:': '💎',
   ':chart:': '📈', ':money:': '💰', ':bitcoin:': '₿',
+  ':ok_hand:': '👌', ':raised_hands:': '🙌', ':muscle:': '💪',
+  ':sparkles:': '✨', ':memo:': '📝', ':link:': '🔗',
+  ':pin:': '📌', ':bell:': '🔔', ':mute:': '🔇',
+  ':search:': '🔍', ':gear:': '⚙️',
 };
 
 export function replaceShortcodes(text: string): string {
