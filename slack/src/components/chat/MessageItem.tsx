@@ -204,13 +204,6 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from '@/components/ui/dialog';
-import {
   Tooltip,
   TooltipTrigger,
   TooltipContent,
@@ -224,6 +217,7 @@ import ImageLightbox from './ImageLightbox';
 import UserProfilePopup from './UserProfilePopup';
 import { cn } from '@/lib/utils';
 import { useAppStore } from '@/lib/stores/app-store';
+import { useToast } from '@/components/ui/toast-provider';
 
 interface MessageItemProps {
   message: Message;
@@ -249,15 +243,12 @@ export default function MessageItem({
   channelId,
 }: MessageItemProps) {
   const { setActiveThread } = useAppStore();
+  const { showToast } = useToast();
   const [showActions, setShowActions] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState(message.content);
   const [reactionPickerOpen, setReactionPickerOpen] = useState(false);
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
-  const [copyToast, setCopyToast] = useState(false);
-  const toastTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
-
   const [isPinned, setIsPinned] = useState(!!message.pinnedAt);
   const [isBookmarked, setIsBookmarked] = useState(false);
   const [animatingReactions, setAnimatingReactions] = useState<Set<string>>(new Set());
@@ -309,6 +300,7 @@ export default function MessageItem({
     if (res.ok) {
       const data = await res.json();
       setIsPinned(data.pinned);
+      showToast(data.pinned ? 'Message pinned' : 'Message unpinned', 'success');
     }
   }
 
@@ -320,6 +312,7 @@ export default function MessageItem({
         body: JSON.stringify({ messageId: message.id }),
       });
       setIsBookmarked(false);
+      showToast('Bookmark removed', 'info');
     } else {
       await fetch('/api/bookmarks', {
         method: 'POST',
@@ -327,29 +320,27 @@ export default function MessageItem({
         body: JSON.stringify({ messageId: message.id }),
       });
       setIsBookmarked(true);
+      showToast('Message saved', 'success');
     }
   }
 
-  function handleConfirmDelete() {
-    onDelete?.(message.id);
-    setDeleteDialogOpen(false);
+  function handleDelete() {
+    if (window.confirm("Delete this message? This can't be undone.")) {
+      onDelete?.(message.id);
+    }
   }
 
   function handleShare() {
     const channelPart = channelName ? `[#${channelName}] ` : '';
     const text = `${channelPart}${senderName}: ${message.content}`;
     navigator.clipboard.writeText(text).then(() => {
-      setCopyToast(true);
-      if (toastTimeout.current) clearTimeout(toastTimeout.current);
-      toastTimeout.current = setTimeout(() => setCopyToast(false), 2500);
+      showToast('Copied to clipboard', 'success');
     });
   }
 
   function handleCopyText() {
     navigator.clipboard.writeText(message.content).then(() => {
-      setCopyToast(true);
-      if (toastTimeout.current) clearTimeout(toastTimeout.current);
-      toastTimeout.current = setTimeout(() => setCopyToast(false), 2500);
+      showToast('Copied to clipboard', 'success');
     });
   }
 
@@ -358,9 +349,7 @@ export default function MessageItem({
     const path = channelId ? `/workspace/channel/${channelId}` : window.location.pathname;
     const permalink = `${base}${path}#msg-${message.id}`;
     navigator.clipboard.writeText(permalink).then(() => {
-      setCopyToast(true);
-      if (toastTimeout.current) clearTimeout(toastTimeout.current);
-      toastTimeout.current = setTimeout(() => setCopyToast(false), 2500);
+      showToast('Copied to clipboard', 'success');
     });
   }
 
@@ -604,12 +593,17 @@ export default function MessageItem({
             <TooltipProvider>
               {message.reactions.map(reaction => {
                 const iReacted = reaction.userIds.includes(currentUserId ?? '');
-                const othersCount = iReacted ? reaction.count - 1 : reaction.count;
+                const names = reaction.userNames ?? [];
+                const otherNames = iReacted
+                  ? names.filter((_, i) => reaction.userIds[i] !== currentUserId)
+                  : names;
                 let tooltipText = '';
-                if (iReacted && othersCount > 0) {
-                  tooltipText = `You and ${othersCount} other${othersCount > 1 ? 's' : ''}`;
+                if (iReacted && otherNames.length > 0) {
+                  tooltipText = `You, ${otherNames.join(', ')}`;
                 } else if (iReacted) {
                   tooltipText = 'You';
+                } else if (names.length > 0) {
+                  tooltipText = names.join(', ');
                 } else {
                   tooltipText = `${reaction.count} person${reaction.count > 1 ? 's' : ''}`;
                 }
@@ -734,9 +728,8 @@ export default function MessageItem({
                     <Pencil className="w-4 h-4 mr-2" />
                     Edit message
                   </DropdownMenuItem>
-                  {/* T7: Delete with confirmation */}
                   <DropdownMenuItem
-                    onClick={() => setDeleteDialogOpen(true)}
+                    onClick={handleDelete}
                     className="text-red-400 hover:bg-red-500/10 hover:text-red-400 cursor-pointer"
                   >
                     <Trash2 className="w-4 h-4 mr-2" />
@@ -749,35 +742,6 @@ export default function MessageItem({
         </div>
       )}
 
-      {/* T7: Delete confirmation dialog */}
-      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <DialogContent className="bg-[#222529] border-white/10 text-white sm:max-w-md" showCloseButton={false}>
-          <DialogHeader>
-            <DialogTitle className="text-white">Delete message?</DialogTitle>
-          </DialogHeader>
-          <p className="text-sm text-slate-400">
-            Are you sure you want to delete this message? This can&apos;t be undone.
-          </p>
-          <DialogFooter className="border-t-white/10 bg-transparent -mx-0 -mb-0 rounded-b-none pt-2 flex-row justify-end gap-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setDeleteDialogOpen(false)}
-              className="text-slate-300 hover:text-white"
-            >
-              Cancel
-            </Button>
-            <Button
-              size="sm"
-              onClick={handleConfirmDelete}
-              className="bg-red-600 hover:bg-red-700 text-white"
-            >
-              Delete
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       {/* T10: Image lightbox */}
       {lightboxSrc && (
         <ImageLightbox
@@ -786,12 +750,6 @@ export default function MessageItem({
         />
       )}
 
-      {/* T13: Copy toast */}
-      {copyToast && (
-        <div className="absolute right-2 -top-8 z-20 bg-[#36c5f0] text-[#1a1d21] text-xs font-medium px-2 py-1 rounded shadow-lg pointer-events-none">
-          Copied to clipboard
-        </div>
-      )}
     </div>
   );
 }

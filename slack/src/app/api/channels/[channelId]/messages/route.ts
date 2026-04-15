@@ -69,8 +69,9 @@ export async function GET(
 
   const [msgReactions, msgFiles] = await Promise.all([
     db
-      .select()
+      .select({ messageId: reactions.messageId, emoji: reactions.emoji, userId: reactions.userId, displayName: users.displayName })
       .from(reactions)
+      .innerJoin(users, eq(reactions.userId, users.id))
       .where(inArray(reactions.messageId, messageIds)),
     db
       .select()
@@ -78,10 +79,11 @@ export async function GET(
       .where(inArray(files.messageId, messageIds)),
   ]);
 
-  const reactionsByMessage = msgReactions.reduce<Record<string, Record<string, number>>>(
+  const reactionsByMessage = msgReactions.reduce<Record<string, Record<string, { userId: string; displayName: string }[]>>>(
     (acc, r) => {
       if (!acc[r.messageId]) acc[r.messageId] = {};
-      acc[r.messageId][r.emoji] = (acc[r.messageId][r.emoji] || 0) + 1;
+      if (!acc[r.messageId][r.emoji]) acc[r.messageId][r.emoji] = [];
+      acc[r.messageId][r.emoji].push({ userId: r.userId, displayName: r.displayName });
       return acc;
     },
     {}

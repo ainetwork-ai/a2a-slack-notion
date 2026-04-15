@@ -7,6 +7,7 @@ export interface Reaction {
   emoji: string;
   count: number;
   userIds: string[];
+  userNames: string[];
 }
 
 export interface Message {
@@ -40,11 +41,15 @@ function mapApiMessage(m: any): Message {
     editedAt: m.updatedAt !== m.createdAt ? m.updatedAt : undefined,
     threadCount: m.threadCount || 0,
     reactions: m.reactions
-      ? Object.entries(m.reactions).map(([emoji, count]) => ({
-          emoji,
-          count: count as number,
-          userIds: [],
-        }))
+      ? Object.entries(m.reactions).map(([emoji, reactors]) => {
+          const list = reactors as { userId: string; displayName: string }[];
+          return {
+            emoji,
+            count: list.length,
+            userIds: list.map(r => r.userId),
+            userNames: list.map(r => r.displayName),
+          };
+        })
       : [],
     metadata: m.metadata,
     parentId: m.parentId,
