@@ -265,7 +265,11 @@ export default function ChannelDetailPanel({
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1">
                         <p className="text-sm text-white truncate">{member.displayName}</p>
-                        {member.isAgent && <Bot className="w-3 h-3 text-[#36c5f0] shrink-0" />}
+                        {member.isAgent && (
+                          <Badge className="text-[10px] px-1 py-0 h-4 bg-[#36c5f0]/20 text-[#36c5f0] border-[#36c5f0]/30 shrink-0">
+                            Bot
+                          </Badge>
+                        )}
                       </div>
                       {member.role && (
                         <Badge className="text-[10px] px-1 py-0 h-3.5 mt-0.5 bg-white/10 text-slate-400 border-white/10">

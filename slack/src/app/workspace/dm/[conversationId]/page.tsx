@@ -130,9 +130,13 @@ export default function DMPage({ params }: { params: Promise<{ conversationId: s
 
   const { typingUsers } = useTyping(undefined, conversationId);
   const { isOnline } = usePresence();
-
   const online = otherUser ? isOnline(otherUser.id) : false;
   const agentStream = useAgentStream();
+
+  // Inject a synthetic typing entry for the agent while waiting for a response
+  const agentTypingUsers = (isAgent && otherUser && agentStream.isStreaming && !agentStream.content)
+    ? [...typingUsers, { userId: otherUser.id, displayName: otherUser.displayName }]
+    : typingUsers;
 
   // Header display values
   const headerTitle = isGroup
@@ -350,7 +354,7 @@ export default function DMPage({ params }: { params: Promise<{ conversationId: s
             onDelete={deleteMessage}
             lastReadAt={lastReadAtRef.current}
           />
-          <TypingIndicator typingUsers={typingUsers} />
+          <TypingIndicator typingUsers={agentTypingUsers} />
 
           {/* Agent streaming response */}
           {isAgent && (agentStream.isStreaming || agentStream.content) && (

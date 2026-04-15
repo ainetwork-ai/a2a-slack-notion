@@ -40,11 +40,11 @@ function DateSeparator({ date }: { date: Date }) {
 function NewMessageDivider() {
   return (
     <div className="flex items-center gap-3 px-4 py-2 my-1">
-      <div className="flex-1 h-px bg-red-500/60" />
-      <span className="text-xs text-red-400 font-semibold px-2 py-0.5 bg-red-500/10 border border-red-500/30 rounded-full whitespace-nowrap">
+      <div className="flex-1 h-px bg-[#1d9bd1]/60" />
+      <span className="text-xs text-[#1d9bd1] font-semibold px-2 py-0.5 bg-[#1d9bd1]/10 border border-[#1d9bd1]/30 rounded-full whitespace-nowrap">
         New
       </span>
-      <div className="flex-1 h-px bg-red-500/60" />
+      <div className="flex-1 h-px bg-[#1d9bd1]/60" />
     </div>
   );
 }

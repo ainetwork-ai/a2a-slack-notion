@@ -86,9 +86,16 @@ export async function GET(request: NextRequest) {
       statusEmoji: users.statusEmoji,
       statusExpiresAt: users.statusExpiresAt,
       updatedAt: users.updatedAt,
+      isAgent: users.isAgent,
     })
     .from(users)
     .where(inArray(users.id, ids));
 
-  return NextResponse.json(presences);
+  // Agents are always online
+  const result = presences.map(p => ({
+    ...p,
+    status: p.isAgent ? "online" : p.status,
+  }));
+
+  return NextResponse.json(result);
 }

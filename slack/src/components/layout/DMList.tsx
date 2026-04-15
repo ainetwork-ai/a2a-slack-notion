@@ -31,9 +31,11 @@ interface DMConversation {
   } | null;
   members: DMMember[];
   lastMessage?: string;
+  latestMessage?: { id: string; content: string; createdAt: string; userId: string } | null;
   unread?: boolean;
   unreadCount?: number;
   isMuted?: boolean;
+  updatedAt?: string;
 }
 
 export default function DMList() {
@@ -59,7 +61,13 @@ export default function DMList() {
     { refreshInterval: 3000, revalidateOnFocus: true }
   );
 
-  const conversations = Array.isArray(data) ? data : [];
+  const conversations = Array.isArray(data)
+    ? [...data].sort((a, b) => {
+        const aTime = a.latestMessage?.createdAt ?? a.updatedAt ?? '';
+        const bTime = b.latestMessage?.createdAt ?? b.updatedAt ?? '';
+        return bTime > aTime ? 1 : bTime < aTime ? -1 : 0;
+      })
+    : [];
 
   useEffect(() => {
     const userIds = conversations.flatMap(c =>
