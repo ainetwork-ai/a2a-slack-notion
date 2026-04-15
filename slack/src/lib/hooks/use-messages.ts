@@ -61,21 +61,28 @@ interface UseMessagesOptions {
 export function useMessages({ channelId, conversationId, parentId }: UseMessagesOptions) {
   const [cursor, setCursor] = useState<string | null>(null);
 
-  const endpoint = channelId
+  const endpoint = parentId
+    ? `/api/messages/${parentId}/thread`
+    : channelId
     ? `/api/channels/${channelId}/messages`
     : conversationId
     ? `/api/dm/${conversationId}/messages`
     : null;
 
-  const swrKey = endpoint
-    ? parentId
-      ? `${endpoint}?parentId=${parentId}`
-      : endpoint
-    : null;
+  const swrKey = endpoint;
 
   const rawFetcher = async (url: string) => {
     const res = await fetch(url);
     const json = await res.json();
+
+    // Thread API returns { parent, thread }, channel/DM API returns { messages, nextCursor }
+    if (json.thread) {
+      return {
+        messages: (json.thread ?? []).map(mapApiMessage),
+        nextCursor: null,
+      };
+    }
+
     return {
       ...json,
       messages: (json.messages ?? []).map(mapApiMessage).reverse(),
