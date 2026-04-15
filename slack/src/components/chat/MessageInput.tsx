@@ -7,6 +7,7 @@ import { Paperclip, Send, Bold, Italic, Strikethrough, Code, List, Quote, Smile,
 import { useTyping } from '@/lib/realtime/use-typing';
 import { cn } from '@/lib/utils';
 import { replaceShortcodes, emojiMap } from '@/lib/emoji-map';
+import { htmlToMarkdown, normalizeMarkdown } from '@/lib/html-to-markdown';
 import { commands, findCommand, findCustomCommand } from '@/lib/slash-commands';
 import { useWorkspaceStore } from '@/lib/stores/workspace-store';
 import ReactionPicker from './ReactionPicker';
@@ -488,10 +489,32 @@ export default function MessageInput({
   }
 
   function handlePaste(e: React.ClipboardEvent<HTMLTextAreaElement>) {
+    // Handle image files
     const file = Array.from(e.clipboardData.files).find(f => f.type.startsWith('image/'));
     if (file) {
       e.preventDefault();
       uploadFile(file);
+      return;
+    }
+
+    // Handle rich text (HTML) paste
+    const html = e.clipboardData.getData('text/html');
+    if (html) {
+      e.preventDefault();
+      const markdown = normalizeMarkdown(htmlToMarkdown(html));
+      const el = textareaRef.current;
+      const pos = el?.selectionStart ?? content.length;
+      const selEnd = el?.selectionEnd ?? pos;
+      const before = content.slice(0, pos);
+      const after = content.slice(selEnd);
+      const newContent = before + markdown + after;
+      setContent(newContent);
+      setTimeout(() => {
+        el?.focus();
+        const newPos = pos + markdown.length;
+        el?.setSelectionRange(newPos, newPos);
+        autoResize();
+      }, 0);
     }
   }
 

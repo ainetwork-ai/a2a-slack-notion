@@ -152,6 +152,7 @@ export async function POST(
       displayName: users.displayName,
       isAgent: users.isAgent,
       a2aUrl: users.a2aUrl,
+      isMuted: dmMembers.isMuted,
     })
     .from(dmMembers)
     .innerJoin(users, eq(dmMembers.userId, users.id))
@@ -174,17 +175,18 @@ export async function POST(
       .map((m) => m.userId)
   );
 
-  // Create notifications for all other members
-  if (otherMembers.length > 0) {
+  // Create notifications for other members who have not muted the conversation
+  const notifiableMembers = otherMembers.filter((m) => !m.isMuted);
+  if (notifiableMembers.length > 0) {
     await db.insert(notifications).values(
-      otherMembers.map((m) => ({
+      notifiableMembers.map((m) => ({
         userId: m.userId,
         messageId: message.id,
         type: mentionedMemberIds.has(m.userId) ? "mention" : "dm",
       }))
     );
 
-    // Send to agents async
+    // Send to agents async (always, regardless of mute — agents still receive messages)
     for (const member of otherMembers) {
       if (member.isAgent && member.a2aUrl) {
         sendToAgent({

@@ -37,9 +37,9 @@ export async function GET(
 
   const { conversationId } = await params;
 
-  // Verify membership
+  // Verify membership and get mute state
   const [membership] = await db
-    .select()
+    .select({ lastReadAt: dmMembers.lastReadAt, isMuted: dmMembers.isMuted })
     .from(dmMembers)
     .where(and(eq(dmMembers.conversationId, conversationId), eq(dmMembers.userId, user.id)))
     .limit(1);
@@ -83,6 +83,7 @@ export async function GET(
       otherMembers,
       isGroup,
       agentSkills: [],
+      isMuted: membership.isMuted,
     },
   });
 }

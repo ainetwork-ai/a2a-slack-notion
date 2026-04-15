@@ -3,6 +3,7 @@ import { users, channels, channelMembers, messages } from "@/lib/db/schema";
 import { eq, and, desc, sql } from "drizzle-orm";
 import { requireAuth } from "@/lib/auth/middleware";
 import { NextRequest, NextResponse } from "next/server";
+import { logAudit } from "@/lib/audit";
 
 export async function GET(request: NextRequest) {
   const auth = await requireAuth();
@@ -84,6 +85,10 @@ export async function POST(request: NextRequest) {
     userId: user.id,
     role: "owner",
   });
+
+  if (workspaceId) {
+    await logAudit(workspaceId, user.id, "channel.create", "channel", channel.id, { name: channel.name });
+  }
 
   return NextResponse.json(channel, { status: 201 });
 }

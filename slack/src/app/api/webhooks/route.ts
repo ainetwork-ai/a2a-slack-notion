@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { webhooks, workspaceMembers, channels } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
 import { randomBytes } from "crypto";
+import { logAudit } from "@/lib/audit";
 
 export async function GET(request: NextRequest) {
   const auth = await requireAuth();
@@ -91,6 +92,8 @@ export async function POST(request: NextRequest) {
     })
     .returning();
 
+  await logAudit(workspaceId, auth.user.id, "webhook.create", "channel", channelId, { webhookId: webhook.id, name: webhook.name });
+
   return NextResponse.json(webhook, { status: 201 });
 }
 
@@ -124,6 +127,8 @@ export async function DELETE(request: NextRequest) {
   await db
     .delete(webhooks)
     .where(and(eq(webhooks.id, id), eq(webhooks.workspaceId, workspaceId)));
+
+  await logAudit(workspaceId, auth.user.id, "webhook.delete", "channel", id);
 
   return NextResponse.json({ success: true });
 }

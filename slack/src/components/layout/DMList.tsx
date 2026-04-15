@@ -33,6 +33,7 @@ interface DMConversation {
   lastMessage?: string;
   unread?: boolean;
   unreadCount?: number;
+  isMuted?: boolean;
 }
 
 export default function DMList() {
@@ -117,7 +118,8 @@ export default function DMList() {
                     'w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm transition-colors text-left',
                     isActive(convo.id)
                       ? 'bg-[#4a154b]/60 text-white'
-                      : 'text-[#bcabbc] hover:bg-white/5 hover:text-white'
+                      : 'text-[#bcabbc] hover:bg-white/5 hover:text-white',
+                    convo.isMuted && !isActive(convo.id) && 'opacity-50'
                   )}
                 >
                   <div className="relative shrink-0">
@@ -125,13 +127,13 @@ export default function DMList() {
                       <Users className="w-3.5 h-3.5 text-[#bcabbc]" />
                     </div>
                   </div>
-                  <span className={cn('truncate flex-1', convo.unread && !isActive(convo.id) && 'font-semibold text-white')}>
+                  <span className={cn('truncate flex-1', convo.unread && !isActive(convo.id) && !convo.isMuted && 'font-semibold text-white')}>
                     {names}
                   </span>
                   <span className="shrink-0 text-[10px] bg-white/10 text-[#bcabbc] rounded-full px-1.5 py-0.5 font-medium">
                     {memberCount}
                   </span>
-                  {(convo.unreadCount ?? 0) > 0 && !isActive(convo.id) && (
+                  {(convo.unreadCount ?? 0) > 0 && !isActive(convo.id) && !convo.isMuted && (
                     <span className="flex items-center justify-center min-w-[18px] h-[18px] rounded-full bg-red-500 text-white text-[10px] font-bold px-1 shrink-0">
                       {(convo.unreadCount ?? 0) > 99 ? '99+' : convo.unreadCount}
                     </span>
@@ -161,7 +163,8 @@ export default function DMList() {
                   'w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm transition-colors text-left',
                   isActive(convo.id)
                     ? 'bg-[#4a154b]/60 text-white'
-                    : 'text-[#bcabbc] hover:bg-white/5 hover:text-white'
+                    : 'text-[#bcabbc] hover:bg-white/5 hover:text-white',
+                  convo.isMuted && !isActive(convo.id) && 'opacity-50'
                 )}
               >
                 <div className="relative shrink-0">
@@ -185,10 +188,10 @@ export default function DMList() {
                     </span>
                   )}
                 </div>
-                <span className={cn('truncate flex-1', convo.unread && !isActive(convo.id) && 'font-semibold text-white')}>
+                <span className={cn('truncate flex-1', convo.unread && !isActive(convo.id) && !convo.isMuted && 'font-semibold text-white')}>
                   {convo.otherUser.displayName}
                 </span>
-                {(convo.unreadCount ?? 0) > 0 && !isActive(convo.id) && (
+                {(convo.unreadCount ?? 0) > 0 && !isActive(convo.id) && !convo.isMuted && (
                   <span className="ml-auto flex items-center justify-center min-w-[18px] h-[18px] rounded-full bg-red-500 text-white text-[10px] font-bold px-1 shrink-0">
                     {(convo.unreadCount ?? 0) > 99 ? '99+' : convo.unreadCount}
                   </span>

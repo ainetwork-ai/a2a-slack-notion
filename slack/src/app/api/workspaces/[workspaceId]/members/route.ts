@@ -3,6 +3,7 @@ import { requireAuth } from "@/lib/auth/middleware";
 import { db } from "@/lib/db";
 import { workspaceMembers, users, channels } from "@/lib/db/schema";
 import { eq, and, sql } from "drizzle-orm";
+import { logAudit } from "@/lib/audit";
 
 export async function GET(
   _req: NextRequest,
@@ -113,6 +114,8 @@ export async function DELETE(
       )
     );
 
+  await logAudit(workspaceId, auth.user.id, "member.remove", "user", userId);
+
   return NextResponse.json({ success: true });
 }
 
@@ -180,6 +183,8 @@ export async function PATCH(
         eq(workspaceMembers.userId, userId)
       )
     );
+
+  await logAudit(workspaceId, auth.user.id, "member.role_change", "user", userId, { newRole: role, previousRole: targetMembership.role });
 
   return NextResponse.json({ success: true });
 }

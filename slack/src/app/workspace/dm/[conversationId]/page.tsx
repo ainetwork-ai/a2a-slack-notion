@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, use, useEffect, useRef } from 'react';
-import { Bot, Phone, Video, Users } from 'lucide-react';
+import { Bot, Phone, Video, Users, Bell, BellOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
@@ -34,6 +34,7 @@ interface Conversation {
   members: ConversationMember[];
   otherMembers: ConversationMember[];
   agentSkills?: AgentSkill[];
+  isMuted?: boolean;
 }
 
 export default function DMPage({ params }: { params: Promise<{ conversationId: string }> }) {
@@ -41,6 +42,8 @@ export default function DMPage({ params }: { params: Promise<{ conversationId: s
   const { activeThread } = useAppStore();
   const [selectedSkill, setSelectedSkill] = useState<AgentSkill | null>(null);
   const lastReadAtRef = useRef<string | null>(null);
+  const [isMuted, setIsMuted] = useState(false);
+  const [togglingMute, setTogglingMute] = useState(false);
 
   useEffect(() => {
     // Mark as read and capture the previous lastReadAt in one call
@@ -62,6 +65,26 @@ export default function DMPage({ params }: { params: Promise<{ conversationId: s
   );
 
   const conversation = convoData?.conversation;
+
+  useEffect(() => {
+    if (conversation?.isMuted !== undefined) {
+      setIsMuted(conversation.isMuted);
+    }
+  }, [conversation?.isMuted]);
+
+  async function handleToggleMute() {
+    if (togglingMute) return;
+    setTogglingMute(true);
+    try {
+      const res = await fetch(`/api/dm/${conversationId}/mute`, { method: 'PATCH' });
+      if (res.ok) {
+        const data = await res.json() as { isMuted: boolean };
+        setIsMuted(data.isMuted);
+      }
+    } finally {
+      setTogglingMute(false);
+    }
+  }
   const isGroup = conversation?.isGroup ?? false;
   const otherUser = conversation?.otherUser;
   const otherMembers = conversation?.otherMembers ?? [];
@@ -164,6 +187,16 @@ export default function DMPage({ params }: { params: Promise<{ conversationId: s
               </Button>
             </>
           )}
+          <Button
+            variant="ghost"
+            size="icon"
+            className={cn('w-8 h-8 hover:bg-white/10', isMuted ? 'text-yellow-400 hover:text-yellow-300' : 'text-slate-400 hover:text-white')}
+            onClick={handleToggleMute}
+            disabled={togglingMute}
+            title={isMuted ? 'Unmute conversation' : 'Mute conversation'}
+          >
+            {isMuted ? <BellOff className="w-4 h-4" /> : <Bell className="w-4 h-4" />}
+          </Button>
         </div>
       </div>
 

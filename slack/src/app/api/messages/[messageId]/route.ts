@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { users, channels, channelMembers, messages, reactions, mentions, files, notifications } from "@/lib/db/schema";
+import { users, channels, channelMembers, messages, reactions, mentions, files, notifications, messageEdits } from "@/lib/db/schema";
 import { eq, and, desc, lt, sql, inArray, or, ilike } from "drizzle-orm";
 import { requireAuth } from "@/lib/auth/middleware";
 import { NextRequest, NextResponse } from "next/server";
@@ -34,6 +34,13 @@ export async function PATCH(
   if (!content || typeof content !== "string") {
     return NextResponse.json({ error: "Content is required" }, { status: 400 });
   }
+
+  // Save edit history
+  await db.insert(messageEdits).values({
+    messageId,
+    previousContent: message.content,
+    editedBy: user.id,
+  });
 
   const [updated] = await db
     .update(messages)

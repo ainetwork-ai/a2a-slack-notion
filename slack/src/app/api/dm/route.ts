@@ -33,6 +33,7 @@ export async function GET() {
         .select({
           userId: dmMembers.userId,
           lastReadAt: dmMembers.lastReadAt,
+          isMuted: dmMembers.isMuted,
           displayName: users.displayName,
           avatarUrl: users.avatarUrl,
           status: users.status,
@@ -78,6 +79,8 @@ export async function GET() {
           )
         );
 
+      const isMuted = myMember?.isMuted ?? false;
+
       return {
         ...conv,
         members,
@@ -86,6 +89,7 @@ export async function GET() {
         latestMessage: latestMessage || null,
         unreadCount,
         unread: unreadCount > 0,
+        isMuted,
       };
     })
   );
