@@ -325,7 +325,7 @@ async function createAgent(
   // Register with a2a-builder (best-effort)
   let a2aUrl: string | null = null;
   try {
-    const builderRes = await fetch(BUILDER_URL, {
+    const builderRes = await fetch("https://a2a-builder.ainetwork.ai/api/agents", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
