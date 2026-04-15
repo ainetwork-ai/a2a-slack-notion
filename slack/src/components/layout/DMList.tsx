@@ -97,7 +97,7 @@ export default function DMList() {
       </div>
 
       {!collapsed && (
-        <div className="mt-0.5 space-y-px">
+        <div className="mt-0.5 space-y-px" role="listbox" aria-label="Direct Messages">
           {conversations.map(convo => {
             if (convo.isGroup) {
               // Group DM rendering — members array includes all participants
@@ -109,6 +109,8 @@ export default function DMList() {
               return (
                 <button
                   key={convo.id}
+                  role="option"
+                  aria-selected={isActive(convo.id)}
                   onClick={() => router.push(`/workspace/dm/${convo.id}`)}
                   className={cn(
                     'w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm transition-colors text-left',
@@ -149,6 +151,8 @@ export default function DMList() {
             return (
               <button
                 key={convo.id}
+                role="option"
+                aria-selected={isActive(convo.id)}
                 onClick={() => router.push(`/workspace/dm/${convo.id}`)}
                 className={cn(
                   'w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm transition-colors text-left',

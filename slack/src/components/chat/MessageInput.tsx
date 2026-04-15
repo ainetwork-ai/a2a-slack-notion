@@ -2,13 +2,14 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Paperclip, Send, Bold, Italic, Strikethrough, Code, List, Quote, Smile, AtSign, Clock } from 'lucide-react';
+import { Paperclip, Send, Bold, Italic, Strikethrough, Code, List, Quote, Smile, AtSign, Clock, Eye, EyeOff } from 'lucide-react';
 import { useTyping } from '@/lib/realtime/use-typing';
 import { cn } from '@/lib/utils';
 import { replaceShortcodes } from '@/lib/emoji-map';
 import { commands, findCommand } from '@/lib/slash-commands';
 import ReactionPicker from './ReactionPicker';
 import GifPicker from './GifPicker';
+import { renderInlineMarkdown } from './MessageItem';
 
 interface MessageInputProps {
   onSend: (content: string, metadata?: Record<string, unknown>) => Promise<void>;
@@ -51,6 +52,10 @@ export default function MessageInput({
     if (typeof window === 'undefined') return false;
     return !localStorage.getItem('shiftEnterHintDismissed');
   });
+  const [previewVisible, setPreviewVisible] = useState(false);
+
+  // Show preview only when content contains formatting characters
+  const hasFormatting = /[*_`~>]/.test(content);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isComposingRef = useRef(false);
@@ -537,6 +542,7 @@ export default function MessageInput({
             onClick={() => fileInputRef.current?.click()}
             disabled={isUploading}
             title="Attach file"
+            aria-label="Attach file"
           >
             <Paperclip className="w-4 h-4" />
           </Button>
@@ -554,6 +560,7 @@ export default function MessageInput({
             disabled={disabled || isSending}
             rows={1}
             autoFocus
+            aria-label={placeholder}
             className="flex-1 bg-transparent text-white placeholder:text-slate-500 text-sm resize-none focus:outline-none leading-relaxed py-1 max-h-[200px] overflow-y-auto"
           />
         </div>
@@ -646,11 +653,26 @@ export default function MessageInput({
             )}
           </div>
 
+          {/* Preview toggle button — only shown when formatting chars present */}
+          {hasFormatting && (
+            <button
+              type="button"
+              onMouseDown={e => { e.preventDefault(); setPreviewVisible(v => !v); }}
+              title={previewVisible ? 'Hide preview' : 'Show formatting preview'}
+              aria-label={previewVisible ? 'Hide formatting preview' : 'Show formatting preview'}
+              aria-pressed={previewVisible}
+              className="w-7 h-7 flex items-center justify-center rounded text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
+            >
+              {previewVisible ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+            </button>
+          )}
+
           {/* Send button — always visible */}
           <Button
             size="icon"
             onClick={handleSend}
             disabled={!hasContent || isSending || disabled}
+            aria-label="Send message"
             className={cn(
               'w-7 h-7 shrink-0 transition-colors ml-0.5',
               hasContent
@@ -662,6 +684,16 @@ export default function MessageInput({
           </Button>
         </div>
       </div>
+
+      {/* Formatting preview strip */}
+      {hasFormatting && previewVisible && (
+        <div
+          className="mt-1 px-3 py-1.5 bg-[#1a1d21] border border-white/10 rounded-lg text-sm text-slate-300 leading-relaxed"
+          aria-label="Formatting preview"
+        >
+          <span dangerouslySetInnerHTML={{ __html: renderInlineMarkdown(content) }} />
+        </div>
+      )}
 
       {/* Item 10: Shift+Enter hint */}
       {showShiftEnterHint && (

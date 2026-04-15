@@ -157,6 +157,8 @@ export default function MessageList({
       className="message-area h-full overflow-y-auto scrollbar-slack"
       onScroll={handleScroll}
       ref={scrollAreaRef}
+      aria-live="polite"
+      aria-label="Message list"
     >
       {/* Load more indicator */}
       {hasMore && (

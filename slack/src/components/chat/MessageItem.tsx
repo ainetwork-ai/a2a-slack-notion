@@ -47,7 +47,7 @@ function cleanUrlTail(url: string): string {
   return url.replace(/[.,;:!?)]+$/, '');
 }
 
-function renderInlineMarkdown(text: string): string {
+export function renderInlineMarkdown(text: string): string {
   // Process block quotes before HTML escaping
   const lines = text.split('\n');
   const processedLines: string[] = [];
@@ -368,9 +368,13 @@ export default function MessageItem({
     );
   }
 
+  const messageTime = format(new Date(message.createdAt), 'h:mm a');
+
   return (
     <div
       id={`msg-${message.id}`}
+      role="article"
+      aria-label={`Message from ${senderName} at ${messageTime}`}
       className={cn(
         'group relative flex items-start gap-3 px-4 hover:bg-white/[0.03] rounded-lg transition-colors',
         isCompact ? 'py-0.5' : 'py-1.5',

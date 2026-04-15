@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 
 import { Home, Search, MessageSquare, Smile, LogOut, Sun, Moon, Inbox, MessagesSquare, Plus, Bookmark, BellOff, Volume2, VolumeX, User, Settings } from 'lucide-react';
+import Image from 'next/image';
 import NotificationPanel from '@/components/modals/NotificationPanel';
 import ProfileEditModal from '@/components/modals/ProfileEditModal';
 import SetStatusModal from '@/components/modals/SetStatusModal';
@@ -120,17 +121,28 @@ export default function Sidebar() {
     <>
     <ProfileEditModal open={profileModalOpen} onClose={() => setProfileModalOpen(false)} />
     <SetStatusModal open={statusModalOpen} onClose={() => setStatusModalOpen(false)} />
-    <div className="sidebar-dark flex flex-col items-center w-16 h-full py-3 gap-1 border-r border-white/5 shrink-0">
+    <div className="sidebar-dark flex flex-col items-center w-16 h-full py-3 gap-1 border-r border-white/5 shrink-0" role="navigation" aria-label="Main navigation">
       {/* Active Workspace Icon */}
       <TooltipProvider delay={300}>
         <Tooltip>
           <TooltipTrigger
-            className="flex items-center justify-center w-10 h-10 rounded-xl bg-[#4a154b] mb-1 cursor-pointer shadow-md hover:bg-[#611f6a] transition-colors"
+            className="flex items-center justify-center w-10 h-10 rounded-xl bg-[#4a154b] mb-1 cursor-pointer shadow-md hover:bg-[#611f6a] transition-colors overflow-hidden"
             onClick={() => router.push('/workspace')}
           >
-            <span className="text-white font-bold text-xs">
-              {activeWorkspace?.iconText ?? 'A2A'}
-            </span>
+            {activeWorkspace?.iconUrl ? (
+              <Image
+                src={activeWorkspace.iconUrl}
+                alt={activeWorkspace.name}
+                width={40}
+                height={40}
+                className="object-cover w-full h-full"
+                unoptimized
+              />
+            ) : (
+              <span className="text-white font-bold text-xs">
+                {activeWorkspace?.iconText ?? 'A2A'}
+              </span>
+            )}
           </TooltipTrigger>
           <TooltipContent side="right" className="bg-[#1a1d21] text-white border-white/10">
             {activeWorkspace?.name ?? 'Slack-A2A'}
@@ -143,10 +155,21 @@ export default function Sidebar() {
         <TooltipProvider key={ws.id} delay={300}>
           <Tooltip>
             <TooltipTrigger
-              className="flex items-center justify-center w-10 h-10 rounded-xl bg-[#222529] cursor-pointer hover:bg-[#4a154b]/60 transition-colors border border-white/10"
+              className="flex items-center justify-center w-10 h-10 rounded-xl bg-[#222529] cursor-pointer hover:bg-[#4a154b]/60 transition-colors border border-white/10 overflow-hidden"
               onClick={() => setActive(ws.id)}
             >
-              <span className="text-white font-bold text-xs">{ws.iconText}</span>
+              {ws.iconUrl ? (
+                <Image
+                  src={ws.iconUrl}
+                  alt={ws.name}
+                  width={40}
+                  height={40}
+                  className="object-cover w-full h-full"
+                  unoptimized
+                />
+              ) : (
+                <span className="text-white font-bold text-xs">{ws.iconText}</span>
+              )}
             </TooltipTrigger>
             <TooltipContent side="right" className="bg-[#1a1d21] text-white border-white/10">
               {ws.name}
@@ -185,6 +208,7 @@ export default function Sidebar() {
       <div className="w-8 border-t border-white/10 mb-2 mt-2" />
 
       {/* Nav Buttons */}
+      <nav aria-label="App navigation">
       <NavButton
         icon={<Home className="w-5 h-5" />}
         label="Home"
@@ -236,6 +260,8 @@ export default function Sidebar() {
           active={pathname === '/workspace/settings'}
         />
       )}
+
+      </nav>
 
       {/* Spacer */}
       <div className="flex-1" />

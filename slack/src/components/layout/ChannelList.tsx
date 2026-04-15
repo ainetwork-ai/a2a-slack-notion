@@ -91,10 +91,12 @@ export default function ChannelList({ workspaceId }: ChannelListProps) {
 
       {/* Channel Items */}
       {!collapsed && (
-        <div className="mt-0.5 space-y-px">
+        <div className="mt-0.5 space-y-px" role="listbox" aria-label="Channels">
           {sortedChannels.map((channel) => (
             <button
               key={channel.id}
+              role="option"
+              aria-selected={isActive(channel.id)}
               onClick={() => router.push(`/workspace/channel/${channel.id}`)}
               className={cn(
                 'w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm transition-colors text-left',
