@@ -31,6 +31,7 @@ interface ChannelDetailPanelProps {
   onClose: () => void;
   onRemoveMember?: (userId: string) => void;
   onArchiveToggle?: (archived: boolean) => void;
+  onInvite?: () => void;
 }
 
 interface McpIntegration {
@@ -66,6 +67,7 @@ export default function ChannelDetailPanel({
   onClose,
   onRemoveMember,
   onArchiveToggle,
+  onInvite,
 }: ChannelDetailPanelProps) {
   const [activeTab, setActiveTab] = useState<Tab>('about');
   const [mcpServers, setMcpServers] = useState<McpServer[]>([]);
@@ -243,6 +245,17 @@ export default function ChannelDetailPanel({
 
         {activeTab === 'members' && (
           <div className="py-2">
+            {onInvite && (
+              <div className="px-3 pb-2">
+                <button
+                  onClick={onInvite}
+                  className="w-full flex items-center gap-2 px-3 py-2 rounded-lg border border-white/10 bg-white/[0.02] text-slate-300 hover:bg-white/5 hover:text-white transition-colors text-sm"
+                >
+                  <Plus className="w-4 h-4 text-slate-400" />
+                  Invite people
+                </button>
+              </div>
+            )}
             {members.length === 0 ? (
               <p className="text-center text-slate-500 text-sm py-8">No members</p>
             ) : (
