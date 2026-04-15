@@ -156,6 +156,36 @@ export async function PATCH(
     return NextResponse.json({ success: true });
   }
 
+  if (body.action === "setEngagementLevel") {
+    const { targetUserId, engagementLevel } = body;
+
+    if (typeof engagementLevel !== "number" || engagementLevel < 0 || engagementLevel > 3) {
+      return NextResponse.json({ error: "engagementLevel must be 0-3" }, { status: 400 });
+    }
+
+    if (!targetUserId || typeof targetUserId !== "string") {
+      return NextResponse.json({ error: "targetUserId is required" }, { status: 400 });
+    }
+
+    // Only admins/owners can change engagement level
+    const [membership] = await db
+      .select()
+      .from(channelMembers)
+      .where(and(eq(channelMembers.channelId, channelId), eq(channelMembers.userId, user.id)))
+      .limit(1);
+
+    if (!membership || !["owner", "admin"].includes(membership.role)) {
+      return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 });
+    }
+
+    await db
+      .update(channelMembers)
+      .set({ engagementLevel })
+      .where(and(eq(channelMembers.channelId, channelId), eq(channelMembers.userId, targetUserId)));
+
+    return NextResponse.json({ success: true });
+  }
+
   return NextResponse.json({ error: "Unknown action" }, { status: 400 });
 }
 

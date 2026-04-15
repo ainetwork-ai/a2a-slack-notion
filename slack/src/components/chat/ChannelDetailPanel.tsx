@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { X, Hash, Pin, Archive, ArchiveRestore, Puzzle, Check, Plus } from 'lucide-react';
+import { X, Hash, Pin, Archive, ArchiveRestore, Puzzle, Check, Plus, Bot } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
@@ -14,6 +14,8 @@ interface ChannelMember {
   displayName: string;
   avatarUrl?: string;
   role?: string;
+  isAgent?: boolean;
+  engagementLevel?: number;
 }
 
 interface ChannelDetailPanelProps {
@@ -69,6 +71,13 @@ export default function ChannelDetailPanel({
   const [mcpServers, setMcpServers] = useState<McpServer[]>([]);
   const [mcpIntegrations, setMcpIntegrations] = useState<McpIntegration[]>([]);
   const [mcpLoading, setMcpLoading] = useState(false);
+  const [engagementLevels, setEngagementLevels] = useState<Record<string, number>>(() => {
+    const initial: Record<string, number> = {};
+    for (const m of members) {
+      if (m.isAgent) initial[m.id] = m.engagementLevel ?? 0;
+    }
+    return initial;
+  });
 
   const fetchMcpData = useCallback(async () => {
     setMcpLoading(true);
@@ -110,6 +119,22 @@ export default function ChannelDetailPanel({
       if (res.ok) fetchMcpData();
     }
   }
+
+  async function updateEngagementLevel(targetUserId: string, level: number) {
+    setEngagementLevels(prev => ({ ...prev, [targetUserId]: level }));
+    await fetch(`/api/channels/${channelId}/members`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'setEngagementLevel', targetUserId, engagementLevel: level }),
+    });
+  }
+
+  const ENGAGEMENT_LABELS: Record<number, { label: string; icon: string }> = {
+    0: { label: 'Silent', icon: '—' },
+    1: { label: 'Reactive', icon: '👁' },
+    2: { label: 'Engaged', icon: '💬' },
+    3: { label: 'Proactive', icon: '⚡' },
+  };
 
   const pinnedMessages = messages.filter(m => m.pinnedAt);
   const fileMessages = messages.filter(
@@ -238,14 +263,31 @@ export default function ChannelDetailPanel({
                       <AvatarFallback className="text-xs bg-[#4a154b] text-white">{initials}</AvatarFallback>
                     </Avatar>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm text-white truncate">{member.displayName}</p>
+                      <div className="flex items-center gap-1">
+                        <p className="text-sm text-white truncate">{member.displayName}</p>
+                        {member.isAgent && <Bot className="w-3 h-3 text-[#36c5f0] shrink-0" />}
+                      </div>
                       {member.role && (
                         <Badge className="text-[10px] px-1 py-0 h-3.5 mt-0.5 bg-white/10 text-slate-400 border-white/10">
                           {member.role}
                         </Badge>
                       )}
                     </div>
-                    {isAdmin && member.id !== currentUserId && (
+                    {member.isAgent && isAdmin && (
+                      <select
+                        value={engagementLevels[member.id] ?? 0}
+                        onChange={e => updateEngagementLevel(member.id, Number(e.target.value))}
+                        className="text-xs bg-white/5 border border-white/10 rounded px-1 py-0.5 text-slate-300 shrink-0 cursor-pointer hover:bg-white/10 transition-colors"
+                        title="Agent engagement level"
+                      >
+                        {Object.entries(ENGAGEMENT_LABELS).map(([val, { label, icon }]) => (
+                          <option key={val} value={val}>
+                            {icon} {label}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                    {!member.isAgent && isAdmin && member.id !== currentUserId && (
                       <button
                         onClick={() => onRemoveMember?.(member.id)}
                         className="text-xs text-red-400 hover:text-red-300 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"

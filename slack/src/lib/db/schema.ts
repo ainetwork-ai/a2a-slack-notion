@@ -117,6 +117,9 @@ export const channelMembers = pgTable(
     notificationPref: text("notification_pref").default("all").notNull(),
     joinedAt: timestamp("joined_at").defaultNow().notNull(),
     lastReadAt: timestamp("last_read_at").defaultNow().notNull(),
+    engagementLevel: integer("engagement_level").default(0).notNull(),
+    lastAutoResponseAt: timestamp("last_auto_response_at"),
+    autoResponseCount: integer("auto_response_count").default(0).notNull(),
   },
   (t) => [
     uniqueIndex("channel_members_pk").on(t.channelId, t.userId),

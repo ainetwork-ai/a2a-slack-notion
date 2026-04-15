@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { users, typingStatus, scheduledMessages, messages, channelMembers } from "@/lib/db/schema";
-import { eq, and, lt, isNotNull, lte } from "drizzle-orm";
+import { eq, and, lt, isNotNull, lte, gt } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
 export async function GET() {
@@ -67,12 +67,20 @@ export async function GET() {
     }
   }
 
+  // Reset daily auto-response counters for all channel members
+  const resetCounters = await db
+    .update(channelMembers)
+    .set({ autoResponseCount: 0 })
+    .where(gt(channelMembers.autoResponseCount, 0))
+    .returning({ channelId: channelMembers.channelId });
+
   return NextResponse.json({
     cleaned: {
       expiredTypingStatuses: deletedTyping.length,
       usersSetOffline: offlineUsers.length,
       expiredStatuses: clearedStatuses.length,
       scheduledMessagesSent: sentScheduled,
+      autoResponseCountersReset: resetCounters.length,
     },
   });
 }

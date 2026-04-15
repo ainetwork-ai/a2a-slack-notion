@@ -4,6 +4,7 @@ import { eq, and, desc, lt, sql, inArray, or, ilike, isNull } from "drizzle-orm"
 import { requireAuth } from "@/lib/auth/middleware";
 import { NextRequest, NextResponse } from "next/server";
 import { sendToAgent } from "@/lib/a2a/message-bridge";
+import { checkAutoEngagement } from "@/lib/a2a/auto-engage";
 
 export async function GET(
   request: NextRequest,
@@ -192,6 +193,15 @@ export async function POST(
       }
     }
   }
+
+  // Fire auto-engagement check asynchronously (don't block response)
+  checkAutoEngagement({
+    channelId,
+    messageContent: content,
+    senderId: user.id,
+  }).catch(() => {
+    // Fire-and-forget, ignore errors
+  });
 
   // Parse @mentions from content
   const broadcastMentionPattern = /@(channel|here|everyone)\b/i;

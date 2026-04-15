@@ -199,3 +199,74 @@ export function extractBaseUrl(inputUrl: string): string {
     .replace(/\/?\.well-known\/agent(-card)?\.json$/, "")
     .replace(/\/$/, "");
 }
+
+/**
+ * Analyze whether an agent should respond to a message.
+ * Tries the agent's intent/analyze JSON-RPC method first, falls back to
+ * keyword matching against skill tags and descriptions.
+ */
+export async function analyzeIntent(
+  agentUrl: string,
+  message: string,
+  context: { channel: string; recentMessages: string[]; agentSkills: string[] }
+): Promise<{
+  shouldRespond: boolean;
+  confidence: number;
+  reason?: string;
+  suggestedSkillId?: string;
+}> {
+  // Try JSON-RPC intent/analyze first
+  try {
+    const res = await fetch(agentUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "intent/analyze",
+        params: { message, context },
+      }),
+      signal: AbortSignal.timeout(5000),
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      if (data.result && typeof data.result.shouldRespond === "boolean") {
+        return data.result as {
+          shouldRespond: boolean;
+          confidence: number;
+          reason?: string;
+          suggestedSkillId?: string;
+        };
+      }
+    }
+  } catch {
+    // Fall through to keyword matching
+  }
+
+  // Keyword fallback: tokenize message and check overlap with skill tokens
+  const messageTokens = message
+    .toLowerCase()
+    .split(/\s+/)
+    .filter((t) => t.length > 2);
+
+  if (messageTokens.length === 0) {
+    return { shouldRespond: false, confidence: 0, reason: "empty message" };
+  }
+
+  const skillTokens = context.agentSkills
+    .join(" ")
+    .toLowerCase()
+    .split(/\s+/)
+    .filter((t) => t.length > 2);
+
+  const skillTokenSet = new Set(skillTokens);
+  const matches = messageTokens.filter((t) => skillTokenSet.has(t));
+  const confidence = matches.length / messageTokens.length;
+
+  return {
+    shouldRespond: confidence > 0,
+    confidence,
+    reason: matches.length > 0 ? `keyword match: ${matches.slice(0, 3).join(", ")}` : "no keyword match",
+  };
+}
