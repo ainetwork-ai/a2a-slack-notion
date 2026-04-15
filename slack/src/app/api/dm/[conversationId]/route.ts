@@ -58,7 +58,7 @@ export async function GET(
     return NextResponse.json({ error: "Conversation not found" }, { status: 404 });
   }
 
-  // Get the other member
+  // Get all members
   const members = await db
     .select({
       id: users.id,
@@ -70,12 +70,18 @@ export async function GET(
     .innerJoin(users, eq(dmMembers.userId, users.id))
     .where(eq(dmMembers.conversationId, conversationId));
 
-  const otherUser = members.find((m) => m.id !== user.id) ?? members[0];
+  const otherMembers = members.filter((m) => m.id !== user.id);
+  // For 1-on-1 DMs keep otherUser for compat; for group DMs it's null
+  const otherUser = otherMembers.length === 1 ? otherMembers[0] : null;
+  const isGroup = members.length > 2;
 
   return NextResponse.json({
     conversation: {
       id: conv.id,
       otherUser,
+      members,
+      otherMembers,
+      isGroup,
       agentSkills: [],
     },
   });

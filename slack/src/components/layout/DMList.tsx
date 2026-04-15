@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { Plus, ChevronDown, ChevronRight, Bot } from 'lucide-react';
+import { Plus, ChevronDown, ChevronRight, Bot, Users } from 'lucide-react';
 import NewDMModal from '@/components/modals/NewDMModal';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { usePresence } from '@/lib/realtime/use-presence';
@@ -11,14 +11,25 @@ import useSWR from 'swr';
 
 const fetcher = (url: string) => fetch(url).then(r => r.json());
 
+interface DMMember {
+  userId: string;
+  displayName: string;
+  avatarUrl?: string;
+  isAgent?: boolean;
+  status?: string;
+}
+
 interface DMConversation {
   id: string;
+  isGroup: boolean;
   otherUser: {
     id: string;
     displayName: string;
     avatarUrl?: string;
     isAgent?: boolean;
-  };
+    status?: string;
+  } | null;
+  members: DMMember[];
   lastMessage?: string;
   unread?: boolean;
 }
@@ -39,11 +50,13 @@ export default function DMList() {
   const conversations = Array.isArray(data) ? data : [];
 
   useEffect(() => {
-    const userIds = conversations
-      .filter(c => c.otherUser && !c.otherUser.isAgent)
-      .map(c => c.otherUser.id);
+    const userIds = conversations.flatMap(c =>
+      c.isGroup
+        ? (c.members ?? []).filter(m => !m.isAgent).map(m => m.userId)
+        : c.otherUser && !c.otherUser.isAgent ? [c.otherUser.id] : []
+    );
     if (userIds.length > 0) fetchPresence(userIds);
-  }, [conversations.filter(c => c.otherUser).map(c => c.otherUser.id).join(',')]);
+  }, [conversations.map(c => c.id).join(',')]);
 
   function isActive(conversationId: string) {
     return pathname === `/workspace/dm/${conversationId}`;
@@ -75,7 +88,45 @@ export default function DMList() {
 
       {!collapsed && (
         <div className="mt-0.5 space-y-px">
-          {conversations.filter(convo => convo.otherUser).map(convo => {
+          {conversations.map(convo => {
+            if (convo.isGroup) {
+              // Group DM rendering — members array includes all participants
+              const memberCount = convo.members?.length ?? 0;
+              const names = (convo.members ?? [])
+                .map(m => m.displayName)
+                .join(', ');
+
+              return (
+                <button
+                  key={convo.id}
+                  onClick={() => router.push(`/workspace/dm/${convo.id}`)}
+                  className={cn(
+                    'w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm transition-colors text-left',
+                    isActive(convo.id)
+                      ? 'bg-[#4a154b]/60 text-white'
+                      : 'text-[#bcabbc] hover:bg-white/5 hover:text-white'
+                  )}
+                >
+                  <div className="relative shrink-0">
+                    <div className="w-6 h-6 rounded bg-[#4a154b]/60 flex items-center justify-center">
+                      <Users className="w-3.5 h-3.5 text-[#bcabbc]" />
+                    </div>
+                  </div>
+                  <span className={cn('truncate flex-1', convo.unread && !isActive(convo.id) && 'font-semibold text-white')}>
+                    {names}
+                  </span>
+                  <span className="shrink-0 text-[10px] bg-white/10 text-[#bcabbc] rounded-full px-1.5 py-0.5 font-medium">
+                    {memberCount}
+                  </span>
+                  {convo.unread && !isActive(convo.id) && (
+                    <span className="ml-1 w-2 h-2 rounded-full bg-white shrink-0" />
+                  )}
+                </button>
+              );
+            }
+
+            // 1-on-1 DM rendering
+            if (!convo.otherUser) return null;
             const online = isOnline(convo.otherUser.id);
             const initials = convo.otherUser.displayName
               .split(' ')
