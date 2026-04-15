@@ -97,3 +97,22 @@ telling the LLM not to "correct" the date to its training cutoff, so
 out-of-cutoff dates (e.g. 2026) are preserved rather than silently
 rewritten to 2024. Pass `TODAY_DATE` explicitly only if you want to
 override the server clock (backdating for archival runs, etc.).
+
+### Web search grounding (`report` skill)
+
+When the `report` skill is invoked, the executor runs the same 3-query
+research pipeline as `unblockmedia-backend/routes/report.internal.js`:
+
+1. LLM generates 3 search queries from `BASIC_ARTICLE_SOURCE` (falls
+   back to the user message if no source was supplied).
+2. Tavily (`topic: 'news'`, `max_results: 10`) is hit in parallel.
+3. Results are deduplicated by URL, top 10 kept.
+4. Results are formatted as `[title](url)\n{snippet}` markdown blocks
+   and appended to the system prompt under a `<Web Search Results>`
+   section — the exact shape the Notion report prompt was written
+   against.
+
+Requires `TAVILY_API_KEY` in the environment. If the key is missing
+or the Tavily request fails, the report skill degrades silently to
+persona + prompt only (no search grounding) — never breaks the
+response.

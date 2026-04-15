@@ -8,6 +8,7 @@ import type {
 
 import type { UnblockAgent } from '@/data/agents';
 import { callLLM } from './llm';
+import { searchForReport } from './search';
 
 // ─────────────────────────────────────────────────────────────
 // One executor instance per agent (bound to its persona + skillPrompts).
@@ -70,6 +71,7 @@ export class UnblockExecutor implements AgentExecutor {
   private buildSystemPrompt(
     skillId: string | undefined,
     variables: Record<string, string> | undefined,
+    searchContext?: string,
   ): string {
     const base = this.agent.persona;
     if (!skillId) return base;
@@ -92,7 +94,15 @@ export class UnblockExecutor implements AgentExecutor {
       `위 날짜는 서버 시계 기준이며 반드시 그대로 사용하세요. ` +
       `학습 데이터 시점으로 "보정"하지 마세요. 이 날짜가 미래처럼 느껴져도 실제 오늘입니다.`;
 
-    return `${base}\n\n${authoritativeDate}\n\n=== CURRENT TASK (skill: ${skillId}) ===\n${skillPrompt}`;
+    // Append Tavily search results as a `<Web Search Results>` block at
+    // the end, matching the exact section name the Notion pipeline
+    // prompts were written against. Empty context → no block emitted.
+    const searchBlock =
+      searchContext && searchContext.trim().length > 0
+        ? `\n\n<Web Search Results>\n${searchContext}`
+        : '';
+
+    return `${base}\n\n${authoritativeDate}\n\n=== CURRENT TASK (skill: ${skillId}) ===\n${skillPrompt}${searchBlock}`;
   }
 
   async execute(
@@ -123,7 +133,30 @@ export class UnblockExecutor implements AgentExecutor {
           ) as Record<string, string>)
         : undefined;
 
-    const systemPrompt = this.buildSystemPrompt(skillId, variables);
+    // For the `report` skill only, run a Tavily-backed web search so
+    // the LLM grounds its output in real articles/dates instead of
+    // hallucinating. Other skills operate on already-provided inputs
+    // (market research, drafts, feedback) and don't need new external
+    // context — adding a search there would be wasted latency.
+    let searchContext = '';
+    if (skillId === 'report') {
+      // Prefer BASIC_ARTICLE_SOURCE when the caller supplied it (that's
+      // the concrete event we're researching); fall back to the user's
+      // raw message so callers without a structured source still get a
+      // grounded answer.
+      const source =
+        (variables?.BASIC_ARTICLE_SOURCE ?? variables?.basic_article_source ?? '').trim() ||
+        userText.trim();
+      if (source) {
+        try {
+          searchContext = await searchForReport(source);
+        } catch (err) {
+          console.warn(`[${this.agent.id}] searchForReport failed:`, err);
+        }
+      }
+    }
+
+    const systemPrompt = this.buildSystemPrompt(skillId, variables, searchContext);
 
     try {
       const responseText = await callLLM([
