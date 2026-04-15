@@ -6,7 +6,7 @@ import { useWorkspaceStore } from '@/lib/stores/workspace-store';
 import { useAuth } from '@/lib/hooks/use-auth';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import Image from 'next/image';
-import { Loader2, Settings, Users, Hash, Calendar, Shield, Trash2, AlertCircle, Terminal, Plus } from 'lucide-react';
+import { Loader2, Settings, Users, Hash, Calendar, Shield, Trash2, AlertCircle, Terminal, Plus, Download } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface Member {
@@ -59,6 +59,32 @@ export default function WorkspaceSettingsPage() {
 
   // Member removal
   const [removingId, setRemovingId] = useState<string | null>(null);
+
+  // Export
+  const [exporting, setExporting] = useState(false);
+
+  async function handleExport() {
+    if (!activeWorkspaceId) return;
+    setExporting(true);
+    try {
+      const res = await fetch(`/api/workspaces/${activeWorkspaceId}/export`);
+      if (!res.ok) throw new Error('Export failed');
+      const data = await res.json();
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${activeWorkspace?.name ?? 'workspace'}-export-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch {
+      setError('Failed to export workspace data');
+    } finally {
+      setExporting(false);
+    }
+  }
 
   // Custom commands
   interface CustomCommand {
@@ -545,6 +571,38 @@ export default function WorkspaceSettingsPage() {
                   ))}
                 </ul>
               )}
+            </div>
+          </section>
+        )}
+
+        {/* Export Data */}
+        {isPrivileged && (
+          <section className="bg-[#222529] border border-white/10 rounded-xl overflow-hidden">
+            <div className="px-5 py-4 border-b border-white/5 flex items-center gap-2">
+              <Download className="w-4 h-4 text-slate-400" />
+              <h2 className="text-sm font-semibold text-white">Export Data</h2>
+            </div>
+            <div className="px-5 py-5 space-y-3">
+              <p className="text-xs text-slate-500">
+                Download a full JSON export of your workspace data including channels, messages, members, and file metadata.
+              </p>
+              <button
+                onClick={handleExport}
+                disabled={exporting}
+                className="flex items-center gap-2 px-4 py-2 bg-[#4a154b] hover:bg-[#611f6a] text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {exporting ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    Exporting…
+                  </>
+                ) : (
+                  <>
+                    <Download className="w-3.5 h-3.5" />
+                    Export Data
+                  </>
+                )}
+              </button>
             </div>
           </section>
         )}

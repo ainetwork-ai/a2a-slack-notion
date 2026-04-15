@@ -17,6 +17,7 @@ export async function GET(request: NextRequest) {
       channel: channels,
       lastReadAt: channelMembers.lastReadAt,
       role: channelMembers.role,
+      folderId: channelMembers.folderId,
     })
     .from(channelMembers)
     .innerJoin(channels, eq(channelMembers.channelId, channels.id))
@@ -37,7 +38,7 @@ export async function GET(request: NextRequest) {
   const memberships = await query;
 
   const channelsWithUnread = await Promise.all(
-    memberships.map(async ({ channel, lastReadAt, role }) => {
+    memberships.map(async ({ channel, lastReadAt, role, folderId }) => {
       const [{ count }] = await db
         .select({ count: sql<number>`count(*)::int` })
         .from(messages)
@@ -48,7 +49,7 @@ export async function GET(request: NextRequest) {
             sql`${messages.parentId} is null`
           )
         );
-      return { ...channel, unreadCount: count, role, lastReadAt };
+      return { ...channel, unreadCount: count, role, lastReadAt, folderId };
     })
   );
 

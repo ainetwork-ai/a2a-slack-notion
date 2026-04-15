@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { Hash, Plus, ChevronDown, ChevronRight, ArrowUpDown, Clock, Archive } from 'lucide-react';
+import { Hash, Plus, ChevronDown, ChevronRight, ArrowUpDown, Clock, Archive, Folder, FolderOpen, FolderPlus, MoreHorizontal, X } from 'lucide-react';
 import { useAppStore } from '@/lib/stores/app-store';
 import { cn } from '@/lib/utils';
 import useSWR from 'swr';
@@ -18,6 +18,14 @@ interface Channel {
   createdAt: string;
   unreadCount?: number;
   role?: string;
+  folderId?: string | null;
+}
+
+interface ChannelFolder {
+  id: string;
+  name: string;
+  position: number;
+  createdAt: string;
 }
 
 interface ChannelListProps {
@@ -31,6 +39,10 @@ export default function ChannelList({ workspaceId }: ChannelListProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [sortAlpha, setSortAlpha] = useState(false);
   const [archivedCollapsed, setArchivedCollapsed] = useState(true);
+  const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(new Set());
+  const [creatingFolder, setCreatingFolder] = useState(false);
+  const [newFolderName, setNewFolderName] = useState('');
+  const [movingChannelId, setMovingChannelId] = useState<string | null>(null);
 
   const url = workspaceId
     ? `/api/channels?workspaceId=${workspaceId}`
@@ -40,17 +52,156 @@ export default function ChannelList({ workspaceId }: ChannelListProps) {
     ? `/api/channels?workspaceId=${workspaceId}&archived=true`
     : '/api/channels?archived=true';
 
-  const { data } = useSWR<Channel[]>(url, fetcher, { refreshInterval: 5000 });
+  const foldersUrl = workspaceId
+    ? `/api/channel-folders?workspaceId=${workspaceId}`
+    : null;
+
+  const { data, mutate: mutateChannels } = useSWR<Channel[]>(url, fetcher, { refreshInterval: 5000 });
   const { data: archivedData } = useSWR<Channel[]>(archivedUrl, fetcher, { refreshInterval: 30000 });
+  const { data: foldersData, mutate: mutateFolders } = useSWR<ChannelFolder[]>(
+    foldersUrl,
+    fetcher,
+    { refreshInterval: 30000 }
+  );
+
   const channels = Array.isArray(data) ? data : [];
   const archivedChannels = Array.isArray(archivedData) ? archivedData : [];
+  const folders = Array.isArray(foldersData) ? foldersData : [];
 
   const sortedChannels = sortAlpha
     ? [...channels].sort((a, b) => a.name.localeCompare(b.name))
     : channels;
 
+  // Separate channels into foldered and unfoldered
+  const unfiledChannels = sortedChannels.filter((c) => !c.folderId);
+  const channelsByFolder = (folderId: string) =>
+    sortedChannels.filter((c) => c.folderId === folderId);
+
   function isActive(channelId: string) {
     return pathname.startsWith(`/workspace/channel/${channelId}`);
+  }
+
+  function toggleFolder(folderId: string) {
+    setCollapsedFolders((prev) => {
+      const next = new Set(prev);
+      if (next.has(folderId)) next.delete(folderId);
+      else next.add(folderId);
+      return next;
+    });
+  }
+
+  async function handleCreateFolder() {
+    if (!workspaceId || !newFolderName.trim()) return;
+    await fetch('/api/channel-folders', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: newFolderName.trim(), workspaceId }),
+    });
+    setNewFolderName('');
+    setCreatingFolder(false);
+    mutateFolders();
+  }
+
+  async function handleDeleteFolder(folderId: string) {
+    if (!confirm('Delete this folder? Channels inside will be moved to the main list.')) return;
+    await fetch('/api/channel-folders', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: folderId }),
+    });
+    mutateFolders();
+    mutateChannels();
+  }
+
+  async function handleMoveChannel(channelId: string, targetFolderId: string | null) {
+    const endpoint = targetFolderId
+      ? `/api/channel-folders/${targetFolderId}/channels`
+      : `/api/channel-folders/none/channels`;
+    await fetch(endpoint, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ channelId }),
+    });
+    setMovingChannelId(null);
+    mutateChannels();
+  }
+
+  function ChannelItem({ channel, indent = false }: { channel: Channel; indent?: boolean }) {
+    const active = isActive(channel.id);
+    const isMoving = movingChannelId === channel.id;
+
+    return (
+      <div className="relative group/channel">
+        <button
+          role="option"
+          aria-selected={active}
+          onClick={() => router.push(`/workspace/channel/${channel.id}`)}
+          className={cn(
+            'w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm transition-colors text-left',
+            indent && 'pl-5',
+            active
+              ? 'bg-[#4a154b]/60 text-white'
+              : 'text-[#bcabbc] hover:bg-white/5 hover:text-white'
+          )}
+        >
+          <Hash className="w-4 h-4 shrink-0 opacity-70" />
+          <span
+            className={cn(
+              'truncate flex-1',
+              (channel.unreadCount ?? 0) > 0 && !active && 'font-semibold text-white'
+            )}
+          >
+            {channel.name}
+          </span>
+          {(channel.unreadCount ?? 0) > 0 && !active && (
+            <span className="w-2 h-2 rounded-full bg-white shrink-0" />
+          )}
+        </button>
+        {/* Move to folder button */}
+        {workspaceId && (
+          <div className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover/channel:opacity-100 transition-opacity">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setMovingChannelId(isMoving ? null : channel.id);
+              }}
+              className="p-0.5 rounded text-[#bcabbc] hover:text-white hover:bg-white/10"
+              title="Move to folder"
+            >
+              <MoreHorizontal className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
+        {/* Folder picker dropdown */}
+        {isMoving && (
+          <div className="absolute right-0 top-full mt-0.5 z-50 bg-[#222529] border border-white/10 rounded-lg shadow-xl py-1 min-w-36">
+            <p className="px-3 py-1 text-[10px] text-slate-500 uppercase tracking-wide font-semibold">Move to</p>
+            {channel.folderId && (
+              <button
+                onClick={() => handleMoveChannel(channel.id, null)}
+                className="w-full text-left px-3 py-1.5 text-sm text-slate-300 hover:bg-white/5 hover:text-white"
+              >
+                No folder
+              </button>
+            )}
+            {folders.map((folder) =>
+              folder.id !== channel.folderId ? (
+                <button
+                  key={folder.id}
+                  onClick={() => handleMoveChannel(channel.id, folder.id)}
+                  className="w-full text-left px-3 py-1.5 text-sm text-slate-300 hover:bg-white/5 hover:text-white"
+                >
+                  {folder.name}
+                </button>
+              ) : null
+            )}
+            {folders.length === 0 && !channel.folderId && (
+              <p className="px-3 py-1.5 text-xs text-slate-600">No folders yet</p>
+            )}
+          </div>
+        )}
+      </div>
+    );
   }
 
   return (
@@ -79,6 +230,15 @@ export default function ChannelList({ workspaceId }: ChannelListProps) {
           >
             {sortAlpha ? <Clock className="w-3.5 h-3.5" /> : <ArrowUpDown className="w-3.5 h-3.5" />}
           </button>
+          {workspaceId && (
+            <button
+              onClick={() => setCreatingFolder(true)}
+              className="text-[#bcabbc] hover:text-white p-0.5 rounded"
+              title="Create folder"
+            >
+              <FolderPlus className="w-3.5 h-3.5" />
+            </button>
+          )}
           <button
             onClick={() => setCreateChannelOpen(true)}
             className="text-[#bcabbc] hover:text-white p-0.5 rounded"
@@ -89,35 +249,95 @@ export default function ChannelList({ workspaceId }: ChannelListProps) {
         </div>
       </div>
 
+      {/* Create folder inline form */}
+      {creatingFolder && (
+        <div className="px-2 py-1 flex items-center gap-1">
+          <input
+            autoFocus
+            value={newFolderName}
+            onChange={(e) => setNewFolderName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') handleCreateFolder();
+              if (e.key === 'Escape') { setCreatingFolder(false); setNewFolderName(''); }
+            }}
+            placeholder="Folder name"
+            className="flex-1 bg-[#1a1d21] border border-white/10 rounded px-2 py-1 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-[#4a154b]"
+          />
+          <button
+            onClick={handleCreateFolder}
+            disabled={!newFolderName.trim()}
+            className="p-1 rounded text-[#bcabbc] hover:text-white hover:bg-white/10 disabled:opacity-40"
+          >
+            <Plus className="w-3.5 h-3.5" />
+          </button>
+          <button
+            onClick={() => { setCreatingFolder(false); setNewFolderName(''); }}
+            className="p-1 rounded text-[#bcabbc] hover:text-white hover:bg-white/10"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
       {/* Channel Items */}
       {!collapsed && (
-        <div className="mt-0.5 space-y-px" role="listbox" aria-label="Channels">
-          {sortedChannels.map((channel) => (
-            <button
-              key={channel.id}
-              role="option"
-              aria-selected={isActive(channel.id)}
-              onClick={() => router.push(`/workspace/channel/${channel.id}`)}
-              className={cn(
-                'w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm transition-colors text-left',
-                isActive(channel.id)
-                  ? 'bg-[#4a154b]/60 text-white'
-                  : 'text-[#bcabbc] hover:bg-white/5 hover:text-white'
-              )}
-            >
-              <Hash className="w-4 h-4 shrink-0 opacity-70" />
-              <span
-                className={cn(
-                  'truncate',
-                  (channel.unreadCount ?? 0) > 0 && !isActive(channel.id) && 'font-semibold text-white'
+        <div
+          className="mt-0.5 space-y-px"
+          role="listbox"
+          aria-label="Channels"
+          onClick={() => { if (movingChannelId) setMovingChannelId(null); }}
+        >
+          {/* Folders */}
+          {folders.map((folder) => {
+            const folderChannels = channelsByFolder(folder.id);
+            const isFolderCollapsed = collapsedFolders.has(folder.id);
+            return (
+              <div key={folder.id} className="space-y-px">
+                <div className="flex items-center gap-1 px-2 py-1 group/folder">
+                  <button
+                    onClick={() => toggleFolder(folder.id)}
+                    className="flex items-center gap-1.5 flex-1 text-[#bcabbc] hover:text-white text-xs font-semibold transition-colors"
+                  >
+                    {isFolderCollapsed ? (
+                      <ChevronRight className="w-3 h-3 shrink-0" />
+                    ) : (
+                      <ChevronDown className="w-3 h-3 shrink-0" />
+                    )}
+                    {isFolderCollapsed ? (
+                      <Folder className="w-3 h-3 shrink-0 opacity-70" />
+                    ) : (
+                      <FolderOpen className="w-3 h-3 shrink-0 opacity-70" />
+                    )}
+                    <span className="truncate">{folder.name}</span>
+                    {folderChannels.length > 0 && (
+                      <span className="text-[10px] text-slate-600 ml-0.5">({folderChannels.length})</span>
+                    )}
+                  </button>
+                  <button
+                    onClick={() => handleDeleteFolder(folder.id)}
+                    className="opacity-0 group-hover/folder:opacity-100 p-0.5 rounded text-slate-600 hover:text-red-400 transition-all"
+                    title="Delete folder"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+                {!isFolderCollapsed && folderChannels.length > 0 && (
+                  <div className="space-y-px">
+                    {folderChannels.map((channel) => (
+                      <ChannelItem key={channel.id} channel={channel} indent />
+                    ))}
+                  </div>
                 )}
-              >
-                {channel.name}
-              </span>
-              {(channel.unreadCount ?? 0) > 0 && !isActive(channel.id) && (
-                <span className="ml-auto w-2 h-2 rounded-full bg-white shrink-0" />
-              )}
-            </button>
+                {!isFolderCollapsed && folderChannels.length === 0 && (
+                  <p className="pl-7 pr-2 py-1 text-xs text-slate-600 italic">Empty folder</p>
+                )}
+              </div>
+            );
+          })}
+
+          {/* Unfiled channels */}
+          {unfiledChannels.map((channel) => (
+            <ChannelItem key={channel.id} channel={channel} />
           ))}
 
           {channels.length === 0 && (
