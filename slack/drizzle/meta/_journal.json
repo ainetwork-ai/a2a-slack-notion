@@ -8,6 +8,13 @@
       "when": 1776219858455,
       "tag": "0000_short_princess_powerful",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1776221091626,
+      "tag": "0001_perpetual_zaran",
+      "breakpoints": true
     }
   ]
 }

@@ -15,6 +15,7 @@ export const workspaces = pgTable("workspaces", {
   name: text("name").notNull(),
   slug: text("slug").unique().notNull(),
   iconText: text("icon_text").default("WS").notNull(),
+  iconUrl: text("icon_url"),
   description: text("description"),
   createdBy: uuid("created_by"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -274,5 +275,23 @@ export const threadSubscriptions = pgTable(
   (t) => [
     uniqueIndex("thread_subscriptions_unique").on(t.userId, t.messageId),
     index("thread_subscriptions_message_idx").on(t.messageId),
+  ]
+);
+
+export const blockedUsers = pgTable(
+  "blocked_users",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .references(() => users.id, { onDelete: "cascade" })
+      .notNull(),
+    blockedUserId: uuid("blocked_user_id")
+      .references(() => users.id, { onDelete: "cascade" })
+      .notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("blocked_users_unique").on(t.userId, t.blockedUserId),
+    index("blocked_users_user_idx").on(t.userId),
   ]
 );

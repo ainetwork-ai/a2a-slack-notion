@@ -4,8 +4,9 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { MessageSquare } from 'lucide-react';
+import { MessageSquare, Ban, CheckCircle } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
 
 interface UserProfilePopupProps {
   userId: string;
@@ -31,6 +32,8 @@ export default function UserProfilePopup({
   children,
 }: UserProfilePopupProps) {
   const router = useRouter();
+  const [isBlocked, setIsBlocked] = useState(false);
+  const [isBlockLoading, setIsBlockLoading] = useState(false);
 
   const initials = displayName
     .split(' ')
@@ -38,6 +41,17 @@ export default function UserProfilePopup({
     .join('')
     .toUpperCase()
     .slice(0, 2);
+
+  useEffect(() => {
+    if (!userId || isAgent) return;
+    fetch('/api/users/block')
+      .then(r => r.json())
+      .then(data => {
+        const blocked: { blockedUserId: string }[] = data.blockedUsers ?? [];
+        setIsBlocked(blocked.some(b => b.blockedUserId === userId));
+      })
+      .catch(() => {});
+  }, [userId, isAgent]);
 
   async function handleSendMessage() {
     try {
@@ -52,6 +66,24 @@ export default function UserProfilePopup({
       }
     } catch {
       // silently fail
+    }
+  }
+
+  async function handleToggleBlock() {
+    setIsBlockLoading(true);
+    try {
+      const res = await fetch('/api/users/block', {
+        method: isBlocked ? 'DELETE' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ blockedUserId: userId }),
+      });
+      if (res.ok) {
+        setIsBlocked(prev => !prev);
+      }
+    } catch {
+      // silently fail
+    } finally {
+      setIsBlockLoading(false);
     }
   }
 
@@ -117,14 +149,35 @@ export default function UserProfilePopup({
 
           {/* Send message button — only for human users */}
           {!isAgent && (
-            <Button
-              size="sm"
-              onClick={handleSendMessage}
-              className="w-full h-8 bg-[#4a154b] hover:bg-[#611f6a] text-white text-xs gap-1.5"
-            >
-              <MessageSquare className="w-3.5 h-3.5" />
-              Send message
-            </Button>
+            <div className="flex flex-col gap-2">
+              <Button
+                size="sm"
+                onClick={handleSendMessage}
+                className="w-full h-8 bg-[#4a154b] hover:bg-[#611f6a] text-white text-xs gap-1.5"
+              >
+                <MessageSquare className="w-3.5 h-3.5" />
+                Send message
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={handleToggleBlock}
+                disabled={isBlockLoading}
+                className={`w-full h-8 text-xs gap-1.5 ${isBlocked ? 'text-green-400 hover:text-green-300 hover:bg-green-400/10' : 'text-red-400 hover:text-red-300 hover:bg-red-400/10'}`}
+              >
+                {isBlocked ? (
+                  <>
+                    <CheckCircle className="w-3.5 h-3.5" />
+                    Unblock user
+                  </>
+                ) : (
+                  <>
+                    <Ban className="w-3.5 h-3.5" />
+                    Block user
+                  </>
+                )}
+              </Button>
+            </div>
           )}
         </div>
       </PopoverContent>

@@ -69,6 +69,8 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const q = searchParams.get("q");
   const channelIdFilter = searchParams.get("channelId");
+  const offset = parseInt(searchParams.get("offset") ?? "0", 10);
+  const limit = parseInt(searchParams.get("limit") ?? "50", 10);
 
   if (!q || q.trim().length === 0) {
     return NextResponse.json({ results: [] });
@@ -119,15 +121,19 @@ export async function GET(request: NextRequest) {
       .innerJoin(users, eq(messages.userId, users.id))
       .where(and(...conditions))
       .orderBy(desc(messages.createdAt))
-      .limit(50);
+      .limit(limit + 1)
+      .offset(offset);
 
-    const enriched = results.map(msg => ({
+    const hasMore = results.length > limit;
+    const pageResults = hasMore ? results.slice(0, limit) : results;
+
+    const enriched = pageResults.map(msg => ({
       ...msg,
       senderName: msg.user?.displayName ?? null,
       channel: { id: channelIdFilter, name: '' },
       conversation: null,
     }));
-    return NextResponse.json({ results: enriched, textQuery: parsed.text });
+    return NextResponse.json({ results: enriched, textQuery: parsed.text, hasMore, offset, limit });
   }
 
   // Get DM conversations the user is a member of
@@ -202,7 +208,7 @@ export async function GET(request: NextRequest) {
           }))
         );
       }
-      return NextResponse.json({ results: allResults, textQuery: parsed.text });
+      return NextResponse.json({ results: allResults, textQuery: parsed.text, hasMore: false, offset: 0, limit });
     }
   }
 
@@ -242,6 +248,8 @@ export async function GET(request: NextRequest) {
     createdAt: Date;
   }> = [];
 
+  let hasMore = false;
+
   if (conditions.length > 0 || hasMessageOperators) {
     const msgResults = await db
       .select({
@@ -264,11 +272,15 @@ export async function GET(request: NextRequest) {
       .innerJoin(users, eq(messages.userId, users.id))
       .where(conditions.length > 0 ? and(...conditions) : undefined)
       .orderBy(desc(messages.createdAt))
-      .limit(50);
+      .limit(limit + 1)
+      .offset(offset);
+
+    const hasMoreMessages = msgResults.length > limit;
+    const pageMsgResults = hasMoreMessages ? msgResults.slice(0, limit) : msgResults;
 
     // Enrich with channel/conversation info
     const enrichedRaw = await Promise.all(
-      msgResults.map(async (msg) => {
+      pageMsgResults.map(async (msg) => {
         let channelInfo = null;
         if (msg.channelId) {
           const [ch] = await db
@@ -291,6 +303,8 @@ export async function GET(request: NextRequest) {
       senderName: msg.user?.displayName ?? null,
       createdAt: msg.createdAt,
     }));
+
+    hasMore = hasMoreMessages;
   }
 
   // Channel search (only when no in: operator forcing channel scope)
@@ -333,5 +347,5 @@ export async function GET(request: NextRequest) {
     })),
   ];
 
-  return NextResponse.json({ results: allResults, textQuery: parsed.text });
+  return NextResponse.json({ results: allResults, textQuery: parsed.text, hasMore, offset, limit });
 }

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Hash, MessageSquare, User, Loader2, Search, X } from 'lucide-react';
+import { Hash, MessageSquare, User, Loader2, Search, X, ChevronDown } from 'lucide-react';
 import { useAppStore } from '@/lib/stores/app-store';
 import { useSearch } from '@/lib/hooks/use-search';
 
@@ -34,7 +34,7 @@ const FILTER_LABELS: { key: FilterType; label: string }[] = [
 export default function SearchModal() {
   const router = useRouter();
   const { searchOpen, setSearchOpen } = useAppStore();
-  const { results, isSearching, query, textQuery, search, clearSearch } = useSearch();
+  const { results, isSearching, isLoadingMore, query, textQuery, search, clearSearch, hasMore, loadMore } = useSearch();
   const inputRef = useRef<HTMLInputElement>(null);
   const [activeFilter, setActiveFilter] = useState<FilterType>('all');
 
@@ -242,6 +242,23 @@ export default function SearchModal() {
                     <span>{highlightText(result.content, textQuery)}</span>
                   </button>
                 ))}
+              </div>
+            )}
+
+            {hasMore && (activeFilter === 'all' || activeFilter === 'messages') && (
+              <div className="px-4 py-2 border-t border-white/10">
+                <button
+                  onClick={loadMore}
+                  disabled={isLoadingMore}
+                  className="w-full flex items-center justify-center gap-1.5 py-1.5 text-xs text-slate-400 hover:text-white transition-colors disabled:opacity-50"
+                >
+                  {isLoadingMore ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <ChevronDown className="w-3.5 h-3.5" />
+                  )}
+                  {isLoadingMore ? 'Loading...' : 'Load more results'}
+                </button>
               </div>
             )}
           </div>
