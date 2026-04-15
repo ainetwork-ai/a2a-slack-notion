@@ -1,13 +1,15 @@
 /**
- * Builder agent — intercepts DM messages and creates agents via natural conversation.
- * No external LLM needed: uses regex/keyword matching to parse intent.
+ * Builder agent — sends user messages to a2a-builder (LLM) for natural-language
+ * intent understanding, then executes the returned JSON actions to create agents
+ * and channels. Falls back to simple template matching if the LLM is unavailable.
  */
 
 import { db } from "@/lib/db";
 import { users, workspaceMembers, channels, channelMembers } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
+import { v4 as uuidv4 } from "uuid";
 
-// ─── Agent templates ──────────────────────────────────────────────────────────
+// ─── Agent templates (used by both LLM path and fallback) ─────────────────────
 
 interface AgentTemplate {
   description: string;
@@ -79,212 +81,7 @@ const AGENT_TEMPLATES: Record<string, AgentTemplate> = {
   },
 };
 
-// ─── Creation keywords ────────────────────────────────────────────────────────
-
-const CREATION_KEYWORDS =
-  /\b(만들어|생성|create|build|make|추가|add|spawn|새로운|new)\b/i;
-
-const CHANNEL_KEYWORDS =
-  /\b(채널|channel)\b/i;
-
-// ─── Name extraction ──────────────────────────────────────────────────────────
-
-/**
- * Extract agent names and descriptions from a message.
- * Handles patterns like:
- *   "뉴스 리서처 에이전트 만들어줘"
- *   "Create a NewsWriter agent that writes articles"
- *   "리서처랑 라이터 두 개 만들어줘"
- *   "make me a news researcher and a content writer"
- */
-function extractAgentRequests(message: string): Array<{ name: string; role: string; description: string }> {
-  const results: Array<{ name: string; role: string; description: string }> = [];
-
-  // Normalize
-  const text = message.trim();
-
-  // Pattern 1: "NAME agent/에이전트 [that/which/who description]"
-  const agentPattern =
-    /([A-Za-z가-힣][A-Za-z가-힣\s\-_]*?)\s+(?:agent|에이전트|봇|bot)(?:\s+(?:that|which|who|for|to)\s+(.+?))?(?:[,\n]|$)/gi;
-
-  let m: RegExpExecArray | null;
-  while ((m = agentPattern.exec(text)) !== null) {
-    const rawName = m[1].trim();
-    const desc = m[2]?.trim() || "";
-    if (rawName.length < 2) continue;
-    const role = detectRole(rawName + " " + desc);
-    results.push({
-      name: formatAgentName(rawName),
-      role,
-      description: desc || AGENT_TEMPLATES[role]?.description || `${rawName} agent`,
-    });
-  }
-
-  // Pattern 2: Korean compound — "뉴스 리서처", "콘텐츠 라이터" etc.
-  if (results.length === 0) {
-    const koreanPattern = /([가-힣A-Za-z]+(?:\s+[가-힣A-Za-z]+)?)\s+(?:에이전트|봇)/g;
-    while ((m = koreanPattern.exec(text)) !== null) {
-      const rawName = m[1].trim();
-      if (rawName.length < 2) continue;
-      const role = detectRole(rawName);
-      results.push({
-        name: formatAgentName(rawName),
-        role,
-        description: AGENT_TEMPLATES[role]?.description || `${rawName} agent`,
-      });
-    }
-  }
-
-  // Pattern 3: "a/an ROLE" or "ROLE agent" without explicit word "agent"
-  // e.g. "make me a researcher" / "make me a news researcher and a writer"
-  if (results.length === 0) {
-    const roleWords = Object.keys(AGENT_TEMPLATES).join("|");
-    const rolePattern = new RegExp(
-      `(?:a|an|하나)\\s+(?:[A-Za-z가-힣]+\\s+)?(${roleWords})`,
-      "gi"
-    );
-    while ((m = rolePattern.exec(text)) !== null) {
-      const role = m[1].toLowerCase();
-      // Look for a qualifier before the role in the same match area
-      const beforeRole = text.slice(Math.max(0, m.index - 20), m.index + m[0].length);
-      const qualifier = extractQualifier(beforeRole, role);
-      const name = qualifier ? formatAgentName(`${qualifier} ${role}`) : formatAgentName(role);
-      results.push({
-        name,
-        role,
-        description: AGENT_TEMPLATES[role]?.description || `${name} agent`,
-      });
-    }
-  }
-
-  // Pattern 4: multiple roles joined by "and/랑/과/와/,"
-  // e.g. "리서처랑 라이터 두 개", "researcher and writer"
-  if (results.length === 0) {
-    const multiRole = /([A-Za-z가-힣]+)(?:\s*(?:랑|과|와|and|,)\s*([A-Za-z가-힣]+))+/gi;
-    while ((m = multiRole.exec(text)) !== null) {
-      const parts = m[0].split(/\s*(?:랑|과|와|and|,)\s*/i).map((p) => p.trim());
-      for (const part of parts) {
-        const role = detectRole(part);
-        if (role !== "assistant") {
-          results.push({
-            name: formatAgentName(part),
-            role,
-            description: AGENT_TEMPLATES[role]?.description || `${part} agent`,
-          });
-        }
-      }
-    }
-  }
-
-  // Deduplicate by name
-  const seen = new Set<string>();
-  return results.filter((r) => {
-    const key = r.name.toLowerCase();
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-}
-
-/** Extract a qualifier word preceding the role keyword (e.g. "news" from "news researcher") */
-function extractQualifier(context: string, role: string): string {
-  const idx = context.toLowerCase().lastIndexOf(role);
-  if (idx <= 0) return "";
-  const before = context.slice(0, idx).trim();
-  const words = before.split(/\s+/);
-  const last = words[words.length - 1];
-  if (last && !/^(a|an|the|make|create|build|me|a|하나|봇)$/i.test(last)) {
-    return last;
-  }
-  return "";
-}
-
-/** Detect the best-matching role from a text snippet */
-function detectRole(text: string): string {
-  const lower = text.toLowerCase();
-
-  const aliases: Record<string, string> = {
-    research: "researcher",
-    리서처: "researcher",
-    리서치: "researcher",
-    조사: "researcher",
-    검색: "researcher",
-    뉴스: "researcher",
-    writer: "writer",
-    라이터: "writer",
-    작가: "writer",
-    작성: "writer",
-    editor: "editor",
-    에디터: "editor",
-    편집: "editor",
-    검토: "editor",
-    analyst: "analyst",
-    분석: "analyst",
-    분석가: "analyst",
-    translator: "translator",
-    번역: "translator",
-    번역가: "translator",
-    monitor: "monitor",
-    모니터: "monitor",
-    알림: "monitor",
-    scheduler: "scheduler",
-    스케줄: "scheduler",
-    일정: "scheduler",
-    assistant: "assistant",
-    어시스턴트: "assistant",
-    도우미: "assistant",
-  };
-
-  for (const [keyword, role] of Object.entries(aliases)) {
-    if (lower.includes(keyword)) return role;
-  }
-
-  // Check template keys directly
-  for (const key of Object.keys(AGENT_TEMPLATES)) {
-    if (lower.includes(key)) return key;
-  }
-
-  return "assistant";
-}
-
-/** Convert raw name to PascalCase agent name */
-function formatAgentName(raw: string): string {
-  return raw
-    .split(/[\s\-_]+/)
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join("");
-}
-
-// ─── Channel extraction ───────────────────────────────────────────────────────
-
-interface ChannelRequest {
-  name: string;
-  inviteAgents: boolean;
-}
-
-function extractChannelRequest(message: string): ChannelRequest | null {
-  if (!CHANNEL_KEYWORDS.test(message)) return null;
-
-  // Pattern: "NAME 채널" or "channel NAME" or "NAME channel"
-  const patterns = [
-    /([A-Za-z가-힣][A-Za-z가-힣\s\-_]+?)\s+채널/i,
-    /channel\s+([A-Za-z가-힣][A-Za-z가-힣\s\-_]+)/i,
-    /([A-Za-z가-힣][A-Za-z가-힣\s\-_]+?)\s+channel/i,
-  ];
-
-  for (const pat of patterns) {
-    const m = pat.exec(message);
-    if (m) {
-      const name = m[1].trim().toLowerCase().replace(/\s+/g, "-");
-      const inviteAgents = /초대|invite|join|들어|넣어/.test(message);
-      return { name, inviteAgents };
-    }
-  }
-
-  return null;
-}
-
-// ─── Core logic ───────────────────────────────────────────────────────────────
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface BuilderResult {
   response: string;
@@ -292,96 +89,230 @@ export interface BuilderResult {
   createdChannel: { id: string; name: string } | null;
 }
 
-/**
- * Main entry point: parse a message and take builder actions.
- * Returns a human-readable response and any created resources.
- */
-export async function handleBuilderMessage(
-  message: string,
-  userId: string
-): Promise<BuilderResult> {
-  const isCreationIntent = CREATION_KEYWORDS.test(message);
+interface LLMAgentDef {
+  name: string;
+  description?: string;
+  role?: string;
+  systemPrompt?: string;
+}
 
-  if (!isCreationIntent) {
-    return {
-      response: buildHelpMessage(),
-      createdAgents: [],
-      createdChannel: null,
-    };
+interface LLMChannelDef {
+  channelName: string;
+  description?: string;
+  inviteAgents?: string[];
+  engagementLevels?: Record<string, number>;
+}
+
+interface LLMAction {
+  action: "create_agents" | "create_channel";
+  agents?: LLMAgentDef[];
+  channelName?: string;
+  description?: string;
+  inviteAgents?: string[];
+  engagementLevels?: Record<string, number>;
+}
+
+// ─── LLM via a2a-builder ──────────────────────────────────────────────────────
+
+const BUILDER_URL = "https://a2a-builder.ainetwork.ai/api/agents";
+
+const SYSTEM_PROMPT = `You are a Builder agent for Slack-A2A. You help users create new AI agents and channels.
+
+When the user asks you to create agents, respond with a JSON block:
+\`\`\`json
+{"action":"create_agents","agents":[{"name":"AgentName","description":"what it does","role":"researcher|writer|editor|analyst|translator|assistant|monitor|scheduler","systemPrompt":"detailed system prompt for the agent"}]}
+\`\`\`
+
+When asked to create a channel and invite agents:
+\`\`\`json
+{"action":"create_channel","channelName":"channel-name","description":"channel purpose","inviteAgents":["AgentName1","AgentName2"],"engagementLevels":{"AgentName1":2,"AgentName2":1}}
+\`\`\`
+
+You can output multiple JSON blocks in sequence — one for creating agents, then one for creating a channel.
+Always respond in the same language the user used.
+After all JSON blocks, add a friendly confirmation message summarizing what was created.
+Agent names should be in PascalCase (e.g. NewsResearcher, ContentWriter).
+Channel names should be lowercase with hyphens (e.g. newsroom, ai-research).`;
+
+async function queryLLM(message: string): Promise<string | null> {
+  try {
+    const res = await fetch(BUILDER_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        method: "message/send",
+        params: {
+          message: {
+            messageId: uuidv4(),
+            role: "user",
+            parts: [{ kind: "text", text: message }],
+            kind: "message",
+          },
+          configuration: {
+            blocking: true,
+            acceptedOutputModes: ["text/plain"],
+          },
+          metadata: {
+            systemPrompt: SYSTEM_PROMPT,
+          },
+        },
+        id: uuidv4(),
+      }),
+      signal: AbortSignal.timeout(20000),
+    });
+
+    if (!res.ok) return null;
+
+    const data = await res.json();
+    const result = data?.result;
+
+    // Task response (artifacts)
+    if (result?.artifacts?.[0]?.parts) {
+      const textPart = result.artifacts[0].parts.find(
+        (p: { kind: string; text?: string }) => p.kind === "text"
+      );
+      return textPart?.text ?? null;
+    }
+
+    // Message response (parts)
+    if (result?.parts) {
+      const textPart = result.parts.find(
+        (p: { kind: string; text?: string }) => p.kind === "text"
+      );
+      return textPart?.text ?? null;
+    }
+
+    return null;
+  } catch {
+    return null;
   }
+}
 
-  const agentRequests = extractAgentRequests(message);
-  const channelRequest = extractChannelRequest(message);
-
-  // Nothing detected
-  if (agentRequests.length === 0 && !channelRequest) {
-    return {
-      response:
-        "I detected a creation intent but couldn't figure out what to build. " +
-        "Try something like:\n" +
-        "• \"Create a NewsResearcher agent\"\n" +
-        "• \"Make me a writer and an editor agent\"\n" +
-        "• \"뉴스 리서처 에이전트 만들어줘\"\n" +
-        "• \"Create a newsroom channel\"",
-      createdAgents: [],
-      createdChannel: null,
-    };
-  }
-
-  const createdAgents: Array<{ id: string; name: string; a2aUrl: string | null }> = [];
-  const lines: string[] = [];
-
-  // Create agents
-  for (const req of agentRequests) {
+/** Extract all ```json ... ``` blocks from the LLM response text */
+function extractJsonBlocks(text: string): LLMAction[] {
+  const actions: LLMAction[] = [];
+  const blockRe = /```(?:json)?\s*([\s\S]*?)```/g;
+  let m: RegExpExecArray | null;
+  while ((m = blockRe.exec(text)) !== null) {
     try {
-      const agent = await createAgent(req, userId);
-      createdAgents.push({ id: agent.id, name: agent.displayName, a2aUrl: agent.a2aUrl });
-      lines.push(`✓ **${agent.displayName}** — ${req.description}`);
-    } catch (err) {
-      lines.push(`✗ Failed to create ${req.name}: ${err instanceof Error ? err.message : "unknown error"}`);
+      const parsed = JSON.parse(m[1].trim());
+      if (parsed?.action) actions.push(parsed as LLMAction);
+    } catch {
+      // skip malformed blocks
     }
   }
+  return actions;
+}
 
-  // Create channel
-  let createdChannel: { id: string; name: string } | null = null;
-  if (channelRequest) {
-    try {
-      createdChannel = await createChannel(channelRequest, userId, createdAgents);
-      lines.push(`✓ Channel **#${createdChannel.name}** created`);
-      if (channelRequest.inviteAgents && createdAgents.length > 0) {
-        lines.push(`  Invited: ${createdAgents.map((a) => a.name).join(", ")}`);
-      }
-    } catch (err) {
-      lines.push(`✗ Failed to create channel: ${err instanceof Error ? err.message : "unknown error"}`);
-    }
+/** Extract the human-readable confirmation text (everything after the last ``` block) */
+function extractConfirmationText(text: string): string {
+  const lastBlock = text.lastIndexOf("```");
+  if (lastBlock === -1) return text.trim();
+  const after = text.slice(lastBlock + 3).trim();
+  return after || text.trim();
+}
+
+// ─── Fallback keyword-based intent detection ──────────────────────────────────
+
+const CREATION_KEYWORDS =
+  /\b(만들어|생성|create|build|make|추가|add|spawn|새로운|new)\b/i;
+
+const ROLE_ALIASES: Record<string, string> = {
+  research: "researcher",
+  리서처: "researcher",
+  리서치: "researcher",
+  조사: "researcher",
+  검색: "researcher",
+  뉴스: "researcher",
+  라이터: "writer",
+  작가: "writer",
+  작성: "writer",
+  에디터: "editor",
+  편집: "editor",
+  검토: "editor",
+  분석: "analyst",
+  분석가: "analyst",
+  번역: "translator",
+  번역가: "translator",
+  모니터: "monitor",
+  알림: "monitor",
+  스케줄: "scheduler",
+  일정: "scheduler",
+  어시스턴트: "assistant",
+  도우미: "assistant",
+};
+
+function detectRole(text: string): string {
+  const lower = text.toLowerCase();
+  for (const [keyword, role] of Object.entries(ROLE_ALIASES)) {
+    if (lower.includes(keyword)) return role;
+  }
+  for (const key of Object.keys(AGENT_TEMPLATES)) {
+    if (lower.includes(key)) return key;
+  }
+  return "assistant";
+}
+
+function fallbackParse(message: string): LLMAction[] {
+  if (!CREATION_KEYWORDS.test(message)) return [];
+
+  const actions: LLMAction[] = [];
+
+  // Detect agents via Korean "에이전트" or English "agent" keyword
+  const agentRe =
+    /([A-Za-z가-힣][A-Za-z가-힣\s\-_]*?)\s+(?:agent|에이전트|봇)/gi;
+  const agents: LLMAgentDef[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = agentRe.exec(message)) !== null) {
+    const raw = m[1].trim();
+    if (raw.length < 2) continue;
+    const role = detectRole(raw);
+    const name = raw
+      .split(/[\s\-_]+/)
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+      .join("");
+    agents.push({ name, role, description: AGENT_TEMPLATES[role]?.description });
   }
 
-  const summary =
-    createdAgents.length > 0
-      ? `I've created ${createdAgents.length} agent${createdAgents.length > 1 ? "s" : ""} for you:`
-      : "Here's what I did:";
+  if (agents.length > 0) {
+    actions.push({ action: "create_agents", agents });
+  }
 
-  return {
-    response: `${summary}\n\n${lines.join("\n")}`,
-    createdAgents,
-    createdChannel,
-  };
+  // Detect channel request
+  const channelRe =
+    /([A-Za-z가-힣][A-Za-z가-힣\s\-_]+?)\s+(?:채널|channel)|(?:channel|채널)\s+([A-Za-z가-힣][A-Za-z가-힣\s\-_]+)/i;
+  const cm = channelRe.exec(message);
+  if (cm) {
+    const raw = (cm[1] || cm[2]).trim().toLowerCase().replace(/\s+/g, "-");
+    const inviteAgents =
+      /초대|invite|join|들어|넣어/.test(message)
+        ? agents.map((a) => a.name)
+        : [];
+    actions.push({ action: "create_channel", channelName: raw, inviteAgents });
+  }
+
+  return actions;
 }
 
 // ─── DB helpers ───────────────────────────────────────────────────────────────
 
 async function createAgent(
-  req: { name: string; role: string; description: string },
+  def: LLMAgentDef,
   userId: string
-): Promise<{ id: string; displayName: string; a2aUrl: string | null }> {
-  const template = AGENT_TEMPLATES[req.role] || AGENT_TEMPLATES.assistant;
+): Promise<{ id: string; name: string; a2aUrl: string | null }> {
+  const role = def.role || detectRole(def.name);
+  const template = AGENT_TEMPLATES[role] || AGENT_TEMPLATES.assistant;
 
-  const ainAddress = `agent-${req.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${Date.now()}`;
+  const systemPrompt = def.systemPrompt || template.systemPrompt;
+  const description = def.description || template.description || `${def.name} agent`;
+
+  const ainAddress = `agent-${def.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${Date.now()}`;
 
   const agentCard = {
-    name: req.name,
-    description: req.description,
-    systemPrompt: template.systemPrompt,
+    name: def.name,
+    description,
+    systemPrompt,
     mcpAccess: template.mcpAccess,
     skills: [],
     builtBy: userId,
@@ -394,8 +325,16 @@ async function createAgent(
       pushNotifications: false,
       stateTransitionHistory: false,
       extensions: [
-        { uri: "urn:a2a:ext:memory", description: "Persistent agent memory across conversations", required: false },
-        { uri: "urn:a2a:ext:tool-use", description: "LLM-driven MCP tool invocation", required: false },
+        {
+          uri: "urn:a2a:ext:memory",
+          description: "Persistent agent memory across conversations",
+          required: false,
+        },
+        {
+          uri: "urn:a2a:ext:tool-use",
+          description: "LLM-driven MCP tool invocation",
+          required: false,
+        },
       ],
     },
   };
@@ -404,7 +343,7 @@ async function createAgent(
     .insert(users)
     .values({
       ainAddress,
-      displayName: req.name,
+      displayName: def.name,
       isAgent: true,
       status: "online",
       agentCardJson: agentCard,
@@ -414,15 +353,16 @@ async function createAgent(
   // Register with a2a-builder (best-effort)
   let a2aUrl: string | null = null;
   try {
-    const builderRes = await fetch("https://a2a-builder.ainetwork.ai/api/agents", {
+    const builderRes = await fetch(BUILDER_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        name: req.name,
-        description: req.description,
-        systemPrompt: template.systemPrompt,
+        name: def.name,
+        description,
+        systemPrompt,
         skills: [],
       }),
+      signal: AbortSignal.timeout(10000),
     });
     if (builderRes.ok) {
       const data = await builderRes.json();
@@ -439,7 +379,7 @@ async function createAgent(
     // Agent still works locally without A2A URL
   }
 
-  // Add to creator's workspaces and their public channels
+  // Add agent to creator's workspaces and their public channels
   const creatorWorkspaces = await db
     .select({ workspaceId: workspaceMembers.workspaceId })
     .from(workspaceMembers)
@@ -454,7 +394,12 @@ async function createAgent(
     const publicChannels = await db
       .select({ id: channels.id })
       .from(channels)
-      .where(and(eq(channels.workspaceId, ws.workspaceId), eq(channels.isPrivate, false)));
+      .where(
+        and(
+          eq(channels.workspaceId, ws.workspaceId),
+          eq(channels.isPrivate, false)
+        )
+      );
 
     for (const ch of publicChannels) {
       await db
@@ -464,27 +409,26 @@ async function createAgent(
     }
   }
 
-  return { id: agent.id, displayName: agent.displayName, a2aUrl };
+  return { id: agent.id, name: agent.displayName, a2aUrl };
 }
 
 async function createChannel(
-  req: ChannelRequest,
+  def: LLMChannelDef,
   userId: string,
-  agentsToInvite: Array<{ id: string; name: string; a2aUrl: string | null }>
+  allCreatedAgents: Array<{ id: string; name: string; a2aUrl: string | null }>
 ): Promise<{ id: string; name: string }> {
-  // Determine workspace from user
   const [membership] = await db
     .select({ workspaceId: workspaceMembers.workspaceId })
     .from(workspaceMembers)
     .where(eq(workspaceMembers.userId, userId))
     .limit(1);
 
-  const workspaceId = membership?.workspaceId || null;
+  const workspaceId = membership?.workspaceId ?? null;
 
   const [channel] = await db
     .insert(channels)
     .values({
-      name: req.name,
+      name: def.channelName,
       isPrivate: false,
       createdBy: userId,
       workspaceId,
@@ -497,8 +441,18 @@ async function createChannel(
     .values({ channelId: channel.id, userId, role: "owner" })
     .onConflictDoNothing();
 
-  // Invite agents if requested
-  if (req.inviteAgents && agentsToInvite.length > 0) {
+  // Invite specified agents (by name) or all created agents if inviteAgents is ["*"]
+  if (def.inviteAgents && def.inviteAgents.length > 0) {
+    const namesToInvite = new Set(
+      def.inviteAgents.map((n) => n.toLowerCase())
+    );
+    const agentsToInvite =
+      def.inviteAgents[0] === "*"
+        ? allCreatedAgents
+        : allCreatedAgents.filter((a) =>
+            namesToInvite.has(a.name.toLowerCase())
+          );
+
     for (const agent of agentsToInvite) {
       await db
         .insert(channelMembers)
@@ -510,6 +464,108 @@ async function createChannel(
   return { id: channel.id, name: channel.name };
 }
 
+// ─── Main entry point ─────────────────────────────────────────────────────────
+
+/**
+ * Main entry point: sends message to a2a-builder LLM, parses JSON action blocks
+ * from the response, and executes agent/channel creation. Falls back to simple
+ * keyword parsing if the LLM is unavailable.
+ */
+export async function handleBuilderMessage(
+  message: string,
+  userId: string
+): Promise<BuilderResult> {
+  // 1. Try LLM path
+  const llmResponse = await queryLLM(message);
+
+  let actions: LLMAction[];
+  let confirmationText: string | null = null;
+
+  if (llmResponse) {
+    actions = extractJsonBlocks(llmResponse);
+    confirmationText = extractConfirmationText(llmResponse);
+  } else {
+    // 2. Fallback: simple keyword parsing
+    actions = fallbackParse(message);
+  }
+
+  // No actions detected → show help
+  if (actions.length === 0) {
+    return {
+      response: buildHelpMessage(),
+      createdAgents: [],
+      createdChannel: null,
+    };
+  }
+
+  const createdAgents: Array<{ id: string; name: string; a2aUrl: string | null }> = [];
+  const lines: string[] = [];
+
+  // Execute actions in order
+  for (const action of actions) {
+    if (action.action === "create_agents" && action.agents) {
+      for (const agentDef of action.agents) {
+        try {
+          const agent = await createAgent(agentDef, userId);
+          createdAgents.push(agent);
+          lines.push(
+            `✓ **${agent.name}** — ${agentDef.description || AGENT_TEMPLATES[agentDef.role || "assistant"]?.description || "agent"}`
+          );
+        } catch (err) {
+          lines.push(
+            `✗ Failed to create ${agentDef.name}: ${err instanceof Error ? err.message : "unknown error"}`
+          );
+        }
+      }
+    }
+
+    if (action.action === "create_channel" && action.channelName) {
+      try {
+        const channel = await createChannel(
+          {
+            channelName: action.channelName,
+            description: action.description,
+            inviteAgents: action.inviteAgents ?? [],
+            engagementLevels: action.engagementLevels,
+          },
+          userId,
+          createdAgents
+        );
+        lines.push(`✓ Channel **#${channel.name}** created`);
+        if (action.inviteAgents && action.inviteAgents.length > 0) {
+          lines.push(
+            `  Invited: ${action.inviteAgents.join(", ")}`
+          );
+        }
+      } catch (err) {
+        lines.push(
+          `✗ Failed to create channel: ${err instanceof Error ? err.message : "unknown error"}`
+        );
+      }
+    }
+  }
+
+  // Build final response: use LLM confirmation text if available, else generate one
+  let response: string;
+  if (confirmationText && confirmationText.length > 10) {
+    response = `${lines.join("\n")}\n\n${confirmationText}`;
+  } else {
+    const summary =
+      createdAgents.length > 0
+        ? `I've created ${createdAgents.length} agent${createdAgents.length > 1 ? "s" : ""} for you:`
+        : "Here's what I did:";
+    response = `${summary}\n\n${lines.join("\n")}`;
+  }
+
+  return {
+    response,
+    createdAgents,
+    createdChannel: null, // channel returned inline in lines; callers use createdAgents
+  };
+}
+
+// ─── Help message ─────────────────────────────────────────────────────────────
+
 function buildHelpMessage(): string {
   return (
     "Hi! I'm the Builder agent. I can create new agents and channels for you.\n\n" +
@@ -517,6 +573,7 @@ function buildHelpMessage(): string {
     "• \"Create a NewsResearcher agent\"\n" +
     "• \"Make me a content writer agent\"\n" +
     "• \"뉴스 리서처 에이전트 만들어줘\"\n" +
+    "• \"뉴스 리서처 에이전트랑 뉴스 라이터 에이전트 2개 만들어줘\"\n" +
     "• \"Build a researcher and a writer agent\"\n\n" +
     "**Create a channel:**\n" +
     "• \"Create a newsroom channel\"\n" +
