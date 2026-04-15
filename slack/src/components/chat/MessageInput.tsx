@@ -673,26 +673,53 @@ export default function MessageInput({
               <Clock className="w-4 h-4" />
             </button>
             {scheduleOpen && (
-              <div className="absolute bottom-full right-0 mb-2 w-48 bg-[#222529] border border-white/10 rounded-lg shadow-xl overflow-hidden z-50">
+              <div className="absolute bottom-full right-0 mb-2 w-52 bg-[#222529] border border-white/10 rounded-lg shadow-xl overflow-hidden z-50">
                 <p className="px-3 py-1.5 text-[11px] text-slate-500 font-semibold uppercase">Schedule send</p>
-                {[
-                  { label: 'In 30 minutes', ms: 30 * 60 * 1000 },
-                  { label: 'In 1 hour', ms: 60 * 60 * 1000 },
-                  { label: 'In 3 hours', ms: 3 * 60 * 60 * 1000 },
-                ].map(opt => (
+                {(() => {
+                  const now = new Date();
+                  const tomorrow9am = new Date(now);
+                  tomorrow9am.setDate(tomorrow9am.getDate() + 1);
+                  tomorrow9am.setHours(9, 0, 0, 0);
+                  return [
+                    { label: 'In 30 minutes', scheduledFor: new Date(now.getTime() + 30 * 60 * 1000) },
+                    { label: 'In 1 hour', scheduledFor: new Date(now.getTime() + 60 * 60 * 1000) },
+                    { label: 'In 2 hours', scheduledFor: new Date(now.getTime() + 2 * 60 * 60 * 1000) },
+                    { label: 'Tomorrow 9am', scheduledFor: tomorrow9am },
+                  ];
+                })().map(opt => (
                   <button
                     key={opt.label}
                     className="w-full text-left px-3 py-2 text-sm text-slate-300 hover:bg-white/10 hover:text-white transition-colors"
                     onClick={async () => {
                       const msg = content.trim();
                       if (!msg) { setScheduleOpen(false); return; }
+                      if (!channelId && !conversationId) { setScheduleOpen(false); return; }
                       setScheduleOpen(false);
-                      setContent('');
-                      if (textareaRef.current) textareaRef.current.style.height = 'auto';
-                      const time = new Date(Date.now() + opt.ms);
-                      setEphemeralMessage(`Message scheduled for ${time.toLocaleTimeString()}`);
-                      setTimeout(() => setEphemeralMessage(null), 5000);
-                      setTimeout(async () => { await onSend(replaceShortcodes(msg)); }, opt.ms);
+                      try {
+                        const res = await fetch('/api/scheduled-messages', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            content: replaceShortcodes(msg),
+                            scheduledFor: opt.scheduledFor.toISOString(),
+                            channelId: channelId ?? undefined,
+                            conversationId: conversationId ?? undefined,
+                          }),
+                        });
+                        if (res.ok) {
+                          setContent('');
+                          if (textareaRef.current) textareaRef.current.style.height = 'auto';
+                          const timeLabel = opt.scheduledFor.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+                          setEphemeralMessage(`Message scheduled for ${timeLabel}`);
+                          setTimeout(() => setEphemeralMessage(null), 6000);
+                        } else {
+                          setEphemeralMessage('Failed to schedule message.');
+                          setTimeout(() => setEphemeralMessage(null), 4000);
+                        }
+                      } catch {
+                        setEphemeralMessage('Failed to schedule message.');
+                        setTimeout(() => setEphemeralMessage(null), 4000);
+                      }
                     }}
                   >
                     {opt.label}

@@ -81,6 +81,23 @@ export const channels = pgTable("channels", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+export const channelFolders = pgTable(
+  "channel_folders",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .references(() => users.id, { onDelete: "cascade" })
+      .notNull(),
+    workspaceId: uuid("workspace_id")
+      .references(() => workspaces.id, { onDelete: "cascade" })
+      .notNull(),
+    name: text("name").notNull(),
+    position: integer("position").default(0).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [index("channel_folders_user_workspace_idx").on(t.userId, t.workspaceId)]
+);
+
 export const channelMembers = pgTable(
   "channel_members",
   {
@@ -90,6 +107,9 @@ export const channelMembers = pgTable(
     userId: uuid("user_id")
       .references(() => users.id, { onDelete: "cascade" })
       .notNull(),
+    folderId: uuid("folder_id").references(() => channelFolders.id, {
+      onDelete: "set null",
+    }),
     role: text("role").default("member").notNull(),
     notificationPref: text("notification_pref").default("all").notNull(),
     joinedAt: timestamp("joined_at").defaultNow().notNull(),
@@ -294,6 +314,47 @@ export const blockedUsers = pgTable(
   (t) => [
     uniqueIndex("blocked_users_unique").on(t.userId, t.blockedUserId),
     index("blocked_users_user_idx").on(t.userId),
+  ]
+);
+
+export const scheduledMessages = pgTable(
+  "scheduled_messages",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .references(() => users.id, { onDelete: "cascade" })
+      .notNull(),
+    channelId: uuid("channel_id").references(() => channels.id, { onDelete: "cascade" }),
+    conversationId: uuid("conversation_id").references(() => dmConversations.id, { onDelete: "cascade" }),
+    content: text("content").notNull(),
+    scheduledFor: timestamp("scheduled_for").notNull(),
+    isSent: boolean("is_sent").default(false).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [
+    index("scheduled_messages_user_idx").on(t.userId, t.isSent),
+    index("scheduled_messages_time_idx").on(t.scheduledFor, t.isSent),
+  ]
+);
+
+export const channelMcpIntegrations = pgTable(
+  "channel_mcp_integrations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    channelId: uuid("channel_id")
+      .references(() => channels.id, { onDelete: "cascade" })
+      .notNull(),
+    serverId: text("server_id").notNull(),
+    enabled: boolean("enabled").default(true).notNull(),
+    config: jsonb("config"),
+    addedBy: uuid("added_by")
+      .references(() => users.id)
+      .notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("channel_mcp_unique").on(t.channelId, t.serverId),
+    index("channel_mcp_channel_idx").on(t.channelId),
   ]
 );
 

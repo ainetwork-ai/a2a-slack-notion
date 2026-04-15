@@ -21,12 +21,16 @@ export const commands: SlashCommand[] = [
 /mute — Toggle mute for this channel
 /dm @user <message> — Send a direct message
 /me <action> — Express an action (_you do something_)
+/pin — Pin the most recent message
+/unpin — Unpin the most recently pinned message
 /shrug [message] — Append ¯\\_(ツ)_/¯
 /tableflip [message] — Append (╯°□°)╯︵ ┻━┻
 /unflip [message] — Append ┬─┬ノ( º _ ºノ)
 /lenny [message] — Append ( ͡° ͜ʖ ͡°)
 /date — Show current date and time
-/remind me in <N> minutes/hours to <msg> — Set a server-persisted reminder`,
+/remind me in <N> minutes/hours to <msg> — Set a server-persisted reminder
+/polymarket trending | search <query> — Prediction market data
+/news search <query> | trending | topic <category> — News articles`,
       ephemeral: true,
     }),
   },
@@ -227,6 +231,55 @@ export const commands: SlashCommand[] = [
     }),
   },
   {
+    name: '/pin',
+    description: 'Pin the most recent message in this channel',
+    usage: '/pin',
+    execute: async (_, context) => {
+      if (!context.channelId) return { response: 'This command only works in channels.', ephemeral: true };
+      try {
+        const res = await fetch(`/api/channels/${context.channelId}/messages`);
+        if (!res.ok) return { response: 'Could not fetch messages.', ephemeral: true };
+        const data = await res.json();
+        const msgs: Array<{ id: string; content: string; pinnedAt?: string | null }> = data.messages ?? [];
+        // Find most recent unpinned message
+        const target = [...msgs].reverse().find(m => !m.pinnedAt);
+        if (!target) return { response: 'No unpinned messages found.', ephemeral: true };
+        const pinRes = await fetch(`/api/messages/${target.id}/pin`, { method: 'POST' });
+        if (!pinRes.ok) return { response: 'Failed to pin message.', ephemeral: true };
+        const preview = target.content.slice(0, 60) + (target.content.length > 60 ? '…' : '');
+        return { response: `📌 Pinned: "${preview}"`, ephemeral: true };
+      } catch {
+        return { response: 'Failed to pin message.', ephemeral: true };
+      }
+    },
+  },
+  {
+    name: '/unpin',
+    description: 'Unpin the most recently pinned message in this channel',
+    usage: '/unpin',
+    execute: async (_, context) => {
+      if (!context.channelId) return { response: 'This command only works in channels.', ephemeral: true };
+      try {
+        const res = await fetch(`/api/channels/${context.channelId}/messages`);
+        if (!res.ok) return { response: 'Could not fetch messages.', ephemeral: true };
+        const data = await res.json();
+        const msgs: Array<{ id: string; content: string; pinnedAt?: string | null }> = data.messages ?? [];
+        // Find most recently pinned message
+        const pinned = msgs.filter(m => m.pinnedAt).sort((a, b) =>
+          new Date(b.pinnedAt!).getTime() - new Date(a.pinnedAt!).getTime()
+        );
+        if (!pinned.length) return { response: 'No pinned messages found.', ephemeral: true };
+        const target = pinned[0];
+        const pinRes = await fetch(`/api/messages/${target.id}/pin`, { method: 'POST' });
+        if (!pinRes.ok) return { response: 'Failed to unpin message.', ephemeral: true };
+        const preview = target.content.slice(0, 60) + (target.content.length > 60 ? '…' : '');
+        return { response: `Unpinned: "${preview}"`, ephemeral: true };
+      } catch {
+        return { response: 'Failed to unpin message.', ephemeral: true };
+      }
+    },
+  },
+  {
     name: '/remind',
     description: 'Set a reminder',
     usage: '/remind me in <N> minutes/hours to <message> | /remind me at <time> to <message>',
@@ -286,6 +339,112 @@ export const commands: SlashCommand[] = [
         return { response: `⏰ Reminder saved for ${timeLabel}: "${message}"`, ephemeral: true };
       } catch {
         return { response: 'Failed to save reminder.', ephemeral: true };
+      }
+    },
+  },
+  {
+    name: '/polymarket',
+    description: 'Polymarket prediction markets',
+    usage: '/polymarket trending | /polymarket search <query>',
+    execute: async (args, context) => {
+      if (!context.channelId) return { response: 'This command only works in channels.', ephemeral: true };
+      const parts = args.trim().split(/\s+/);
+      const subcommand = parts[0]?.toLowerCase();
+
+      if (!subcommand || subcommand === 'help') {
+        return {
+          response: `📊 *Polymarket Commands*
+• /polymarket trending — Show trending prediction markets
+• /polymarket search <query> — Search markets by keyword`,
+          ephemeral: true,
+        };
+      }
+
+      const toolParams: Record<string, unknown> = {};
+      let toolName = subcommand;
+
+      if (subcommand === 'search') {
+        const query = parts.slice(1).join(' ');
+        if (!query) return { response: 'Usage: /polymarket search <query>', ephemeral: true };
+        toolParams.query = query;
+      } else if (subcommand !== 'trending') {
+        // Treat unknown subcommand as search query
+        toolName = 'search';
+        toolParams.query = args.trim();
+      }
+
+      try {
+        const res = await fetch('/api/mcp/execute', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            serverId: 'polymarket',
+            toolName,
+            params: toolParams,
+            channelId: context.channelId,
+          }),
+        });
+        const result = await res.json();
+        if (!res.ok) return { response: result.error || 'Failed to execute command.', ephemeral: true };
+        return { response: result.content };
+      } catch {
+        return { response: 'Failed to reach Polymarket.', ephemeral: true };
+      }
+    },
+  },
+  {
+    name: '/news',
+    description: 'Search news articles and trending topics',
+    usage: '/news search <query> | /news trending [geo] | /news topic <category>',
+    execute: async (args, context) => {
+      if (!context.channelId) return { response: 'This command only works in channels.', ephemeral: true };
+      const parts = args.trim().split(/\s+/);
+      const subcommand = parts[0]?.toLowerCase();
+
+      if (!subcommand || subcommand === 'help') {
+        return {
+          response: `📰 *News Commands*
+• /news search <query> — Search news articles
+• /news trending [US|KR|...] — Trending news by country
+• /news topic <category> — News by topic (world, business, technology, science, sports, health, entertainment)`,
+          ephemeral: true,
+        };
+      }
+
+      const toolParams: Record<string, unknown> = {};
+      let toolName = subcommand;
+
+      if (subcommand === 'search') {
+        const query = parts.slice(1).join(' ');
+        if (!query) return { response: 'Usage: /news search <query>', ephemeral: true };
+        toolParams.query = query;
+      } else if (subcommand === 'trending') {
+        if (parts[1]) toolParams.geo = parts[1].toUpperCase();
+      } else if (subcommand === 'topic') {
+        if (!parts[1]) return { response: 'Usage: /news topic <category>\nCategories: world, business, technology, science, sports, health, entertainment', ephemeral: true };
+        toolParams.topic = parts[1].toLowerCase();
+      } else {
+        // Treat unknown subcommand as search query
+        toolName = 'search';
+        toolParams.query = args.trim();
+      }
+
+      try {
+        const res = await fetch('/api/mcp/execute', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            serverId: 'news',
+            toolName,
+            params: toolParams,
+            channelId: context.channelId,
+          }),
+        });
+        const result = await res.json();
+        if (!res.ok) return { response: result.error || 'Failed to execute command.', ephemeral: true };
+        return { response: result.content };
+      } catch {
+        return { response: 'Failed to fetch news.', ephemeral: true };
       }
     },
   },

@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
-import { users, typingStatus } from "@/lib/db/schema";
-import { eq, and, lt, isNotNull } from "drizzle-orm";
+import { users, typingStatus, scheduledMessages, messages, channelMembers } from "@/lib/db/schema";
+import { eq, and, lt, isNotNull, lte } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
 export async function GET() {
@@ -39,11 +39,40 @@ export async function GET() {
     )
     .returning({ id: users.id });
 
+  // Process due scheduled messages
+  const dueScheduled = await db
+    .select()
+    .from(scheduledMessages)
+    .where(and(eq(scheduledMessages.isSent, false), lte(scheduledMessages.scheduledFor, now)));
+
+  let sentScheduled = 0;
+  for (const sm of dueScheduled) {
+    try {
+      if (sm.channelId) {
+        const [membership] = await db
+          .select()
+          .from(channelMembers)
+          .where(and(eq(channelMembers.channelId, sm.channelId), eq(channelMembers.userId, sm.userId)))
+          .limit(1);
+        if (membership) {
+          await db.insert(messages).values({ channelId: sm.channelId, userId: sm.userId, content: sm.content });
+        }
+      } else if (sm.conversationId) {
+        await db.insert(messages).values({ conversationId: sm.conversationId, userId: sm.userId, content: sm.content });
+      }
+      await db.update(scheduledMessages).set({ isSent: true }).where(eq(scheduledMessages.id, sm.id));
+      sentScheduled++;
+    } catch {
+      // Skip failed sends, will retry next cron run
+    }
+  }
+
   return NextResponse.json({
     cleaned: {
       expiredTypingStatuses: deletedTyping.length,
       usersSetOffline: offlineUsers.length,
       expiredStatuses: clearedStatuses.length,
+      scheduledMessagesSent: sentScheduled,
     },
   });
 }
