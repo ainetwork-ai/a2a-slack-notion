@@ -74,7 +74,7 @@ export default function AgentList() {
       {!collapsed && (
         <div className="mt-0.5 space-y-px">
           {agents.map(agent => (
-            <button
+            <div
               key={agent.id}
               onClick={async () => {
                 const res = await fetch('/api/dm', {
@@ -89,7 +89,7 @@ export default function AgentList() {
                 }
               }}
               className={cn(
-                'w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm transition-colors text-left group/agent',
+                'w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm transition-colors cursor-pointer group/agent',
                 isActive(agent.conversationId)
                   ? 'bg-[#4a154b]/60 text-white'
                   : 'text-[#bcabbc] hover:bg-white/5 hover:text-white'
@@ -98,7 +98,7 @@ export default function AgentList() {
               <div className="relative shrink-0">
                 <Avatar className="w-6 h-6">
                   {agent.iconUrl && <AvatarImage src={agent.iconUrl} alt={agent.name} />}
-                  <AvatarFallback className="bg-[#36c5f0]/20 text-[#36c5f0]">
+                  <AvatarFallback className="bg-[#1d9bd1]/20 text-[#1d9bd1]">
                     <Bot className="w-3.5 h-3.5" />
                   </AvatarFallback>
                 </Avatar>
@@ -118,10 +118,10 @@ export default function AgentList() {
                 className="w-5 h-5 flex items-center justify-center rounded opacity-0 group-hover/agent:opacity-100 hover:bg-white/10 transition-all shrink-0"
                 title={`Test ${agent.name}`}
               >
-                <FlaskConical className="w-3 h-3 text-[#36c5f0]" />
+                <FlaskConical className="w-3 h-3 text-[#1d9bd1]" />
               </button>
-              <Zap className="w-3 h-3 text-[#36c5f0] opacity-70 shrink-0 group-hover/agent:hidden" />
-            </button>
+              <Zap className="w-3 h-3 text-[#1d9bd1] opacity-70 shrink-0 group-hover/agent:hidden" />
+            </div>
           ))}
 
           <button

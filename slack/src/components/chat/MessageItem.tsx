@@ -90,7 +90,7 @@ export function renderInlineMarkdown(text: string): string {
   html = html.replace(/\x00URL(\d+)\x00/g, (_match, idxStr: string) => {
     const url = urlPlaceholders[parseInt(idxStr)];
     const displayUrl = url.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-    return `<a href="${url}" target="_blank" rel="noopener noreferrer" class="text-[#1d9bd1] hover:underline">${displayUrl}</a>`;
+    return `<a href="${url}" target="_blank" rel="noopener noreferrer" class="text-[#1d9bd1] hover:underline break-all">${displayUrl}</a>`;
   });
 
   // Item 2 & 13: Style @channel/@here/@everyone and regular @mentions
@@ -172,7 +172,7 @@ function OGCard({ url }: { url: string }) {
       href={url}
       target="_blank"
       rel="noopener noreferrer"
-      className="mt-2 flex gap-3 max-w-md bg-white/5 border-l-4 border-[#36c5f0] rounded-r-lg p-3 hover:bg-white/8 transition-colors no-underline"
+      className="mt-2 flex gap-3 max-w-md bg-white/5 border-l-4 border-[#1d9bd1] rounded-r-lg p-3 hover:bg-white/8 transition-colors no-underline"
       onClick={e => e.stopPropagation()}
     >
       {og.image ? (
@@ -192,7 +192,7 @@ function OGCard({ url }: { url: string }) {
       ) : null}
       <div className="min-w-0">
         <p className="text-xs text-slate-500 mb-0.5">{domain}</p>
-        {og.title && <p className="text-sm font-semibold text-[#36c5f0] hover:underline truncate">{og.title}</p>}
+        {og.title && <p className="text-sm font-semibold text-[#1d9bd1] hover:underline truncate">{og.title}</p>}
         {og.description && <p className="text-xs text-slate-400 line-clamp-2 mt-0.5">{og.description}</p>}
       </div>
     </a>
@@ -405,7 +405,7 @@ export default function MessageItem({
       className={cn(
         'group relative flex items-start gap-3 px-4 hover:bg-white/[0.03] rounded-lg transition-colors',
         isCompact ? 'py-0.5' : 'py-1.5',
-        isAgentResponse && 'bg-[#36c5f0]/5 border-l-2 border-[#36c5f0]/30',
+        isAgentResponse && 'bg-[#1d9bd1]/5 border-l-2 border-[#1d9bd1]/30',
         isMentioned && 'border-l-4 border-yellow-500 bg-yellow-500/5'
       )}
       onMouseEnter={() => setShowActions(true)}
@@ -421,7 +421,7 @@ export default function MessageItem({
           )}
           <AvatarFallback className={cn(
             'text-xs font-semibold',
-            message.isAgent ? 'bg-[#36c5f0]/20 text-[#36c5f0]' : 'bg-[#4a154b] text-white'
+            message.isAgent ? 'bg-[#1d9bd1]/20 text-[#1d9bd1]' : 'bg-[#4a154b] text-white'
           )}>
             {initials}
           </AvatarFallback>
@@ -441,7 +441,7 @@ export default function MessageItem({
             <button className="font-black text-[15px] hover:underline cursor-pointer" style={{ color: getNameColor(senderName) }}>{senderName}</button>
           </UserProfilePopup>
           {message.isAgent && (
-            <Badge className="text-[10px] px-1 py-0 h-4 bg-[#36c5f0]/20 text-[#36c5f0] border-[#36c5f0]/30">
+            <Badge className="text-[10px] px-1 py-0 h-4 bg-[#1d9bd1]/20 text-[#1d9bd1] border-[#1d9bd1]/30">
               Bot
             </Badge>
           )}
@@ -457,7 +457,7 @@ export default function MessageItem({
           >
             {format(new Date(message.createdAt), 'h:mm a')}
             {timestampToast && (
-              <span className="absolute left-0 -top-6 bg-[#36c5f0] text-[#1a1d21] text-xs font-medium px-2 py-0.5 rounded shadow-lg whitespace-nowrap pointer-events-none z-20">
+              <span className="absolute left-0 -top-6 bg-[#1d9bd1] text-[#1a1d21] text-xs font-medium px-2 py-0.5 rounded shadow-lg whitespace-nowrap pointer-events-none z-20">
                 Link copied!
               </span>
             )}
@@ -665,7 +665,7 @@ export default function MessageItem({
         {!isThreadView && message.threadCount && message.threadCount > 0 ? (
           <button
             onClick={() => setActiveThread(message.id)}
-            className="flex items-center gap-1.5 mt-1.5 text-xs text-[#36c5f0] hover:text-[#36c5f0]/80 hover:underline"
+            className="flex items-center gap-1.5 mt-1.5 text-xs text-[#1d9bd1] hover:text-[#1d9bd1]/80 hover:underline"
           >
             <MessageSquare className="w-3.5 h-3.5" />
             {message.threadCount} {message.threadCount === 1 ? 'reply' : 'replies'}
