@@ -12,6 +12,7 @@ import ThreadPanel from '@/components/chat/ThreadPanel';
 import AgentSkillPicker from '@/components/agent/AgentSkillPicker';
 import { AgentSkill } from '@/components/agent/AgentSkillPicker';
 import { useMessages } from '@/lib/hooks/use-messages';
+import { useAuth } from '@/lib/hooks/use-auth';
 import { useTyping } from '@/lib/realtime/use-typing';
 import { usePresence } from '@/lib/realtime/use-presence';
 import { useAppStore } from '@/lib/stores/app-store';
@@ -39,6 +40,7 @@ interface Conversation {
 
 export default function DMPage({ params }: { params: Promise<{ conversationId: string }> }) {
   const { conversationId } = use(params);
+  const { user: authUser } = useAuth();
   const { activeThread } = useAppStore();
   const [selectedSkill, setSelectedSkill] = useState<AgentSkill | null>(null);
   const lastReadAtRef = useRef<string | null>(null);
@@ -91,7 +93,7 @@ export default function DMPage({ params }: { params: Promise<{ conversationId: s
   const isAgent = otherUser?.isAgent ?? false;
 
   const { messages, isLoading, hasMore, sendMessage, editMessage, deleteMessage, loadMore } =
-    useMessages({ conversationId });
+    useMessages({ conversationId, currentUser: authUser ? { id: authUser.id, displayName: authUser.displayName, avatarUrl: authUser.avatarUrl } : undefined });
 
   const { typingUsers } = useTyping(undefined, conversationId);
   const { isOnline } = usePresence();

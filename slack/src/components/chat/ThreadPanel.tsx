@@ -5,6 +5,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sh
 import { MessageSquare, Bell, BellOff } from 'lucide-react';
 import { useAppStore } from '@/lib/stores/app-store';
 import { useMessages } from '@/lib/hooks/use-messages';
+import { useAuth } from '@/lib/hooks/use-auth';
 import MessageList from './MessageList';
 import MessageInput from './MessageInput';
 import TypingIndicator from './TypingIndicator';
@@ -25,11 +26,13 @@ export default function ThreadPanel({
   parentMessageId,
   parentMessageContent,
 }: ThreadPanelProps) {
+  const { user: authUser } = useAuth();
   const { activeThread, setActiveThread } = useAppStore();
   const { messages, isLoading, sendMessage, editMessage, deleteMessage } = useMessages({
     channelId,
     conversationId,
     parentId: parentMessageId,
+    currentUser: authUser ? { id: authUser.id, displayName: authUser.displayName, avatarUrl: authUser.avatarUrl } : undefined,
   });
   const { typingUsers } = useTyping(channelId, conversationId);
   const [alsoSendToChannel, setAlsoSendToChannel] = useState(false);

@@ -21,6 +21,7 @@ import ThreadPanel from '@/components/chat/ThreadPanel';
 import InviteMemberModal from '@/components/modals/InviteMemberModal';
 import ChannelDetailPanel from '@/components/chat/ChannelDetailPanel';
 import { useMessages, Message } from '@/lib/hooks/use-messages';
+import { useAuth } from '@/lib/hooks/use-auth';
 import { useTyping } from '@/lib/realtime/use-typing';
 import { useAppStore } from '@/lib/stores/app-store';
 import { useRouter } from 'next/navigation';
@@ -47,6 +48,7 @@ interface Channel {
 
 export default function ChannelPage({ params }: { params: Promise<{ channelId: string }> }) {
   const { channelId } = use(params);
+  const { user: authUser } = useAuth();
   const { activeThread, setActiveThread } = useAppStore();
   const [inviteOpen, setInviteOpen] = useState(false);
   const [detailPanelOpen, setDetailPanelOpen] = useState(false);
@@ -174,7 +176,7 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
     : undefined;
 
   const { messages, isLoading, hasMore, sendMessage, editMessage, deleteMessage, loadMore } =
-    useMessages({ channelId });
+    useMessages({ channelId, currentUser: authUser ? { id: authUser.id, displayName: authUser.displayName, avatarUrl: authUser.avatarUrl } : undefined });
 
   const pinnedMessages = messages.filter(m => m.pinnedAt);
   const { typingUsers } = useTyping(channelId);

@@ -7,6 +7,7 @@ import { inArray } from "drizzle-orm";
 import { eq, and, gt } from "drizzle-orm";
 
 export async function POST(req: NextRequest) {
+  try {
   const body = await req.json();
   const { signature, address, displayName, provider, inviteToken } = body;
   console.log("[Auth:Verify] Request:", { address, displayName, provider, hasSig: !!signature, hasInvite: !!inviteToken });
@@ -202,4 +203,8 @@ export async function POST(req: NextRequest) {
 
   console.log("[Auth:Verify] Login success! User:", user.id, user.displayName);
   return NextResponse.json({ user });
+  } catch (err) {
+    console.error("[Auth:Verify] Unhandled error:", err);
+    return NextResponse.json({ error: "Internal server error", details: String(err) }, { status: 500 });
+  }
 }
