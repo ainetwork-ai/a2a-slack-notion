@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils';
 import { replaceShortcodes } from '@/lib/emoji-map';
 import { commands, findCommand } from '@/lib/slash-commands';
 import ReactionPicker from './ReactionPicker';
+import GifPicker from './GifPicker';
 
 interface MessageInputProps {
   onSend: (content: string, metadata?: Record<string, unknown>) => Promise<void>;
@@ -43,6 +44,7 @@ export default function MessageInput({
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
+  const [gifPickerOpen, setGifPickerOpen] = useState(false);
   // Item 10: Shift+Enter hint
   const [showShiftEnterHint, setShowShiftEnterHint] = useState(() => {
     if (typeof window === 'undefined') return false;
@@ -122,6 +124,18 @@ export default function MessageInput({
 
   function handleEmojiSelect(emoji: string) {
     insertAtCursor(emoji);
+  }
+
+  async function handleGifSelect(url: string) {
+    setIsSending(true);
+    try {
+      await stopTyping();
+      await onSend(url);
+    } catch {
+      // keep content on failure
+    } finally {
+      setIsSending(false);
+    }
   }
 
   function handleMentionButton() {
@@ -543,6 +557,13 @@ export default function MessageInput({
             triggerIcon={<Smile className="w-4 h-4" />}
             triggerTitle="Add emoji"
             triggerClassName="w-7 h-7 flex items-center justify-center rounded text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
+          />
+
+          {/* GIF picker button */}
+          <GifPicker
+            onSelect={handleGifSelect}
+            open={gifPickerOpen}
+            onOpenChange={setGifPickerOpen}
           />
 
           {/* @mention button */}

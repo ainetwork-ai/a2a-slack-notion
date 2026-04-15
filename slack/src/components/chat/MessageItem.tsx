@@ -260,6 +260,7 @@ export default function MessageItem({
 
   const [isPinned, setIsPinned] = useState(!!message.pinnedAt);
   const [isBookmarked, setIsBookmarked] = useState(false);
+  const [animatingReactions, setAnimatingReactions] = useState<Set<string>>(new Set());
 
   const isOwn = message.senderId === currentUserId;
   const senderName = message.senderName || 'Unknown';
@@ -286,6 +287,16 @@ export default function MessageItem({
   }
 
   async function handleReaction(emoji: string) {
+    // Trigger pop animation
+    setAnimatingReactions(prev => new Set(prev).add(emoji));
+    setTimeout(() => {
+      setAnimatingReactions(prev => {
+        const next = new Set(prev);
+        next.delete(emoji);
+        return next;
+      });
+    }, 300);
+
     await fetch(`/api/messages/${message.id}/reactions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -548,7 +559,8 @@ export default function MessageItem({
                         'flex items-center gap-1 px-2 py-0.5 rounded-full border text-xs transition-colors',
                         iReacted
                           ? 'bg-[#4a154b]/30 border-[#4a154b]/60 text-white'
-                          : 'bg-white/5 border-white/10 text-slate-300 hover:bg-white/10'
+                          : 'bg-white/5 border-white/10 text-slate-300 hover:bg-white/10',
+                        animatingReactions.has(reaction.emoji) && 'reaction-pop'
                       )}
                     >
                       <span>{reaction.emoji}</span>

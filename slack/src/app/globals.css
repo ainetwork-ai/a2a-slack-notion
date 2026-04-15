@@ -310,6 +310,18 @@
   background-color: rgba(255, 255, 255, 0.2);
 }
 
+/* Reaction pop animation */
+@keyframes reaction-pop {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.4); }
+  70% { transform: scale(0.9); }
+  100% { transform: scale(1); }
+}
+
+.reaction-pop {
+  animation: reaction-pop 0.3s ease-out;
+}
+
 /* Typing indicator dots */
 .typing-dot {
   display: inline-block;
