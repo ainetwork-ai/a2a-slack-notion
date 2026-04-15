@@ -17,6 +17,7 @@ import { useTyping } from '@/lib/realtime/use-typing';
 import { usePresence } from '@/lib/realtime/use-presence';
 import { useAppStore } from '@/lib/stores/app-store';
 import { useWorkspaceStore } from '@/lib/stores/workspace-store';
+import { useAgentStream } from '@/lib/realtime/use-agent-stream';
 import useSWR from 'swr';
 import { cn } from '@/lib/utils';
 
@@ -131,6 +132,7 @@ export default function DMPage({ params }: { params: Promise<{ conversationId: s
   const { isOnline } = usePresence();
 
   const online = otherUser ? isOnline(otherUser.id) : false;
+  const agentStream = useAgentStream();
 
   // Header display values
   const headerTitle = isGroup
@@ -152,6 +154,18 @@ export default function DMPage({ params }: { params: Promise<{ conversationId: s
       ...metadata,
       ...(selectedSkill ? { skillId: selectedSkill.id, skillName: selectedSkill.name } : {}),
     });
+
+    // Start streaming for agent responses
+    if (isAgent && otherUser?.id) {
+      agentStream.reset();
+      agentStream.startStream({
+        agentId: otherUser.id,
+        text: content,
+        conversationId,
+        skillId: selectedSkill?.id,
+        senderName: authUser?.displayName,
+      });
+    }
   }
 
   return (
@@ -337,6 +351,37 @@ export default function DMPage({ params }: { params: Promise<{ conversationId: s
             lastReadAt={lastReadAtRef.current}
           />
           <TypingIndicator typingUsers={typingUsers} />
+
+          {/* Agent streaming response */}
+          {isAgent && (agentStream.isStreaming || agentStream.content) && (
+            <div className="px-5 py-2">
+              <div className="flex items-start gap-2.5">
+                <Avatar className="w-8 h-8 shrink-0 mt-0.5">
+                  <AvatarFallback className="bg-[#36c5f0]/20 text-[#36c5f0]">
+                    <Bot className="w-4 h-4" />
+                  </AvatarFallback>
+                </Avatar>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <span className="text-sm font-semibold text-white">{otherUser?.displayName}</span>
+                    <Badge className="text-[10px] px-1 py-0 h-4 bg-[#36c5f0]/20 text-[#36c5f0] border-[#36c5f0]/30">Bot</Badge>
+                    {agentStream.status && (
+                      <span className="text-[11px] text-slate-500 italic">{agentStream.status}</span>
+                    )}
+                  </div>
+                  {agentStream.content ? (
+                    <p className="text-sm text-slate-300 whitespace-pre-wrap leading-relaxed">{agentStream.content}<span className={agentStream.isStreaming ? 'animate-pulse' : ''}>|</span></p>
+                  ) : agentStream.isStreaming ? (
+                    <div className="flex items-center gap-1">
+                      <span className="w-2 h-2 bg-[#36c5f0] rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                      <span className="w-2 h-2 bg-[#36c5f0] rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                      <span className="w-2 h-2 bg-[#36c5f0] rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Skill picker for agent conversations */}
           {!isGroup && isAgent && conversation?.agentSkills && (

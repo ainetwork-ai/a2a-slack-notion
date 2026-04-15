@@ -144,6 +144,25 @@ export const MCP_SERVERS: McpServer[] = [
           key: { type: "string", description: "Memory key to delete", required: true },
         },
       },
+      {
+        name: "agent_create",
+        description: "Create a new A2A agent in the workspace",
+        parameters: {
+          name: { type: "string", description: "Agent name", required: true },
+          description: { type: "string", description: "Agent description" },
+          systemPrompt: { type: "string", description: "System prompt for the agent" },
+          mcpAccess: { type: "string", description: "JSON array of MCP server IDs e.g. [\"news\",\"polymarket\"]" },
+          skills: { type: "string", description: "JSON array of skills e.g. [{\"name\":\"...\",\"description\":\"...\",\"instruction\":\"...\"}]" },
+          creatorId: { type: "string", description: "ID of the user creating the agent", required: true },
+        },
+      },
+      {
+        name: "agent_list",
+        description: "List all agents in the workspace",
+        parameters: {
+          creatorId: { type: "string", description: "Filter by creator ID" },
+        },
+      },
     ],
   },
 ];

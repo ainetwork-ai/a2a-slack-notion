@@ -23,6 +23,8 @@ const providers: Record<string, Record<string, ProviderFn>> = {
     memory_read: slack.memory_read as ProviderFn,
     memory_write: slack.memory_write as ProviderFn,
     memory_delete: slack.memory_delete as ProviderFn,
+    agent_create: slack.agent_create as ProviderFn,
+    agent_list: slack.agent_list as ProviderFn,
   },
 };
 

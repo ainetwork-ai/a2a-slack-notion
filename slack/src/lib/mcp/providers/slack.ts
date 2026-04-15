@@ -276,3 +276,134 @@ export async function memory_delete(params: {
     return `Failed to delete memory: ${err instanceof Error ? err.message : "Unknown error"}`;
   }
 }
+
+// ─── Agent CRUD ────────────────────────────────────────────
+
+import { workspaceMembers } from "@/lib/db/schema";
+
+export async function agent_create(params: {
+  name: string;
+  description?: string;
+  systemPrompt?: string;
+  mcpAccess?: string;
+  skills?: string;
+  creatorId: string;
+}): Promise<string> {
+  if (!params.name?.trim()) return "Agent name is required.";
+  if (!params.creatorId) return "creatorId is required.";
+
+  try {
+    const ainAddress = `agent-${params.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${Date.now()}`;
+
+    let parsedSkills: Array<{ name: string; description: string; instruction: string }> = [];
+    if (params.skills) {
+      try { parsedSkills = JSON.parse(params.skills); } catch { /* ignore */ }
+    }
+
+    let mcpAccessList: string[] = ["slack"];
+    if (params.mcpAccess) {
+      try {
+        const parsed = JSON.parse(params.mcpAccess);
+        mcpAccessList = Array.from(new Set([...parsed, "slack"]));
+      } catch {
+        mcpAccessList = [...params.mcpAccess.split(",").map(s => s.trim()), "slack"];
+      }
+    }
+
+    const agentSkills = parsedSkills.map(s => ({
+      id: s.name.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
+      name: s.name,
+      description: s.description || "",
+      instruction: s.instruction || "",
+    }));
+
+    const agentCard = {
+      name: params.name.trim(),
+      description: params.description?.trim() || `Agent: ${params.name.trim()}`,
+      systemPrompt: params.systemPrompt?.trim() || "",
+      mcpAccess: mcpAccessList,
+      skills: agentSkills,
+      builtBy: params.creatorId,
+      provider: { organization: "Slack-A2A" },
+      version: "2.0.0",
+      defaultInputModes: ["text/plain"],
+      defaultOutputModes: ["text/plain"],
+      capabilities: {
+        streaming: true,
+        pushNotifications: false,
+        stateTransitionHistory: false,
+        extensions: [
+          { uri: "urn:a2a:ext:memory", description: "Persistent agent memory", required: false },
+          { uri: "urn:a2a:ext:tool-use", description: "LLM-driven MCP tool invocation", required: false },
+        ],
+      },
+    };
+
+    const [agent] = await db
+      .insert(users)
+      .values({
+        ainAddress,
+        displayName: params.name.trim(),
+        isAgent: true,
+        status: "online",
+        agentCardJson: agentCard,
+      })
+      .returning();
+
+    // Add to creator's workspaces
+    const creatorWs = await db
+      .select({ workspaceId: workspaceMembers.workspaceId })
+      .from(workspaceMembers)
+      .where(eq(workspaceMembers.userId, params.creatorId));
+
+    for (const ws of creatorWs) {
+      await db.insert(workspaceMembers)
+        .values({ workspaceId: ws.workspaceId, userId: agent.id, role: "member" })
+        .onConflictDoNothing();
+
+      const pubChannels = await db.select({ id: channels.id }).from(channels)
+        .where(and(eq(channels.workspaceId, ws.workspaceId), eq(channels.isPrivate, false)));
+      for (const ch of pubChannels) {
+        await db.insert(channelMembers)
+          .values({ channelId: ch.id, userId: agent.id, role: "member" })
+          .onConflictDoNothing();
+      }
+    }
+
+    const skillNames = agentSkills.map(s => s.name).join(", ") || "General Chat";
+    return `**Agent created successfully!**\n\nName: **${agent.displayName}**\nID: \`${agent.id}\`\nSkills: ${skillNames}\nMCP Access: ${mcpAccessList.join(", ")}\n\nThe agent is now available in the sidebar. DM @${agent.displayName} to start chatting.`;
+  } catch (err) {
+    return `Failed to create agent: ${err instanceof Error ? err.message : "Unknown error"}`;
+  }
+}
+
+export async function agent_list(params: {
+  creatorId?: string;
+}): Promise<string> {
+  try {
+    const agents = await db
+      .select({
+        id: users.id,
+        displayName: users.displayName,
+        agentCardJson: users.agentCardJson,
+        status: users.status,
+      })
+      .from(users)
+      .where(eq(users.isAgent, true))
+      .orderBy(desc(users.createdAt))
+      .limit(20);
+
+    if (agents.length === 0) return "No agents found.";
+
+    const lines = agents.map((a, i) => {
+      const card = a.agentCardJson as { builtBy?: string; skills?: Array<{ name: string }>; mcpAccess?: string[] } | null;
+      const isOwned = params.creatorId && card?.builtBy === params.creatorId;
+      const skills = card?.skills?.map(s => s.name).join(", ") || "—";
+      return `**${i + 1}. ${a.displayName}**${isOwned ? " (yours)" : ""}\n   ID: \`${a.id}\` | Skills: ${skills}`;
+    });
+
+    return `**Agents (${agents.length})**\n\n${lines.join("\n\n")}`;
+  } catch (err) {
+    return `Failed to list agents: ${err instanceof Error ? err.message : "Unknown error"}`;
+  }
+}

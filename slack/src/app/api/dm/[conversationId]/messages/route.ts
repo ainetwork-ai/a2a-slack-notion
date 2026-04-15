@@ -186,9 +186,9 @@ export async function POST(
       }))
     );
 
-    // Send to agents async (always, regardless of mute — agents still receive messages)
+    // Send to external A2A agents async (built agents are handled by frontend streaming)
     for (const member of otherMembers) {
-      if (member.isAgent) {
+      if (member.isAgent && member.a2aUrl) {
         sendToAgent({
           agentId: member.userId,
           text: content,

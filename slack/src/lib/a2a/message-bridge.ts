@@ -301,3 +301,268 @@ async function callLLM(
   const data = await res.json();
   return data.choices?.[0]?.message?.content || "No response generated.";
 }
+
+// ─── Streaming ─────────────────────────────────────────────
+
+/**
+ * Stream a built agent's response. Yields SSE-compatible chunks.
+ * Tool-use rounds are non-streaming (tool calls need full text),
+ * but the final response is streamed token-by-token.
+ */
+export async function* streamAgentResponse(params: {
+  agentId: string;
+  text: string;
+  channelId?: string;
+  conversationId?: string;
+  skillId?: string;
+  senderName?: string;
+}): AsyncGenerator<{ type: string; content: string }> {
+  const [agent] = await db
+    .select()
+    .from(users)
+    .where(eq(users.id, params.agentId))
+    .limit(1);
+
+  if (!agent) {
+    yield { type: "error", content: "Agent not found" };
+    return;
+  }
+
+  const card = agent.agentCardJson as BuiltAgentCard | null;
+  const agentName = agent.displayName;
+
+  // External A2A — delegate to SDK streaming
+  if (agent.a2aUrl) {
+    const { streamA2AMessage } = await import("./client");
+    const rpcUrl = (card as { url?: string } | null)?.url || agent.a2aUrl;
+    try {
+      for await (const event of streamA2AMessage(rpcUrl, params.text, {
+        agentName,
+        skillId: params.skillId,
+      })) {
+        yield event;
+      }
+    } catch {
+      yield { type: "error", content: "Stream failed" };
+    }
+    return;
+  }
+
+  // Built agent — vLLM streaming with tool-use
+  if (!card?.builtBy) {
+    yield { type: "error", content: "Agent not configured" };
+    return;
+  }
+
+  const pointer: MessagePointer = {
+    channelId: params.channelId,
+    conversationId: params.conversationId,
+    agentId: params.agentId,
+    senderName: params.senderName,
+  };
+
+  // Build system prompt (same as runAgent)
+  const systemContent = buildSystemPrompt(card, agentName, pointer, params.skillId);
+
+  const llmMessages: Array<{ role: string; content: string }> = [
+    { role: "system", content: systemContent },
+    { role: "user", content: params.text },
+  ];
+
+  // Tool-use rounds (non-streaming — need full text to parse tool calls)
+  yield { type: "status", content: "Thinking..." };
+
+  for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+    const response = await callLLM(llmMessages);
+    const toolCalls = parseToolCalls(response);
+
+    if (toolCalls.length === 0) {
+      // No tool calls in first response — re-do with streaming
+      // But we already have the full response, so just yield it
+      for (const char of response.replace(/\[TOOL_CALL:[^\]]*\]/g, "")) {
+        // Yield in small chunks for smoother streaming feel
+        yield { type: "content", content: char };
+        // Small artificial delay removed — just chunk it
+      }
+
+      // Save to DB
+      await db.insert(messages).values({
+        channelId: params.channelId || null,
+        conversationId: params.conversationId || null,
+        userId: agent.id,
+        content: response.replace(/\[TOOL_CALL:[^\]]*\]/g, "").trim(),
+        contentType: "agent-response",
+        metadata: { agentName, provider: "vllm" },
+      });
+      return;
+    }
+
+    // Execute tools
+    yield { type: "status", content: `Calling ${toolCalls.map(t => t.tool).join(", ")}...` };
+
+    const results: string[] = [];
+    for (const tc of toolCalls) {
+      if (tc.tool.startsWith("slack:")) {
+        if (pointer.channelId && !tc.params.channelId) tc.params.channelId = pointer.channelId;
+        if (pointer.conversationId && !tc.params.conversationId) tc.params.conversationId = pointer.conversationId;
+        if (pointer.agentId && !tc.params.agentId) tc.params.agentId = pointer.agentId;
+      }
+      const [serverId, toolName] = tc.tool.split(":");
+      if (serverId && toolName) {
+        const result = await executeTool(serverId, toolName, tc.params);
+        results.push(`[TOOL_RESULT: ${tc.tool}]\n${result.content}\n[/TOOL_RESULT]`);
+      }
+    }
+
+    llmMessages.push({ role: "assistant", content: response });
+    llmMessages.push({
+      role: "user",
+      content: results.join("\n\n") + "\n\nUse the tool results above to answer. Do not output [TOOL_CALL] again unless you need more data.",
+    });
+  }
+
+  // Final streaming response from vLLM
+  yield { type: "status", content: "Generating response..." };
+
+  let fullContent = "";
+  try {
+    const res = await fetch(`${VLLM_BASE_URL}/v1/chat/completions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: VLLM_MODEL,
+        messages: llmMessages,
+        max_tokens: 1024,
+        temperature: 0.7,
+        stream: true,
+      }),
+    });
+
+    if (!res.ok || !res.body) {
+      const fallback = await callLLM(llmMessages);
+      yield { type: "content", content: fallback };
+      fullContent = fallback;
+    } else {
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          if (line.startsWith("data: ") && line !== "data: [DONE]") {
+            try {
+              const data = JSON.parse(line.slice(6));
+              const delta = data.choices?.[0]?.delta?.content;
+              if (delta) {
+                fullContent += delta;
+                yield { type: "content", content: delta };
+              }
+            } catch { /* skip */ }
+          }
+        }
+      }
+    }
+  } catch {
+    const fallback = await callLLM(llmMessages);
+    yield { type: "content", content: fallback };
+    fullContent = fallback;
+  }
+
+  // Save final message to DB
+  const cleanContent = fullContent.replace(/\[TOOL_CALL:[^\]]*\]/g, "").trim();
+  if (cleanContent) {
+    await db.insert(messages).values({
+      channelId: params.channelId || null,
+      conversationId: params.conversationId || null,
+      userId: agent.id,
+      content: cleanContent,
+      contentType: "agent-response",
+      metadata: { agentName, provider: "vllm" },
+    });
+  }
+}
+
+/**
+ * Build the system prompt for a built agent (shared between streaming and non-streaming).
+ */
+function buildSystemPrompt(
+  card: BuiltAgentCard,
+  agentName: string,
+  pointer: MessagePointer,
+  skillHint?: string
+): string {
+  const systemParts: string[] = [];
+
+  if (card.systemPrompt) {
+    systemParts.push(card.systemPrompt);
+  } else {
+    systemParts.push(`You are ${agentName}, a helpful assistant.`);
+  }
+
+  // Available tools
+  const toolDocs: string[] = [];
+  for (const serverId of card.mcpAccess || []) {
+    const server = MCP_SERVERS.find((s) => s.id === serverId);
+    if (!server) continue;
+    for (const tool of server.tools) {
+      const paramDoc = tool.parameters
+        ? Object.entries(tool.parameters)
+            .map(([k, v]) => `${k}${v.required ? "*" : ""}:${v.type} (${v.description})`)
+            .join(", ")
+        : "";
+      toolDocs.push(`${serverId}:${tool.name} — ${tool.description}${paramDoc ? ` [${paramDoc}]` : ""}`);
+    }
+  }
+
+  if (toolDocs.length > 0) {
+    systemParts.push(
+      `## Available Tools\n\n${toolDocs.join("\n")}\n\n` +
+        `To call a tool, write on its own line:\n[TOOL_CALL: <tool> | param1=value1, param2=value2]\n\n` +
+        `Examples:\n` +
+        `[TOOL_CALL: slack:read_thread | conversationId=${pointer.conversationId || "..."}, limit=10]\n` +
+        `[TOOL_CALL: slack:memory_read | agentId=${pointer.agentId || "..."}]\n` +
+        `[TOOL_CALL: slack:agent_create | name=MyBot, creatorId=${pointer.agentId || "..."}]\n\n` +
+        `You can call multiple tools across rounds. After receiving tool results, answer thoughtfully.`
+    );
+  }
+
+  // Skills
+  if (card.skills?.length) {
+    const skillDoc = card.skills
+      .map((s) => `- **${s.name}** (${s.id}): ${s.description}${s.instruction ? `\n  Guide: ${s.instruction}` : ""}`)
+      .join("\n");
+    systemParts.push(`## Your Skills\n\n${skillDoc}`);
+  }
+
+  // Pointer context
+  const pointerParts: string[] = [];
+  if (pointer.channelId) pointerParts.push(`channelId: ${pointer.channelId}`);
+  if (pointer.conversationId) pointerParts.push(`conversationId: ${pointer.conversationId}`);
+  if (pointer.messageId) pointerParts.push(`messageId: ${pointer.messageId}`);
+  if (pointer.senderName) pointerParts.push(`sender: ${pointer.senderName}`);
+  if (pointer.agentId) pointerParts.push(`your agentId: ${pointer.agentId}`);
+
+  if (pointerParts.length > 0) {
+    systemParts.push(
+      `## Current Context\n\n${pointerParts.join("\n")}\n` +
+        `Use slack:read_thread to read previous messages. Use slack:memory_read/write for persistent memory.`
+    );
+  }
+
+  // Skill hint
+  if (skillHint) {
+    const skill = card.skills?.find((s) => s.id === skillHint);
+    if (skill) {
+      systemParts.push(`## Active Skill: ${skill.name}\n${skill.instruction || skill.description}`);
+    }
+  }
+
+  return systemParts.join("\n\n");
+}
