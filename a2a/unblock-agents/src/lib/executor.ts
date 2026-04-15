@@ -53,6 +53,20 @@ export class UnblockExecutor implements AgentExecutor {
     return out;
   }
 
+  /**
+   * Today's date in Asia/Seoul (YYYY-MM-DD). Unblock Media's editorial
+   * pipeline is KST-native, so we align with the parent backend's
+   * convention rather than the deployment region's local time.
+   */
+  private serverKstDate(): string {
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Seoul',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date());
+  }
+
   private buildSystemPrompt(
     skillId: string | undefined,
     variables: Record<string, string> | undefined,
@@ -61,8 +75,24 @@ export class UnblockExecutor implements AgentExecutor {
     if (!skillId) return base;
     const raw = this.agent.skillPrompts[skillId];
     if (!raw) return base;
-    const skillPrompt = this.substituteVariables(raw, variables);
-    return `${base}\n\n=== CURRENT TASK (skill: ${skillId}) ===\n${skillPrompt}`;
+
+    // Auto-inject TODAY_DATE from the server clock if the caller didn't
+    // supply one. LLMs tend to "correct" future dates back into their
+    // training cutoff (e.g. rewriting 2026-04-16 as 2024-04-16), so we
+    // also prepend a non-negotiable note pinning the authoritative date
+    // at the top of the system prompt.
+    const vars: Record<string, string> = { ...(variables ?? {}) };
+    const hasToday = Object.keys(vars).some((k) => k.toUpperCase() === 'TODAY_DATE');
+    if (!hasToday) vars.TODAY_DATE = this.serverKstDate();
+    const todayValue = vars.TODAY_DATE ?? vars.today_date ?? this.serverKstDate();
+
+    const skillPrompt = this.substituteVariables(raw, vars);
+    const authoritativeDate =
+      `⚠ CURRENT DATE (authoritative, KST): ${todayValue}\n` +
+      `위 날짜는 서버 시계 기준이며 반드시 그대로 사용하세요. ` +
+      `학습 데이터 시점으로 "보정"하지 마세요. 이 날짜가 미래처럼 느껴져도 실제 오늘입니다.`;
+
+    return `${base}\n\n${authoritativeDate}\n\n=== CURRENT TASK (skill: ${skillId}) ===\n${skillPrompt}`;
   }
 
   async execute(

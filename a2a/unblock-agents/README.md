@@ -89,3 +89,11 @@ doesn't echo literal placeholders back to the caller.
 
 Variable keys are case-insensitive on the server side; `TODAY_DATE` and
 `today_date` both match `^TODAY_DATE^`.
+
+`TODAY_DATE` is **auto-injected from the server's clock in Asia/Seoul**
+(`YYYY-MM-DD`) when a skill is active and the caller didn't supply one.
+An authoritative date note is also prepended to the system prompt
+telling the LLM not to "correct" the date to its training cutoff, so
+out-of-cutoff dates (e.g. 2026) are preserved rather than silently
+rewritten to 2024. Pass `TODAY_DATE` explicitly only if you want to
+override the server clock (backdating for archival runs, etc.).
