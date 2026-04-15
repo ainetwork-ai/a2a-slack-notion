@@ -10,6 +10,8 @@ import ChannelList from '@/components/layout/ChannelList';
 import { useWorkspaceStore } from '@/lib/stores/workspace-store';
 import DMList from '@/components/layout/DMList';
 import AgentList from '@/components/layout/AgentList';
+import McpList from '@/components/layout/McpList';
+import McpTestbed from '@/components/mcp/McpTestbed';
 import SearchModal from '@/components/modals/SearchModal';
 import CreateChannelModal from '@/components/modals/CreateChannelModal';
 import BrowseChannelsModal from '@/components/modals/BrowseChannelsModal';
@@ -35,6 +37,7 @@ export default function WorkspaceLayout({
   useKeyboardShortcuts();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [workspaceModalOpen, setWorkspaceModalOpen] = useState(false);
+  const [mcpTestbedServer, setMcpTestbedServer] = useState<string | null>(null);
   const { activeWorkspaceId, workspaces } = useWorkspaceStore();
 
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
@@ -148,7 +151,7 @@ export default function WorkspaceLayout({
       <div
         style={{ width: sidebarWidth }}
         className={[
-          'relative flex flex-col shrink-0 channel-sidebar border-r border-white/5 overflow-hidden',
+          'relative flex flex-col shrink-0 channel-sidebar border-r overflow-hidden',
           // Mobile: fixed overlay; Desktop: normal flow
           'max-md:fixed max-md:inset-y-0 max-md:left-16 max-md:z-30',
           'max-md:transition-transform max-md:duration-200 max-md:ease-in-out',
@@ -156,7 +159,7 @@ export default function WorkspaceLayout({
         ].join(' ')}
       >
         {/* Workspace name */}
-        <div className="flex items-center justify-between px-4 h-12 border-b border-white/5 shrink-0 channel-header">
+        <div className="flex items-center justify-between px-4 h-12 border-b shrink-0 channel-header">
           <button onClick={() => setWorkspaceModalOpen(true)} className="flex items-center gap-1 font-bold text-base truncate hover:bg-white/10 rounded px-1 -mx-1 transition-colors" style={{ color: 'var(--slack-text-primary)' }}>
             {workspaces.find((w) => w.id === activeWorkspaceId)?.name ?? 'Slack-A2A'}
             <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
@@ -184,6 +187,8 @@ export default function WorkspaceLayout({
           <DMList />
           <Separator className="my-2 bg-white/5" />
           <AgentList />
+          <Separator className="my-2 bg-white/5" />
+          <McpList onServerClick={(id) => setMcpTestbedServer(id)} />
         </div>
 
         {/* E4: Drag handle */}
@@ -200,7 +205,7 @@ export default function WorkspaceLayout({
         <ConnectionStatus />
 
         {/* Mobile hamburger bar */}
-        <div className="flex items-center h-10 px-3 border-b border-white/5 md:hidden shrink-0">
+        <div className="flex items-center h-10 px-3 border-b md:hidden shrink-0 main-content">
           <button
             className="text-slate-400 hover:text-white p-1"
             onClick={() => setSidebarOpen(true)}
@@ -213,7 +218,17 @@ export default function WorkspaceLayout({
           </span>
         </div>
 
-        {children}
+        <div className="flex flex-1 min-h-0 overflow-hidden">
+          <div className="flex-1 min-w-0 overflow-hidden">
+            {children}
+          </div>
+          {mcpTestbedServer && (
+            <McpTestbed
+              initialServerId={mcpTestbedServer}
+              onClose={() => setMcpTestbedServer(null)}
+            />
+          )}
+        </div>
       </div>
 
       {/* Global modals */}

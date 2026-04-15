@@ -28,11 +28,11 @@ function DateSeparator({ date }: { date: Date }) {
 
   return (
     <div className="flex items-center gap-3 px-4 py-2 my-2">
-      <div className="flex-1 h-px bg-white/10" />
-      <span className="text-xs text-slate-400 font-medium px-3 py-1 bg-[#222529] border border-white/10 rounded-full whitespace-nowrap shadow-sm select-none">
+      <div className="flex-1 h-px" style={{ backgroundColor: 'var(--slack-border)' }} />
+      <span className="text-xs font-medium px-3 py-1 rounded-full whitespace-nowrap shadow-sm select-none" style={{ backgroundColor: 'var(--slack-bg-tertiary)', color: 'var(--slack-text-secondary)', border: '1px solid var(--slack-border)' }}>
         {label}
       </span>
-      <div className="flex-1 h-px bg-white/10" />
+      <div className="flex-1 h-px" style={{ backgroundColor: 'var(--slack-border)' }} />
     </div>
   );
 }

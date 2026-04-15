@@ -100,7 +100,7 @@ export function useMessages({ channelId, conversationId, parentId, currentUser }
   const { data, isLoading, mutate } = useSWR<{ messages: Message[]; nextCursor?: string }>(
     swrKey,
     rawFetcher,
-    { refreshInterval: 2000 }
+    { refreshInterval: 3000 }
   );
 
   async function sendMessage(content: string, metadata?: Record<string, unknown>) {
