@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { Plus, ChevronDown, ChevronRight, Bot, Zap, UserPlus, Wrench } from 'lucide-react';
+import { Plus, ChevronDown, ChevronRight, Bot, Zap, UserPlus, Wrench, FlaskConical } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useAppStore } from '@/lib/stores/app-store';
 import { cn } from '@/lib/utils';
@@ -23,7 +23,7 @@ export default function AgentList() {
   const router = useRouter();
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
-  const { setAgentInviteOpen, setAgentBuildOpen } = useAppStore();
+  const { setAgentInviteOpen, setAgentBuildOpen, setTestAgent } = useAppStore();
   const { mutate } = useSWRConfig();
 
   const { data } = useSWR<Agent[]>(
@@ -89,7 +89,7 @@ export default function AgentList() {
                 }
               }}
               className={cn(
-                'w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm transition-colors text-left',
+                'w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm transition-colors text-left group/agent',
                 isActive(agent.conversationId)
                   ? 'bg-[#4a154b]/60 text-white'
                   : 'text-[#bcabbc] hover:bg-white/5 hover:text-white'
@@ -110,7 +110,17 @@ export default function AgentList() {
                 />
               </div>
               <span className="truncate flex-1">{agent.name}</span>
-              <Zap className="w-3 h-3 text-[#36c5f0] opacity-70 shrink-0" />
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setTestAgent({ id: agent.id, name: agent.name });
+                }}
+                className="w-5 h-5 flex items-center justify-center rounded opacity-0 group-hover/agent:opacity-100 hover:bg-white/10 transition-all shrink-0"
+                title={`Test ${agent.name}`}
+              >
+                <FlaskConical className="w-3 h-3 text-[#36c5f0]" />
+              </button>
+              <Zap className="w-3 h-3 text-[#36c5f0] opacity-70 shrink-0 group-hover/agent:hidden" />
             </button>
           ))}
 

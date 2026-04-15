@@ -8,10 +8,12 @@ import MobileNav from '@/components/layout/MobileNav';
 import { requestPermission } from '@/lib/notifications/browser-notify';
 import ChannelList from '@/components/layout/ChannelList';
 import { useWorkspaceStore } from '@/lib/stores/workspace-store';
+import { useAppStore } from '@/lib/stores/app-store';
 import DMList from '@/components/layout/DMList';
 import AgentList from '@/components/layout/AgentList';
 import McpList from '@/components/layout/McpList';
 import McpTestbed from '@/components/mcp/McpTestbed';
+import AgentTestPane from '@/components/mcp/AgentTestPane';
 import SearchModal from '@/components/modals/SearchModal';
 import CreateChannelModal from '@/components/modals/CreateChannelModal';
 import BrowseChannelsModal from '@/components/modals/BrowseChannelsModal';
@@ -39,6 +41,7 @@ export default function WorkspaceLayout({
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [workspaceModalOpen, setWorkspaceModalOpen] = useState(false);
   const [mcpTestbedServer, setMcpTestbedServer] = useState<string | null>(null);
+  const { testAgent, setTestAgent } = useAppStore();
   const { activeWorkspaceId, workspaces } = useWorkspaceStore();
 
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
@@ -227,6 +230,13 @@ export default function WorkspaceLayout({
             <McpTestbed
               initialServerId={mcpTestbedServer}
               onClose={() => setMcpTestbedServer(null)}
+            />
+          )}
+          {testAgent && (
+            <AgentTestPane
+              agentId={testAgent.id}
+              agentName={testAgent.name}
+              onClose={() => setTestAgent(null)}
             />
           )}
         </div>
