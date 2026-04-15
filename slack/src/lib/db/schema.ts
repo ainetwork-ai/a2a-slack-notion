@@ -91,6 +91,7 @@ export const channelMembers = pgTable(
       .references(() => users.id, { onDelete: "cascade" })
       .notNull(),
     role: text("role").default("member").notNull(),
+    notificationPref: text("notification_pref").default("all").notNull(),
     joinedAt: timestamp("joined_at").defaultNow().notNull(),
     lastReadAt: timestamp("last_read_at").defaultNow().notNull(),
   },
@@ -293,5 +294,26 @@ export const blockedUsers = pgTable(
   (t) => [
     uniqueIndex("blocked_users_unique").on(t.userId, t.blockedUserId),
     index("blocked_users_user_idx").on(t.userId),
+  ]
+);
+
+export const customCommands = pgTable(
+  "custom_commands",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id")
+      .references(() => workspaces.id, { onDelete: "cascade" })
+      .notNull(),
+    name: text("name").notNull(),
+    description: text("description").notNull().default(""),
+    responseText: text("response_text").notNull(),
+    createdBy: uuid("created_by")
+      .references(() => users.id)
+      .notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("custom_commands_workspace_name_unique").on(t.workspaceId, t.name),
+    index("custom_commands_workspace_idx").on(t.workspaceId),
   ]
 );

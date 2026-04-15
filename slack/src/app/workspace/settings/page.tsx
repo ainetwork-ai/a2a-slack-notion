@@ -6,7 +6,7 @@ import { useWorkspaceStore } from '@/lib/stores/workspace-store';
 import { useAuth } from '@/lib/hooks/use-auth';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import Image from 'next/image';
-import { Loader2, Settings, Users, Hash, Calendar, Shield, Trash2, AlertCircle } from 'lucide-react';
+import { Loader2, Settings, Users, Hash, Calendar, Shield, Trash2, AlertCircle, Terminal, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface Member {
@@ -59,6 +59,83 @@ export default function WorkspaceSettingsPage() {
 
   // Member removal
   const [removingId, setRemovingId] = useState<string | null>(null);
+
+  // Custom commands
+  interface CustomCommand {
+    id: string;
+    name: string;
+    description: string;
+    responseText: string;
+  }
+  const [customCommands, setCustomCommands] = useState<CustomCommand[]>([]);
+  const [loadingCommands, setLoadingCommands] = useState(false);
+  const [newCmdName, setNewCmdName] = useState('');
+  const [newCmdDescription, setNewCmdDescription] = useState('');
+  const [newCmdResponse, setNewCmdResponse] = useState('');
+  const [savingCmd, setSavingCmd] = useState(false);
+  const [removingCmdId, setRemovingCmdId] = useState<string | null>(null);
+  const [cmdError, setCmdError] = useState<string | null>(null);
+
+  const loadCustomCommands = useCallback(async () => {
+    if (!activeWorkspaceId) return;
+    setLoadingCommands(true);
+    try {
+      const res = await fetch(`/api/commands?workspaceId=${activeWorkspaceId}`);
+      if (res.ok) setCustomCommands(await res.json());
+    } finally {
+      setLoadingCommands(false);
+    }
+  }, [activeWorkspaceId]);
+
+  useEffect(() => {
+    if (isPrivileged) loadCustomCommands();
+  }, [isPrivileged, loadCustomCommands]);
+
+  async function handleAddCommand() {
+    if (!activeWorkspaceId || !newCmdName.trim() || !newCmdResponse.trim()) return;
+    setSavingCmd(true);
+    setCmdError(null);
+    try {
+      const res = await fetch('/api/commands', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          workspaceId: activeWorkspaceId,
+          name: newCmdName.trim(),
+          description: newCmdDescription.trim(),
+          responseText: newCmdResponse.trim(),
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.json();
+        setCmdError(body.error ?? 'Failed to create command');
+      } else {
+        setNewCmdName('');
+        setNewCmdDescription('');
+        setNewCmdResponse('');
+        await loadCustomCommands();
+      }
+    } catch {
+      setCmdError('Failed to create command');
+    } finally {
+      setSavingCmd(false);
+    }
+  }
+
+  async function handleRemoveCommand(id: string) {
+    if (!activeWorkspaceId) return;
+    setRemovingCmdId(id);
+    try {
+      await fetch('/api/commands', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, workspaceId: activeWorkspaceId }),
+      });
+      await loadCustomCommands();
+    } finally {
+      setRemovingCmdId(null);
+    }
+  }
 
   const loadData = useCallback(async () => {
     if (!activeWorkspaceId) return;
@@ -366,6 +443,112 @@ export default function WorkspaceSettingsPage() {
             </ul>
           )}
         </section>
+        {/* Custom Commands */}
+        {isPrivileged && (
+          <section className="bg-[#222529] border border-white/10 rounded-xl overflow-hidden">
+            <div className="px-5 py-4 border-b border-white/5 flex items-center gap-2">
+              <Terminal className="w-4 h-4 text-slate-400" />
+              <h2 className="text-sm font-semibold text-white">Custom Commands</h2>
+            </div>
+
+            <div className="px-5 py-5 space-y-4">
+              <p className="text-xs text-slate-500">
+                Create custom slash commands that respond with a fixed message. Use them in any channel with <span className="font-mono text-slate-400">/commandname</span>.
+              </p>
+
+              {cmdError && (
+                <div className="flex items-center gap-2 px-3 py-2 bg-red-900/30 border border-red-800/50 rounded-lg text-red-300 text-xs">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                  {cmdError}
+                </div>
+              )}
+
+              {/* Add new command form */}
+              <div className="space-y-2 p-4 bg-[#1a1d21] border border-white/5 rounded-lg">
+                <p className="text-xs font-medium text-slate-400 mb-3">Add new command</p>
+                <div className="flex gap-2">
+                  <div className="flex items-center bg-[#222529] border border-white/10 rounded-lg px-3 py-2 text-slate-400 text-sm shrink-0">
+                    /
+                  </div>
+                  <input
+                    className="flex-1 bg-[#222529] border border-white/10 rounded-lg px-3 py-2 text-white text-sm placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-[#4a154b]"
+                    value={newCmdName}
+                    onChange={(e) => setNewCmdName(e.target.value.replace(/[^a-z0-9_-]/gi, '').toLowerCase())}
+                    placeholder="command-name"
+                    disabled={savingCmd}
+                  />
+                </div>
+                <input
+                  className="w-full bg-[#222529] border border-white/10 rounded-lg px-3 py-2 text-white text-sm placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-[#4a154b]"
+                  value={newCmdDescription}
+                  onChange={(e) => setNewCmdDescription(e.target.value)}
+                  placeholder="Short description (optional)"
+                  disabled={savingCmd}
+                />
+                <textarea
+                  className="w-full bg-[#222529] border border-white/10 rounded-lg px-3 py-2 text-white text-sm placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-[#4a154b] resize-none"
+                  rows={2}
+                  value={newCmdResponse}
+                  onChange={(e) => setNewCmdResponse(e.target.value)}
+                  placeholder="Response text when command is run"
+                  disabled={savingCmd}
+                />
+                <button
+                  onClick={handleAddCommand}
+                  disabled={savingCmd || !newCmdName.trim() || !newCmdResponse.trim()}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-[#4a154b] hover:bg-[#611f6a] text-white text-xs font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {savingCmd ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Plus className="w-3.5 h-3.5" />
+                  )}
+                  Add Command
+                </button>
+              </div>
+
+              {/* Existing commands list */}
+              {loadingCommands ? (
+                <div className="flex items-center justify-center py-4">
+                  <Loader2 className="w-4 h-4 text-slate-400 animate-spin" />
+                </div>
+              ) : customCommands.length === 0 ? (
+                <p className="text-xs text-slate-600 text-center py-3">No custom commands yet.</p>
+              ) : (
+                <ul className="space-y-2">
+                  {customCommands.map((cmd) => (
+                    <li key={cmd.id} className="flex items-start gap-3 p-3 bg-[#1a1d21] border border-white/5 rounded-lg">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-mono font-medium text-[#e879f9]">/{cmd.name}</span>
+                          {cmd.description && (
+                            <span className="text-xs text-slate-500 truncate">{cmd.description}</span>
+                          )}
+                        </div>
+                        <p className="text-xs text-slate-400 mt-0.5 line-clamp-2">{cmd.responseText}</p>
+                      </div>
+                      <button
+                        onClick={() => {
+                          if (confirm(`Remove /${cmd.name}?`)) handleRemoveCommand(cmd.id);
+                        }}
+                        disabled={removingCmdId === cmd.id}
+                        className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-900/20 transition-colors disabled:opacity-50 shrink-0"
+                        title="Remove command"
+                      >
+                        {removingCmdId === cmd.id ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <Trash2 className="w-3.5 h-3.5" />
+                        )}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </section>
+        )}
+
       </div>
     </div>
   );

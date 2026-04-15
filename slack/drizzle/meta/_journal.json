@@ -15,6 +15,13 @@
       "when": 1776221091626,
       "tag": "0001_perpetual_zaran",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1776225810121,
+      "tag": "0002_slimy_vector",
+      "breakpoints": true
     }
   ]
 }

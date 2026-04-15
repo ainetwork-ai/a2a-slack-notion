@@ -301,3 +301,37 @@ export function findCommand(input: string): { command: SlashCommand; args: strin
   }
   return null;
 }
+
+/**
+ * Try to match input against custom commands fetched from the API.
+ * Returns a synthetic SlashCommand if found, null otherwise.
+ */
+export async function findCustomCommand(
+  input: string,
+  workspaceId: string
+): Promise<{ command: SlashCommand; args: string } | null> {
+  const trimmed = input.trim();
+  if (!trimmed.startsWith('/')) return null;
+
+  // Extract the command name (first word after /)
+  const [rawName, ...rest] = trimmed.slice(1).split(' ');
+  const name = rawName.toLowerCase();
+  if (!name) return null;
+
+  try {
+    const res = await fetch(`/api/commands?workspaceId=${encodeURIComponent(workspaceId)}`);
+    if (!res.ok) return null;
+    const cmds: Array<{ id: string; name: string; description: string; responseText: string }> = await res.json();
+    const match = cmds.find((c) => c.name === name);
+    if (!match) return null;
+
+    const command: SlashCommand = {
+      name: `/${match.name}`,
+      description: match.description,
+      execute: async () => ({ response: match.responseText }),
+    };
+    return { command, args: rest.join(' ') };
+  } catch {
+    return null;
+  }
+}
