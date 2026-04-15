@@ -99,12 +99,12 @@ export default function ChannelList({ workspaceId }: ChannelListProps) {
               <span
                 className={cn(
                   'truncate',
-                  channel.unreadCount > 0 && !isActive(channel.id) && 'font-semibold text-white'
+                  (channel.unreadCount ?? 0) > 0 && !isActive(channel.id) && 'font-semibold text-white'
                 )}
               >
                 {channel.name}
               </span>
-              {channel.unreadCount > 0 && !isActive(channel.id) && (
+              {(channel.unreadCount ?? 0) > 0 && !isActive(channel.id) && (
                 <span className="ml-auto w-2 h-2 rounded-full bg-white shrink-0" />
               )}
             </button>
