@@ -56,6 +56,8 @@ export default function MessageInput({
   const [emojiSuggestions, setEmojiSuggestions] = useState<Array<{ shortcode: string; emoji: string }>>([]);
   const [emojiQuery, setEmojiQuery] = useState('');
   const [emojiIndex, setEmojiIndex] = useState(0);
+  const [skillSuggestions, setSkillSuggestions] = useState<Array<{ name: string; description: string; skillId: string }>>([]);
+  const [skillIndex, setSkillIndex] = useState(0);
   const [ephemeralMessage, setEphemeralMessage] = useState<string | null>(null);
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -316,6 +318,37 @@ export default function MessageInput({
       setSlashSuggestions([]);
     }
 
+    // Agent skill detection: "@AgentName <partial>" pattern
+    const agentSkillMatch = val.match(/^@([\w\s()-]+?)\s+(.*)$/);
+    if (agentSkillMatch && !val.startsWith('/')) {
+      const agentName = agentSkillMatch[1].trim();
+      const skillQuery = agentSkillMatch[2].toLowerCase();
+      (async () => {
+        try {
+          const res = await fetch(`/api/users/search?q=${encodeURIComponent(agentName)}`);
+          if (!res.ok) return;
+          const users: Array<{ id: string; displayName: string; isAgent?: boolean }> = await res.json();
+          const agent = users.find(u => u.isAgent && u.displayName.toLowerCase() === agentName.toLowerCase());
+          if (!agent) { setSkillSuggestions([]); return; }
+          const agentRes = await fetch(`/api/agents/${agent.id}`);
+          if (!agentRes.ok) { setSkillSuggestions([]); return; }
+          const agentData = await agentRes.json();
+          const skills = (agentData.agentCardJson?.skills || []) as Array<{ id: string; name: string; description: string }>;
+          const filtered = skills
+            .filter(s => s.id !== 'chat')
+            .filter(s => !skillQuery || s.id.includes(skillQuery) || s.name.toLowerCase().includes(skillQuery) || s.description?.toLowerCase().includes(skillQuery))
+            .map(s => ({ name: `@${agentName} ${s.id}`, description: s.description || s.name, skillId: s.id }));
+          setSkillSuggestions(filtered);
+          setSkillIndex(0);
+        } catch { setSkillSuggestions([]); }
+      })();
+      setMentionSuggestions([]);
+      setMentionQuery('');
+      return;
+    } else {
+      setSkillSuggestions([]);
+    }
+
     // Mention detection
     const cursor = e.target.selectionStart ?? 0;
     const textBefore = val.slice(0, cursor);
@@ -389,6 +422,35 @@ export default function MessageInput({
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (isComposingRef.current) return;
+
+    if (skillSuggestions.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSkillIndex(i => Math.min(i + 1, skillSuggestions.length - 1));
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSkillIndex(i => Math.max(i - 1, 0));
+        return;
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault();
+        const skill = skillSuggestions[skillIndex];
+        setContent(skill.name + ' ');
+        setSkillSuggestions([]);
+        setTimeout(() => {
+          textareaRef.current?.focus();
+          const pos = skill.name.length + 1;
+          textareaRef.current?.setSelectionRange(pos, pos);
+        }, 0);
+        return;
+      }
+      if (e.key === 'Escape') {
+        setSkillSuggestions([]);
+        return;
+      }
+    }
 
     if (slashSuggestions.length > 0) {
       if (e.key === 'ArrowDown') {
@@ -661,6 +723,34 @@ export default function MessageInput({
       )}
 
       {/* Slash command suggestions */}
+      {/* Agent skill suggestions */}
+      {skillSuggestions.length > 0 && (
+        <div className="absolute bottom-full left-4 right-4 mb-1 bg-[#222529] border border-white/10 rounded-lg shadow-xl overflow-hidden z-50">
+          <div className="px-3 py-1.5 text-[10px] text-slate-500 font-semibold uppercase tracking-wider border-b border-white/5">Agent Skills</div>
+          {skillSuggestions.map((skill, i) => (
+            <button
+              key={skill.skillId}
+              onClick={() => {
+                setContent(skill.name + ' ');
+                setSkillSuggestions([]);
+                setTimeout(() => {
+                  textareaRef.current?.focus();
+                  const pos = skill.name.length + 1;
+                  textareaRef.current?.setSelectionRange(pos, pos);
+                }, 0);
+              }}
+              className={cn(
+                'w-full flex items-center gap-3 px-3 py-2 text-sm text-left transition-colors',
+                i === skillIndex ? 'bg-[#4a154b]/50 text-white' : 'text-slate-300 hover:bg-white/5'
+              )}
+            >
+              <span className="font-mono font-semibold text-[#36c5f0]">{skill.skillId}</span>
+              <span className="text-slate-400 text-xs">{skill.description}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
       {slashSuggestions.length > 0 && (
         <div className="absolute bottom-full left-4 right-4 mb-1 bg-[#222529] border border-white/10 rounded-lg shadow-xl overflow-hidden z-50">
           {slashSuggestions.map((cmd, i) => (
