@@ -16,27 +16,26 @@ export interface AgentSkillDef {
   instruction: string;
 }
 
-export async function POST(request: NextRequest) {
-  const auth = await requireAuth();
-  if ("error" in auth) return auth.error;
-  const { user } = auth;
+interface AgentDefinition {
+  name: string;
+  description?: string;
+  systemPrompt?: string;
+  mcpAccess?: string[];
+  skills?: { id?: string; name: string; description: string; instruction?: string }[];
+  capabilities?: {
+    streaming?: boolean;
+    pushNotifications?: boolean;
+    extensions?: { uri: string; description: string; required: boolean }[];
+  };
+}
 
-  const { name, description, systemPrompt, mcpAccess, skills, capabilities } =
-    await request.json();
-
-  if (!name?.trim()) {
-    return NextResponse.json(
-      { error: "Agent name is required" },
-      { status: 400 }
-    );
-  }
+async function createSingleAgent(agentDef: AgentDefinition, userId: string) {
+  const { name, description, systemPrompt, mcpAccess, skills, capabilities } = agentDef;
 
   const ainAddress = `agent-${name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${Date.now()}`;
 
-  // Skills are high-level abilities defined by the user
-  // mcpAccess is the list of MCP servers the agent can use as tools
   const agentSkills: AgentSkillDef[] = (skills || []).map(
-    (s: { id?: string; name: string; description: string; instruction?: string }) => ({
+    (s) => ({
       id: s.id || s.name.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
       name: s.name,
       description: s.description,
@@ -49,13 +48,13 @@ export async function POST(request: NextRequest) {
     new Set([...(mcpAccess || []), "slack"])
   );
 
-  const agentCard = {
+  const agentCard: Record<string, unknown> = {
     name: name.trim(),
     description: description?.trim() || `Custom agent: ${name.trim()}`,
     systemPrompt: systemPrompt?.trim() || "",
     mcpAccess: mcpAccessList,
     skills: agentSkills,
-    builtBy: user.id,
+    builtBy: userId,
     provider: { organization: "Slack-A2A" },
     version: "2.0.0",
     defaultInputModes: ["text/plain"],
@@ -66,7 +65,6 @@ export async function POST(request: NextRequest) {
       stateTransitionHistory: false,
       extensions: [
         ...(capabilities?.extensions || []),
-        // Always include memory and toolUse as extensions
         { uri: "urn:a2a:ext:memory", description: "Persistent agent memory across conversations", required: false },
         { uri: "urn:a2a:ext:tool-use", description: "LLM-driven MCP tool invocation", required: false },
       ],
@@ -84,11 +82,41 @@ export async function POST(request: NextRequest) {
     })
     .returning();
 
+  // Register with a2a-builder to get an actual A2A endpoint
+  try {
+    const builderRes = await fetch("https://a2a-builder.ainetwork.ai/api/agents", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: name.trim(),
+        description: description?.trim() || "",
+        systemPrompt: systemPrompt?.trim() || "",
+        skills: agentSkills,
+      }),
+    });
+    if (builderRes.ok) {
+      const builderData = await builderRes.json();
+      const a2aUrl =
+        builderData.url ||
+        builderData.a2aUrl ||
+        `https://a2a-builder.ainetwork.ai/api/agents/${builderData.id || builderData.agentId}`;
+      agentCard.url = a2aUrl;
+      await db
+        .update(users)
+        .set({ a2aUrl, agentCardJson: { ...agentCard, url: a2aUrl } })
+        .where(eq(users.id, agent.id));
+      agent.a2aUrl = a2aUrl;
+    }
+  } catch (e) {
+    console.error("[Agent Build] Failed to register with a2a-builder:", e);
+    // Agent is still created locally but won't have A2A URL
+  }
+
   // Add agent to all workspaces the creator belongs to
   const creatorWorkspaces = await db
     .select({ workspaceId: workspaceMembers.workspaceId })
     .from(workspaceMembers)
-    .where(eq(workspaceMembers.userId, user.id));
+    .where(eq(workspaceMembers.userId, userId));
 
   for (const ws of creatorWorkspaces) {
     await db
@@ -114,5 +142,33 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  return NextResponse.json(agent);
+  return agent;
+}
+
+export async function POST(request: NextRequest) {
+  const auth = await requireAuth();
+  if ("error" in auth) return auth.error;
+  const { user } = auth;
+
+  const body = await request.json();
+
+  // Support both single agent object and array of agents
+  const agentDefs: AgentDefinition[] = Array.isArray(body) ? body : [body];
+
+  for (const agentDef of agentDefs) {
+    if (!agentDef.name?.trim()) {
+      return NextResponse.json(
+        { error: "Agent name is required" },
+        { status: 400 }
+      );
+    }
+  }
+
+  const results = [];
+  for (const agentDef of agentDefs) {
+    const agent = await createSingleAgent(agentDef, user.id);
+    results.push(agent);
+  }
+
+  return NextResponse.json(results.length === 1 ? results[0] : results);
 }
