@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Notion Clone Clipper</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 14px;
+      color: #37352f;
+      background: #ffffff;
+      width: 300px;
+      padding: 16px;
+    }
+    h1 {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 16px;
+      color: #37352f;
+    }
+    label {
+      display: block;
+      font-size: 12px;
+      font-weight: 500;
+      color: #6b7280;
+      margin-bottom: 4px;
+      margin-top: 12px;
+    }
+    input[type="text"], input[type="password"] {
+      width: 100%;
+      padding: 6px 10px;
+      border: 1px solid #e5e7eb;
+      border-radius: 6px;
+      font-size: 13px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    input[type="text"]:focus, input[type="password"]:focus {
+      border-color: #a78bfa;
+    }
+    .btn-group {
+      display: flex;
+      gap: 8px;
+      margin-top: 16px;
+    }
+    button {
+      flex: 1;
+      padding: 8px 12px;
+      border: none;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.15s, opacity 0.15s;
+    }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-primary {
+      background: #7c3aed;
+      color: #ffffff;
+    }
+    .btn-primary:hover:not(:disabled) { background: #6d28d9; }
+    .btn-secondary {
+      background: #f3f4f6;
+      color: #374151;
+    }
+    .btn-secondary:hover:not(:disabled) { background: #e5e7eb; }
+    .status {
+      margin-top: 12px;
+      padding: 8px 10px;
+      border-radius: 6px;
+      font-size: 12px;
+      display: none;
+    }
+    .status.success { background: #d1fae5; color: #065f46; display: block; }
+    .status.error   { background: #fee2e2; color: #991b1b; display: block; }
+    .divider {
+      border: none;
+      border-top: 1px solid #e5e7eb;
+      margin: 16px 0 4px;
+    }
+    .save-row {
+      margin-top: 12px;
+      text-align: right;
+    }
+    .save-row button {
+      flex: none;
+      width: auto;
+      padding: 6px 14px;
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Notion Clone Clipper</h1>
+
+  <label for="apiUrl">API URL</label>
+  <input type="text" id="apiUrl" placeholder="http://localhost:3001" />
+
+  <label for="apiKey">API Key</label>
+  <input type="password" id="apiKey" placeholder="ntn_..." />
+
+  <label for="workspaceId">Workspace ID</label>
+  <input type="text" id="workspaceId" placeholder="workspace cuid" />
+
+  <div class="save-row">
+    <button class="btn-secondary" id="saveSettings">Save settings</button>
+  </div>
+
+  <hr class="divider" />
+
+  <div class="btn-group">
+    <button class="btn-primary" id="clipPage">Clip Page</button>
+    <button class="btn-secondary" id="clipSelection">Clip Selection</button>
+  </div>
+
+  <div class="status" id="status"></div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

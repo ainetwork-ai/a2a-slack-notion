@@ -1,0 +1,167 @@
+@import "tailwindcss";
+
+/* =============================================
+   Design Tokens from DESIGN.md
+   Notion-style Industrial Minimal
+   ============================================= */
+
+@theme {
+  /* Typography */
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, "Apple Color Emoji", Arial, sans-serif, "Segoe UI Emoji", "Segoe UI Symbol";
+  --font-serif: Lyon-Text, Georgia, ui-serif, serif;
+  --font-mono: SFMono-Regular, Menlo, Consolas, "Liberation Mono", Courier, monospace;
+
+  /* Spacing (4px base) */
+  --spacing-2xs: 2px;
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 32px;
+  --spacing-2xl: 48px;
+  --spacing-3xl: 64px;
+
+  /* Border Radius */
+  --radius-sm: 3px;
+  --radius-md: 6px;
+  --radius-lg: 12px;
+  --radius-full: 9999px;
+  --radius-input: 4px;
+
+  /* Z-Index Scale */
+  --z-base: 0;
+  --z-sticky: 10;
+  --z-dropdown: 20;
+  --z-overlay: 30;
+  --z-modal-backdrop: 40;
+  --z-modal: 50;
+  --z-toast: 60;
+  --z-slash-menu: 70;
+
+  /* Motion */
+  --duration-micro: 100ms;
+  --duration-short: 150ms;
+  --duration-medium: 200ms;
+}
+
+/* =============================================
+   CSS Custom Properties (Light Mode Default)
+   ============================================= */
+
+:root {
+  --bg-default: #ffffff;
+  --bg-sidebar: #f7f6f3;
+  --bg-hover: rgba(55, 53, 47, 0.04);
+  --bg-active: rgba(55, 53, 47, 0.08);
+  --text-primary: #37352f;
+  --text-secondary: rgba(55, 53, 47, 0.65);
+  --text-tertiary: rgba(55, 53, 47, 0.45);
+  --accent-blue: #2383e2;
+  --divider: rgba(55, 53, 47, 0.09);
+  --selection: rgba(35, 131, 226, 0.14);
+
+  /* Shadows — 3-layer Notion style */
+  --shadow-menu: 0 0 0 1px rgba(15, 15, 15, 0.05), 0 3px 6px rgba(15, 15, 15, 0.1), 0 9px 24px rgba(15, 15, 15, 0.2);
+  --shadow-card: 0 0 0 1px rgba(15, 15, 15, 0.05), 0 2px 4px rgba(15, 15, 15, 0.1);
+  --shadow-modal: 0 0 0 1px rgba(15, 15, 15, 0.05), 0 5px 10px rgba(15, 15, 15, 0.1), 0 15px 40px rgba(15, 15, 15, 0.2);
+
+  /* Block Colors */
+  --color-red: #eb5757;
+  --color-orange: #d9730d;
+  --color-yellow: #cb912f;
+  --color-green: #448361;
+  --color-blue: #337ea9;
+  --color-purple: #9065b0;
+  --color-pink: #c14c8a;
+  --color-brown: #9f6b53;
+  --color-gray: #787774;
+
+  --bg-red: #fdebed;
+  --bg-orange: #fbecdd;
+  --bg-yellow: #fbf3db;
+  --bg-green: #edf3ec;
+  --bg-blue: #e7f3f8;
+  --bg-purple: #f4f0f7;
+  --bg-pink: #f5e0e9;
+  --bg-brown: #eee0da;
+  --bg-gray: #f1f1ef;
+}
+
+/* Dark Mode */
+.dark {
+  --bg-default: #191919;
+  --bg-sidebar: #202020;
+  --bg-hover: rgba(255, 255, 255, 0.04);
+  --bg-active: rgba(255, 255, 255, 0.08);
+  --text-primary: rgba(255, 255, 255, 0.81);
+  --text-secondary: rgba(255, 255, 255, 0.54);
+  --text-tertiary: rgba(255, 255, 255, 0.35);
+  --accent-blue: #529cca;
+  --divider: rgba(255, 255, 255, 0.09);
+  --selection: rgba(82, 156, 202, 0.2);
+
+  --shadow-menu: 0 0 0 1px rgba(255, 255, 255, 0.05), 0 3px 6px rgba(0, 0, 0, 0.3), 0 9px 24px rgba(0, 0, 0, 0.5);
+  --shadow-card: 0 0 0 1px rgba(255, 255, 255, 0.05), 0 2px 4px rgba(0, 0, 0, 0.3);
+  --shadow-modal: 0 0 0 1px rgba(255, 255, 255, 0.05), 0 5px 10px rgba(0, 0, 0, 0.3), 0 15px 40px rgba(0, 0, 0, 0.5);
+
+  --bg-red: rgba(235, 87, 87, 0.15);
+  --bg-orange: rgba(217, 115, 13, 0.15);
+  --bg-yellow: rgba(203, 145, 47, 0.15);
+  --bg-green: rgba(68, 131, 97, 0.15);
+  --bg-blue: rgba(51, 126, 169, 0.15);
+  --bg-purple: rgba(144, 101, 176, 0.15);
+  --bg-pink: rgba(193, 76, 138, 0.15);
+  --bg-brown: rgba(159, 107, 83, 0.15);
+  --bg-gray: rgba(120, 119, 116, 0.15);
+}
+
+/* =============================================
+   Base Styles
+   ============================================= */
+
+body {
+  background: var(--bg-default);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+::selection {
+  background: var(--selection);
+}
+
+/* No hard borders — DESIGN.md core rule */
+* {
+  border-color: var(--divider);
+}
+
+/* Scrollbar — overlay macOS style */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--text-tertiary);
+  border-radius: var(--radius-full);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-secondary);
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
