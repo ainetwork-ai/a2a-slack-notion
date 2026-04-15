@@ -3,8 +3,10 @@
 import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 
-import { Home, Search, Bell, MessageSquare, Smile, LogOut, Sun, Moon, Inbox, MessagesSquare, Plus, Bookmark, BellOff, Volume2, VolumeX } from 'lucide-react';
+import { Home, Search, MessageSquare, Smile, LogOut, Sun, Moon, Inbox, MessagesSquare, Plus, Bookmark, BellOff, Volume2, VolumeX, User } from 'lucide-react';
 import NotificationPanel from '@/components/modals/NotificationPanel';
+import ProfileEditModal from '@/components/modals/ProfileEditModal';
+import SetStatusModal from '@/components/modals/SetStatusModal';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import {
@@ -72,6 +74,8 @@ export default function Sidebar() {
   const { myStatus, setDnd, isDndEnabled } = usePresence();
   const [dndActive, setDndActive] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
+  const [profileModalOpen, setProfileModalOpen] = useState(false);
+  const [statusModalOpen, setStatusModalOpen] = useState(false);
 
   useEffect(() => {
     fetchWorkspaces();
@@ -113,6 +117,9 @@ export default function Sidebar() {
   const otherWorkspaces = workspaces.filter((w) => w.id !== activeWorkspaceId);
 
   return (
+    <>
+    <ProfileEditModal open={profileModalOpen} onClose={() => setProfileModalOpen(false)} />
+    <SetStatusModal open={statusModalOpen} onClose={() => setStatusModalOpen(false)} />
     <div className="sidebar-dark flex flex-col items-center w-16 h-full py-3 gap-1 border-r border-white/5 shrink-0">
       {/* Active Workspace Icon */}
       <TooltipProvider delay={300}>
@@ -249,12 +256,18 @@ export default function Sidebar() {
               {initials}
             </AvatarFallback>
           </Avatar>
-          <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-green-400 border-2 border-[#1a1d21]" />
+          <span className={cn('absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full border-2 border-[#1a1d21]', statusDotClass())} />
         </DropdownMenuTrigger>
         <DropdownMenuContent side="top" sideOffset={8} className="w-56 bg-[#1a1d21] border-white/10 text-white">
           <DropdownMenuGroup>
             <DropdownMenuLabel className="text-white">
               <div className="font-semibold">{user?.displayName ?? 'You'}</div>
+              {(user?.statusEmoji || user?.statusMessage) && (
+                <div className="flex items-center gap-1 text-xs text-slate-300 mt-0.5">
+                  {user.statusEmoji && <span>{user.statusEmoji}</span>}
+                  {user.statusMessage && <span className="truncate">{user.statusMessage}</span>}
+                </div>
+              )}
               <div className="text-xs text-slate-400 truncate">
                 {user?.ainAddress ? `${user.ainAddress.slice(0, 6)}…${user.ainAddress.slice(-4)}` : ''}
               </div>
@@ -263,19 +276,34 @@ export default function Sidebar() {
           <DropdownMenuSeparator className="bg-white/10" />
           <DropdownMenuItem
             className="text-slate-200 focus:bg-white/10 focus:text-white cursor-pointer"
-            onClick={async () => {
-              const text = prompt('Set your status message:');
-              if (text !== null) {
-                await fetch('/api/presence', {
-                  method: 'PATCH',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ statusMessage: text }),
-                });
-              }
-            }}
+            onClick={() => setProfileModalOpen(true)}
+          >
+            <User className="w-4 h-4" />
+            Edit profile
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            className="text-slate-200 focus:bg-white/10 focus:text-white cursor-pointer"
+            onClick={() => setStatusModalOpen(true)}
           >
             <Smile className="w-4 h-4" />
             Set status
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            className={cn(
+              'focus:bg-white/10 cursor-pointer',
+              dndActive ? 'text-red-400 focus:text-red-400' : 'text-slate-200 focus:text-white'
+            )}
+            onClick={handleToggleDnd}
+          >
+            <BellOff className="w-4 h-4" />
+            {dndActive ? 'Turn off Do Not Disturb' : 'Do Not Disturb'}
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            className="text-slate-200 focus:bg-white/10 focus:text-white cursor-pointer"
+            onClick={handleToggleSound}
+          >
+            {soundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+            {soundEnabled ? 'Mute notification sounds' : 'Unmute notification sounds'}
           </DropdownMenuItem>
           <DropdownMenuSeparator className="bg-white/10" />
           <DropdownMenuItem
@@ -288,5 +316,6 @@ export default function Sidebar() {
         </DropdownMenuContent>
       </DropdownMenu>
     </div>
+    </>
   );
 }

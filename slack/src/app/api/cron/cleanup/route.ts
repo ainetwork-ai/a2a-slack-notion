@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
-import { users, channels, channelMembers, messages, reactions, mentions, files, notifications, dmConversations, dmMembers, typingStatus } from "@/lib/db/schema";
-import { eq, and, desc, lt, sql, inArray, or, ilike } from "drizzle-orm";
+import { users, typingStatus } from "@/lib/db/schema";
+import { eq, and, lt, isNotNull } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
 export async function GET() {
@@ -27,10 +27,23 @@ export async function GET() {
     )
     .returning({ id: users.id });
 
+  // Clear expired status messages/emojis
+  const clearedStatuses = await db
+    .update(users)
+    .set({ statusMessage: null, statusEmoji: null, statusExpiresAt: null, updatedAt: now })
+    .where(
+      and(
+        isNotNull(users.statusExpiresAt),
+        lt(users.statusExpiresAt, now)
+      )
+    )
+    .returning({ id: users.id });
+
   return NextResponse.json({
     cleaned: {
       expiredTypingStatuses: deletedTyping.length,
       usersSetOffline: offlineUsers.length,
+      expiredStatuses: clearedStatuses.length,
     },
   });
 }

@@ -7,6 +7,9 @@ export interface User {
   ainAddress: string;
   displayName: string;
   avatarUrl?: string;
+  statusMessage?: string;
+  statusEmoji?: string;
+  statusExpiresAt?: string;
   createdAt: string;
 }
 

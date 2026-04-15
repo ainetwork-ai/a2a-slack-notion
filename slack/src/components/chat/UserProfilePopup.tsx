@@ -11,6 +11,8 @@ interface UserProfilePopupProps {
   userId: string;
   displayName: string;
   avatarUrl?: string;
+  statusEmoji?: string;
+  statusMessage?: string;
   isAgent?: boolean;
   agentDescription?: string;
   agentSkills?: string[];
@@ -21,6 +23,8 @@ export default function UserProfilePopup({
   userId,
   displayName,
   avatarUrl,
+  statusEmoji,
+  statusMessage,
   isAgent,
   agentDescription,
   agentSkills,
@@ -83,6 +87,14 @@ export default function UserProfilePopup({
               </Badge>
             )}
           </div>
+
+          {/* Status */}
+          {!isAgent && (statusEmoji || statusMessage) && (
+            <div className="flex items-center gap-1.5 text-sm text-slate-300 mb-2">
+              {statusEmoji && <span className="text-base leading-none">{statusEmoji}</span>}
+              {statusMessage && <span>{statusMessage}</span>}
+            </div>
+          )}
 
           {/* Agent description */}
           {isAgent && agentDescription && (

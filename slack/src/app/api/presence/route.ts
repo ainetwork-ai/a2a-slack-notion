@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
-import { users, channels, channelMembers, messages, reactions, mentions, files, notifications, dmConversations, dmMembers } from "@/lib/db/schema";
-import { eq, and, desc, lt, sql, inArray, or, ilike } from "drizzle-orm";
+import { users } from "@/lib/db/schema";
+import { eq, inArray } from "drizzle-orm";
 import { requireAuth } from "@/lib/auth/middleware";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -36,23 +36,28 @@ export async function PATCH(request: NextRequest) {
   const { user } = auth;
 
   const body = await request.json();
-  const { statusMessage, status } = body;
+  const { statusMessage, statusEmoji, statusExpiresAt, status } = body;
 
   const validStatus: UserStatus | undefined =
     status !== undefined && VALID_STATUSES.includes(status as UserStatus)
       ? (status as UserStatus)
       : undefined;
 
+  const expiresAt =
+    statusExpiresAt != null ? new Date(statusExpiresAt) : null;
+
   await db
     .update(users)
     .set({
       ...(statusMessage !== undefined ? { statusMessage: statusMessage ?? "" } : {}),
+      ...(statusEmoji !== undefined ? { statusEmoji: statusEmoji ?? null } : {}),
+      ...(statusExpiresAt !== undefined ? { statusExpiresAt: expiresAt } : {}),
       ...(validStatus !== undefined ? { status: validStatus } : {}),
       updatedAt: new Date(),
     })
     .where(eq(users.id, user.id));
 
-  return NextResponse.json({ statusMessage, status: validStatus });
+  return NextResponse.json({ statusMessage, statusEmoji, statusExpiresAt: expiresAt, status: validStatus });
 }
 
 export async function GET(request: NextRequest) {
@@ -78,6 +83,8 @@ export async function GET(request: NextRequest) {
       displayName: users.displayName,
       status: users.status,
       statusMessage: users.statusMessage,
+      statusEmoji: users.statusEmoji,
+      statusExpiresAt: users.statusExpiresAt,
       updatedAt: users.updatedAt,
     })
     .from(users)
