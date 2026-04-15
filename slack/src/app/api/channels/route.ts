@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { users, channels, channelMembers, messages } from "@/lib/db/schema";
-import { eq, and, desc, sql } from "drizzle-orm";
+import { eq, and, desc, sql, or } from "drizzle-orm";
 import { requireAuth } from "@/lib/auth/middleware";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -10,6 +10,7 @@ export async function GET(request: NextRequest) {
   const { user } = auth;
 
   const workspaceId = request.nextUrl.searchParams.get("workspaceId");
+  const archivedOnly = request.nextUrl.searchParams.get("archived") === "true";
 
   const query = db
     .select({
@@ -23,9 +24,13 @@ export async function GET(request: NextRequest) {
       workspaceId
         ? and(
             eq(channelMembers.userId, user.id),
-            eq(channels.workspaceId, workspaceId)
+            eq(channels.workspaceId, workspaceId),
+            eq(channels.isArchived, archivedOnly)
           )
-        : eq(channelMembers.userId, user.id)
+        : and(
+            eq(channelMembers.userId, user.id),
+            eq(channels.isArchived, archivedOnly)
+          )
     )
     .orderBy(desc(channels.updatedAt));
 

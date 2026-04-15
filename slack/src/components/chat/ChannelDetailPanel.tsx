@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { X, Hash, Pin } from 'lucide-react';
+import { X, Hash, Pin, Archive, ArchiveRestore } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
@@ -25,8 +25,10 @@ interface ChannelDetailPanelProps {
   messages?: Message[];
   currentUserId?: string;
   isAdmin?: boolean;
+  isArchived?: boolean;
   onClose: () => void;
   onRemoveMember?: (userId: string) => void;
+  onArchiveToggle?: (archived: boolean) => void;
 }
 
 type Tab = 'about' | 'members' | 'pinned' | 'files';
@@ -40,8 +42,10 @@ export default function ChannelDetailPanel({
   messages = [],
   currentUserId,
   isAdmin,
+  isArchived = false,
   onClose,
   onRemoveMember,
+  onArchiveToggle,
 }: ChannelDetailPanelProps) {
   const [activeTab, setActiveTab] = useState<Tab>('about');
 
@@ -119,6 +123,33 @@ export default function ChannelDetailPanel({
               <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Channel ID</p>
               <p className="text-xs text-slate-500 font-mono break-all">{channelId}</p>
             </div>
+            {isAdmin && onArchiveToggle && (
+              <div className="pt-2 border-t border-white/5">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => onArchiveToggle(!isArchived)}
+                  className={cn(
+                    'w-full justify-start gap-2 text-sm',
+                    isArchived
+                      ? 'text-green-400 hover:text-green-300 hover:bg-green-500/10'
+                      : 'text-amber-400 hover:text-amber-300 hover:bg-amber-500/10'
+                  )}
+                >
+                  {isArchived ? (
+                    <>
+                      <ArchiveRestore className="w-4 h-4" />
+                      Unarchive channel
+                    </>
+                  ) : (
+                    <>
+                      <Archive className="w-4 h-4" />
+                      Archive channel
+                    </>
+                  )}
+                </Button>
+              </div>
+            )}
           </div>
         )}
 

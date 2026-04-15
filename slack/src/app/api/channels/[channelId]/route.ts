@@ -75,6 +75,7 @@ export async function PATCH(
   const updates: Record<string, unknown> = { updatedAt: new Date() };
   if (body.name !== undefined) updates.name = body.name.trim();
   if (body.description !== undefined) updates.description = body.description;
+  if (body.isArchived !== undefined) updates.isArchived = Boolean(body.isArchived);
 
   const [updated] = await db
     .update(channels)

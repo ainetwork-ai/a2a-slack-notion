@@ -69,6 +69,7 @@ export const channels = pgTable("channels", {
   name: text("name").notNull(),
   description: text("description"),
   isPrivate: boolean("is_private").default(false).notNull(),
+  isArchived: boolean("is_archived").default(false).notNull(),
   createdBy: uuid("created_by").references(() => users.id),
   workspaceId: uuid("workspace_id").references(() => workspaces.id, {
     onDelete: "cascade",
