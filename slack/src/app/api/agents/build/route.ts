@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
   if ("error" in auth) return auth.error;
   const { user } = auth;
 
-  const { name, description, systemPrompt, mcpAccess, skills } =
+  const { name, description, systemPrompt, mcpAccess, skills, capabilities } =
     await request.json();
 
   if (!name?.trim()) {
@@ -58,11 +58,18 @@ export async function POST(request: NextRequest) {
     builtBy: user.id,
     provider: { organization: "Slack-A2A" },
     version: "2.0.0",
+    defaultInputModes: ["text/plain"],
+    defaultOutputModes: ["text/plain"],
     capabilities: {
-      streaming: false,
-      pushNotifications: false,
-      memory: true,
-      toolUse: true,
+      streaming: capabilities?.streaming ?? false,
+      pushNotifications: capabilities?.pushNotifications ?? false,
+      stateTransitionHistory: false,
+      extensions: [
+        ...(capabilities?.extensions || []),
+        // Always include memory and toolUse as extensions
+        { uri: "urn:a2a:ext:memory", description: "Persistent agent memory across conversations", required: false },
+        { uri: "urn:a2a:ext:tool-use", description: "LLM-driven MCP tool invocation", required: false },
+      ],
     },
   };
 
