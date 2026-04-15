@@ -322,63 +322,17 @@ async function createAgent(
     })
     .returning();
 
-  // Create and deploy real A2A agent via a2a-builder-mcp tools (best-effort)
-  let a2aUrl: string | null = null;
-  try {
-    const MCP_DIR = "/mnt/newdata/git/slack-a2a/a2a-builder-mcp";
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { createAgent: mcpCreateAgent } = require(`${MCP_DIR}/dist/tools/create-agent.js`);
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { deployAgent: mcpDeployAgent } = require(`${MCP_DIR}/dist/tools/deploy-agent.js`);
+  // Set a2aUrl to the dynamic endpoint served by this app — no separate deployment needed
+  const appUrl = (process.env.NEXT_PUBLIC_APP_URL || "").replace(/\/$/, "");
+  const a2aUrl: string | null = appUrl
+    ? `${appUrl}/api/a2a/${agent.id}`
+    : null;
 
-    // The MCP tools use process.cwd() to locate agents/, so we temporarily
-    // set cwd to the a2a-builder-mcp directory via the env-scoped execSync workaround.
-    // Instead, we override the AGENTS_DIR by running from the correct directory.
-    const slug = def.name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
-    const agentsDir = `${MCP_DIR}/agents`;
-    const agentDir = `${agentsDir}/${slug}`;
-
-    // Only create if the project dir doesn't exist yet
-    const { existsSync } = await import("fs");
-    const savedCwd = process.cwd();
-    if (!existsSync(agentDir)) {
-      // Switch to mcp dir so AGENTS_DIR resolves correctly
-      process.chdir(MCP_DIR);
-      try {
-        await mcpCreateAgent({
-          name: def.name,
-          description,
-          skills: [{ id: "default", name: def.role || "assistant", description }],
-          model: process.env.VLLM_MODEL || "gemma-4-31B-it",
-          llmBaseUrl: process.env.VLLM_URL || "http://localhost:8100/v1",
-          systemPrompt,
-        });
-      } finally {
-        process.chdir(savedCwd);
-      }
-    }
-
-    // Deploy to Vercel
-    process.chdir(MCP_DIR);
-    let deployResult: string;
-    try {
-      deployResult = await mcpDeployAgent({ name: def.name, prod: true });
-    } finally {
-      process.chdir(savedCwd);
-    }
-
-    // Extract URL from deploy result (format: "URL: https://...")
-    const urlMatch = deployResult.match(/URL:\s*(https:\/\/[^\s]+)/);
-    if (urlMatch) {
-      a2aUrl = urlMatch[1];
-      await db
-        .update(users)
-        .set({ a2aUrl, agentCardJson: { ...agentCard, url: a2aUrl } })
-        .where(eq(users.id, agent.id));
-    }
-  } catch (err) {
-    console.error("[Builder] MCP agent creation failed:", err);
-    // Agent still works locally without A2A URL
+  if (a2aUrl) {
+    await db
+      .update(users)
+      .set({ a2aUrl, agentCardJson: { ...agentCard, url: a2aUrl } })
+      .where(eq(users.id, agent.id));
   }
 
   // Add agent to creator's workspaces and their public channels
