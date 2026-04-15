@@ -188,7 +188,7 @@ export async function POST(
 
     // Send to agents async (always, regardless of mute — agents still receive messages)
     for (const member of otherMembers) {
-      if (member.isAgent && member.a2aUrl) {
+      if (member.isAgent) {
         sendToAgent({
           agentId: member.userId,
           text: content,

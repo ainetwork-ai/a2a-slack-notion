@@ -8,6 +8,7 @@ import {
   channelMembers,
 } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
+import { MCP_SERVERS } from "@/lib/mcp/registry";
 
 export async function POST(request: NextRequest) {
   const auth = await requireAuth();
@@ -26,6 +27,31 @@ export async function POST(request: NextRequest) {
 
   const ainAddress = `agent-${name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${Date.now()}`;
 
+  // Build A2A-compliant skills from MCP registry
+  const skills: Array<{ id: string; name: string; description: string; tags: string[] }> = [];
+  if (mcpServerIds?.length) {
+    for (const serverId of mcpServerIds as string[]) {
+      const server = MCP_SERVERS.find(s => s.id === serverId);
+      if (!server) continue;
+      for (const tool of server.tools) {
+        skills.push({
+          id: `${serverId}:${tool.name}`,
+          name: `${server.icon} ${server.name} — ${tool.name}`,
+          description: tool.description,
+          tags: [serverId, tool.name, "mcp"],
+        });
+      }
+    }
+  }
+
+  // Always add a "chat" skill for general conversation
+  skills.push({
+    id: "chat",
+    name: "General Chat",
+    description: "Ask anything — powered by Gemma4",
+    tags: ["chat", "general"],
+  });
+
   const agentCard = {
     name: name.trim(),
     description: description?.trim() || `Custom agent: ${name.trim()}`,
@@ -38,10 +64,7 @@ export async function POST(request: NextRequest) {
       streaming: false,
       pushNotifications: false,
     },
-    skills: mcpServerIds?.map((id: string) => ({
-      id: `mcp-${id}`,
-      name: `MCP: ${id}`,
-    })) || [],
+    skills,
   };
 
   // Create the agent as a user

@@ -251,7 +251,7 @@ export async function POST(
         );
 
         // Send to agent users asynchronously
-        const agentUsers = mentionedUsers.filter((u) => u.isAgent && u.a2aUrl);
+        const agentUsers = mentionedUsers.filter((u) => u.isAgent);
         for (const agent of agentUsers) {
           sendToAgent({
             agentId: agent.id,
