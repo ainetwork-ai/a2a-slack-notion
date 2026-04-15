@@ -127,6 +127,26 @@ export async function POST(req: NextRequest) {
       .insert(workspaceMembers)
       .values({ workspaceId: targetWorkspaceId, userId: user.id, role: "member" })
       .onConflictDoNothing();
+
+    // Auto-join the #general channel of the workspace
+    const [generalChannel] = await db
+      .select({ id: channels.id })
+      .from(channels)
+      .where(
+        and(
+          eq(channels.workspaceId, targetWorkspaceId),
+          eq(channels.name, "general"),
+          eq(channels.isPrivate, false)
+        )
+      )
+      .limit(1);
+
+    if (generalChannel) {
+      await db
+        .insert(channelMembers)
+        .values({ channelId: generalChannel.id, userId: user.id, role: "member" })
+        .onConflictDoNothing();
+    }
   }
 
   session.userId = user.id;

@@ -14,8 +14,11 @@ export default function TypingIndicator({ typingUsers }: TypingIndicatorProps) {
     label = `${typingUsers[0].displayName} is typing`;
   } else if (typingUsers.length === 2) {
     label = `${typingUsers[0].displayName} and ${typingUsers[1].displayName} are typing`;
+  } else if (typingUsers.length === 3) {
+    label = `${typingUsers[0].displayName}, ${typingUsers[1].displayName}, and ${typingUsers[2].displayName} are typing`;
   } else {
-    label = 'Several people are typing';
+    const others = typingUsers.length - 2;
+    label = `${typingUsers[0].displayName}, ${typingUsers[1].displayName}, and ${others} others are typing`;
   }
 
   return (

@@ -4,6 +4,7 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/hooks/use-auth';
 import Sidebar from '@/components/layout/Sidebar';
+import MobileNav from '@/components/layout/MobileNav';
 import { requestPermission } from '@/lib/notifications/browser-notify';
 import ChannelList from '@/components/layout/ChannelList';
 import { useWorkspaceStore } from '@/lib/stores/workspace-store';
@@ -45,6 +46,11 @@ export default function WorkspaceLayout({
   const startX = useRef(0);
   const startWidth = useRef(0);
 
+  // Touch swipe state
+  const touchStartX = useRef<number | null>(null);
+  const touchStartY = useRef<number | null>(null);
+  const SWIPE_THRESHOLD = 50;
+
   const onMouseMove = useCallback((e: MouseEvent) => {
     if (!isDragging.current) return;
     const delta = e.clientX - startX.current;
@@ -77,6 +83,36 @@ export default function WorkspaceLayout({
 
   useEffect(() => {
     requestPermission();
+  }, []);
+
+  useEffect(() => {
+    function onTouchStart(e: TouchEvent) {
+      touchStartX.current = e.touches[0].clientX;
+      touchStartY.current = e.touches[0].clientY;
+    }
+
+    function onTouchEnd(e: TouchEvent) {
+      if (touchStartX.current === null || touchStartY.current === null) return;
+      const dx = e.changedTouches[0].clientX - touchStartX.current;
+      const dy = e.changedTouches[0].clientY - touchStartY.current;
+      // Only handle horizontal swipes (dx dominates)
+      if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > SWIPE_THRESHOLD) {
+        if (dx > 0) {
+          setSidebarOpen(true);
+        } else {
+          setSidebarOpen(false);
+        }
+      }
+      touchStartX.current = null;
+      touchStartY.current = null;
+    }
+
+    document.addEventListener('touchstart', onTouchStart, { passive: true });
+    document.addEventListener('touchend', onTouchEnd, { passive: true });
+    return () => {
+      document.removeEventListener('touchstart', onTouchStart);
+      document.removeEventListener('touchend', onTouchEnd);
+    };
   }, []);
 
   useEffect(() => {
@@ -159,7 +195,7 @@ export default function WorkspaceLayout({
       </div>
 
       {/* Main content */}
-      <div className="flex flex-col flex-1 min-w-0 main-content overflow-hidden">
+      <div className="flex flex-col flex-1 min-w-0 main-content overflow-hidden pb-14 md:pb-0">
         {/* Connection status banner */}
         <ConnectionStatus />
 
@@ -187,6 +223,9 @@ export default function WorkspaceLayout({
       <AgentInviteModal />
       <WorkspaceModal open={workspaceModalOpen} onOpenChange={setWorkspaceModalOpen} />
       <KeyboardShortcutsModal />
+
+      {/* Mobile bottom navigation */}
+      <MobileNav onOpenSidebar={() => setSidebarOpen(true)} />
     </div>
   );
 }
