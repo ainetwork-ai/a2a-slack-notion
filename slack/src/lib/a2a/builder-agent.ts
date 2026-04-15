@@ -135,11 +135,16 @@ After all JSON blocks, add a friendly confirmation message summarizing what was 
 Agent names should be in PascalCase (e.g. NewsResearcher, ContentWriter).
 Channel names should be lowercase with hyphens (e.g. newsroom, ai-research).`;
 
+const LLM_API_KEY = process.env.LLM_API_KEY || "";
+
 async function queryLLM(message: string): Promise<string | null> {
   try {
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (LLM_API_KEY) headers["api-key"] = LLM_API_KEY;
+
     const res = await fetch(VLLM_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify({
         model: VLLM_MODEL,
         messages: [

@@ -5,14 +5,18 @@
 
 const VLLM_URL = process.env.VLLM_URL || "http://localhost:8100/v1/chat/completions";
 const VLLM_MODEL = process.env.VLLM_MODEL || "gemma-4-31B-it";
+const LLM_API_KEY = process.env.LLM_API_KEY || "";
 
 export async function callVLLM(
   systemPrompt: string,
   userMessage: string
 ): Promise<string> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (LLM_API_KEY) headers["api-key"] = LLM_API_KEY;
+
   const res = await fetch(VLLM_URL, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify({
       model: VLLM_MODEL,
       messages: [
