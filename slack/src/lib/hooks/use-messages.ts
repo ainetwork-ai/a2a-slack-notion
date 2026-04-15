@@ -63,9 +63,10 @@ interface UseMessagesOptions {
   channelId?: string;
   conversationId?: string;
   parentId?: string;
+  currentUser?: { id: string; displayName: string; avatarUrl?: string };
 }
 
-export function useMessages({ channelId, conversationId, parentId }: UseMessagesOptions) {
+export function useMessages({ channelId, conversationId, parentId, currentUser }: UseMessagesOptions) {
   const [cursor, setCursor] = useState<string | null>(null);
 
   const endpoint = parentId
@@ -104,19 +105,21 @@ export function useMessages({ channelId, conversationId, parentId }: UseMessages
 
   async function sendMessage(content: string, metadata?: Record<string, unknown>) {
     if (!endpoint) return;
+    if (!content.trim()) return;
 
     const optimisticMessage: Message = {
       id: `optimistic-${Date.now()}`,
       content,
       contentType: 'text',
-      senderId: 'me',
-      senderName: 'You',
+      senderId: currentUser?.id ?? 'me',
+      senderName: currentUser?.displayName ?? 'You',
+      senderAvatar: currentUser?.avatarUrl,
       createdAt: new Date().toISOString(),
       metadata,
       ...(parentId ? { parentId } : {}),
     };
 
-    // Optimistically add message, then POST, then revalidate
+    // Optimistically add message then POST — let SWR polling pick up the real message
     mutate(
       (current) => ({
         messages: [...(current?.messages ?? []), optimisticMessage],
@@ -125,21 +128,28 @@ export function useMessages({ channelId, conversationId, parentId }: UseMessages
       { revalidate: false }
     );
 
-    try {
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content, metadata, parentId }),
-      });
-      if (!res.ok) throw new Error('Failed to send message');
-    } finally {
-      // Wait briefly for the server to be consistent, then force a fresh fetch
-      await new Promise(r => setTimeout(r, 100));
-      await mutate(undefined, { revalidate: true });
-    }
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content, metadata, parentId }),
+    });
+    if (!res.ok) throw new Error('Failed to send message');
   }
 
   async function editMessage(messageId: string, content: string) {
+    // Optimistically update the message content locally
+    mutate(
+      (current) => ({
+        messages: (current?.messages ?? []).map((m) =>
+          m.id === messageId
+            ? { ...m, content, isEdited: true, editedAt: new Date().toISOString() }
+            : m
+        ),
+        nextCursor: current?.nextCursor,
+      }),
+      { revalidate: false }
+    );
+
     const res = await fetch(`/api/messages/${messageId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -150,6 +160,15 @@ export function useMessages({ channelId, conversationId, parentId }: UseMessages
   }
 
   async function deleteMessage(messageId: string) {
+    // Optimistically remove the message from local list
+    mutate(
+      (current) => ({
+        messages: (current?.messages ?? []).filter((m) => m.id !== messageId),
+        nextCursor: current?.nextCursor,
+      }),
+      { revalidate: false }
+    );
+
     const res = await fetch(`/api/messages/${messageId}`, { method: 'DELETE' });
     if (!res.ok) throw new Error('Failed to delete message');
     await mutate();

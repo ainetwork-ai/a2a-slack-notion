@@ -27,7 +27,7 @@ function DateSeparator({ date }: { date: Date }) {
   else label = format(date, 'MMMM d, yyyy');
 
   return (
-    <div className="flex items-center gap-3 px-4 py-2 my-2 animate-in fade-in slide-in-from-top-1 duration-300">
+    <div className="flex items-center gap-3 px-4 py-2 my-2">
       <div className="flex-1 h-px bg-white/10" />
       <span className="text-xs text-slate-400 font-medium px-3 py-1 bg-[#222529] border border-white/10 rounded-full whitespace-nowrap shadow-sm select-none">
         {label}
@@ -63,6 +63,7 @@ export default function MessageList({
   const { user } = useAuth();
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const prevLengthRef = useRef(0);
+  const prevScrollHeightRef = useRef(0);
   const hasScrolledInitially = useRef(false);
   const [showJumpButton, setShowJumpButton] = useState(false);
 
@@ -84,20 +85,30 @@ export default function MessageList({
       });
       hasScrolledInitially.current = true;
       prevLengthRef.current = messages.length;
+      prevScrollHeightRef.current = el.scrollHeight;
       return;
     }
 
-    // Auto-scroll on new messages only if near bottom
     if (messages.length > prevLengthRef.current) {
-      const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-      if (distanceFromBottom <= 100) {
-        requestAnimationFrame(() => {
-          el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
-        });
-      } else {
-        // Item 8: Show jump button when new messages arrive while scrolled up
-        setShowJumpButton(true);
-      }
+      const added = messages.length - prevLengthRef.current;
+      const prevScrollHeight = prevScrollHeightRef.current;
+
+      requestAnimationFrame(() => {
+        // If messages were prepended (loadMore), preserve scroll position
+        if (el.scrollTop < 50 && added > 1) {
+          const newScrollHeight = el.scrollHeight;
+          el.scrollTo({ top: newScrollHeight - prevScrollHeight, behavior: 'instant' });
+        } else {
+          // New message appended — auto-scroll only if near bottom
+          const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+          if (distanceFromBottom <= 100) {
+            el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+          } else {
+            setShowJumpButton(true);
+          }
+        }
+        prevScrollHeightRef.current = el.scrollHeight;
+      });
     }
     prevLengthRef.current = messages.length;
   }, [messages.length]);
@@ -155,7 +166,6 @@ export default function MessageList({
     <div className="relative flex-1 overflow-hidden">
     <div
       className="message-area h-full overflow-y-auto scrollbar-slack"
-      style={{ scrollBehavior: 'smooth' }}
       onScroll={handleScroll}
       ref={scrollAreaRef}
       aria-live="polite"
