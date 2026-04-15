@@ -6,7 +6,7 @@ import { useWorkspaceStore } from '@/lib/stores/workspace-store';
 import { useAuth } from '@/lib/hooks/use-auth';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import Image from 'next/image';
-import { Loader2, Settings, Users, Hash, Calendar, Shield, Trash2, AlertCircle, Terminal, Plus, Download } from 'lucide-react';
+import { Loader2, Settings, Users, Hash, Calendar, Shield, Trash2, AlertCircle, Terminal, Plus, Download, Webhook, Copy, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface Member {
@@ -59,6 +59,32 @@ export default function WorkspaceSettingsPage() {
 
   // Member removal
   const [removingId, setRemovingId] = useState<string | null>(null);
+
+  // Role management
+  const [updatingRoleId, setUpdatingRoleId] = useState<string | null>(null);
+
+  // Webhooks
+  interface Webhook {
+    id: string;
+    name: string;
+    token: string;
+    channelId: string;
+    channelName: string;
+    createdAt: string;
+  }
+  interface Channel {
+    id: string;
+    name: string;
+  }
+  const [webhooks, setWebhooks] = useState<Webhook[]>([]);
+  const [loadingWebhooks, setLoadingWebhooks] = useState(false);
+  const [webhookChannels, setWebhookChannels] = useState<Channel[]>([]);
+  const [newWebhookName, setNewWebhookName] = useState('');
+  const [newWebhookChannelId, setNewWebhookChannelId] = useState('');
+  const [savingWebhook, setSavingWebhook] = useState(false);
+  const [removingWebhookId, setRemovingWebhookId] = useState<string | null>(null);
+  const [webhookError, setWebhookError] = useState<string | null>(null);
+  const [copiedToken, setCopiedToken] = useState<string | null>(null);
 
   // Export
   const [exporting, setExporting] = useState(false);
@@ -116,6 +142,117 @@ export default function WorkspaceSettingsPage() {
   useEffect(() => {
     if (isPrivileged) loadCustomCommands();
   }, [isPrivileged, loadCustomCommands]);
+
+  const loadWebhooks = useCallback(async () => {
+    if (!activeWorkspaceId) return;
+    setLoadingWebhooks(true);
+    try {
+      const res = await fetch(`/api/webhooks?workspaceId=${activeWorkspaceId}`);
+      if (res.ok) setWebhooks(await res.json());
+    } finally {
+      setLoadingWebhooks(false);
+    }
+  }, [activeWorkspaceId]);
+
+  const loadWebhookChannels = useCallback(async () => {
+    if (!activeWorkspaceId) return;
+    try {
+      const res = await fetch(`/api/channels?workspaceId=${activeWorkspaceId}`);
+      if (res.ok) {
+        const data = await res.json();
+        // channels API returns [{channel: {...}, ...}, ...]
+        const list: Channel[] = Array.isArray(data)
+          ? data
+              .map((row: { channel?: { id: string; name: string } }) => row.channel ?? row)
+              .filter((c): c is Channel => !!(c && (c as Channel).id && (c as Channel).name))
+          : [];
+        setWebhookChannels(list);
+      }
+    } catch {
+      // ignore
+    }
+  }, [activeWorkspaceId]);
+
+  useEffect(() => {
+    if (isPrivileged) {
+      loadWebhooks();
+      loadWebhookChannels();
+    }
+  }, [isPrivileged, loadWebhooks, loadWebhookChannels]);
+
+  async function handleAddWebhook() {
+    if (!activeWorkspaceId || !newWebhookName.trim() || !newWebhookChannelId) return;
+    setSavingWebhook(true);
+    setWebhookError(null);
+    try {
+      const res = await fetch('/api/webhooks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          workspaceId: activeWorkspaceId,
+          channelId: newWebhookChannelId,
+          name: newWebhookName.trim(),
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.json();
+        setWebhookError(body.error ?? 'Failed to create webhook');
+      } else {
+        setNewWebhookName('');
+        setNewWebhookChannelId('');
+        await loadWebhooks();
+      }
+    } catch {
+      setWebhookError('Failed to create webhook');
+    } finally {
+      setSavingWebhook(false);
+    }
+  }
+
+  async function handleRemoveWebhook(id: string) {
+    if (!activeWorkspaceId) return;
+    setRemovingWebhookId(id);
+    try {
+      await fetch('/api/webhooks', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, workspaceId: activeWorkspaceId }),
+      });
+      await loadWebhooks();
+    } finally {
+      setRemovingWebhookId(null);
+    }
+  }
+
+  function handleCopyWebhookUrl(token: string) {
+    const url = `${window.location.origin}/api/webhooks/incoming/${token}`;
+    navigator.clipboard.writeText(url).then(() => {
+      setCopiedToken(token);
+      setTimeout(() => setCopiedToken(null), 2000);
+    });
+  }
+
+  async function handleRoleChange(userId: string, newRole: string) {
+    if (!activeWorkspaceId) return;
+    setUpdatingRoleId(userId);
+    try {
+      const res = await fetch(`/api/workspaces/${activeWorkspaceId}/members`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, role: newRole }),
+      });
+      if (!res.ok) {
+        const body = await res.json();
+        setError(body.error ?? 'Failed to update role');
+      } else {
+        await loadData();
+      }
+    } catch {
+      setError('Failed to update role');
+    } finally {
+      setUpdatingRoleId(null);
+    }
+  }
 
   async function handleAddCommand() {
     if (!activeWorkspaceId || !newCmdName.trim() || !newCmdResponse.trim()) return;
@@ -444,7 +581,22 @@ export default function WorkspaceSettingsPage() {
                         {member.ainAddress.slice(0, 8)}…{member.ainAddress.slice(-4)}
                       </div>
                     </div>
-                    <RoleBadge role={member.role} />
+                    {myRole === 'owner' && member.role !== 'owner' && !isMe ? (
+                      <select
+                        value={member.role}
+                        onChange={(e) => handleRoleChange(member.userId, e.target.value)}
+                        disabled={updatingRoleId === member.userId}
+                        className="bg-[#1a1d21] border border-white/10 rounded text-xs text-slate-300 px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-[#4a154b] disabled:opacity-50"
+                      >
+                        <option value="member">member</option>
+                        <option value="admin">admin</option>
+                      </select>
+                    ) : (
+                      <RoleBadge role={member.role} />
+                    )}
+                    {updatingRoleId === member.userId && (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-400" />
+                    )}
                     {canRemove && (
                       <button
                         onClick={() => {
@@ -569,6 +721,119 @@ export default function WorkspaceSettingsPage() {
                       </button>
                     </li>
                   ))}
+                </ul>
+              )}
+            </div>
+          </section>
+        )}
+
+        {/* Incoming Webhooks */}
+        {isPrivileged && (
+          <section className="bg-[#222529] border border-white/10 rounded-xl overflow-hidden">
+            <div className="px-5 py-4 border-b border-white/5 flex items-center gap-2">
+              <Webhook className="w-4 h-4 text-slate-400" />
+              <h2 className="text-sm font-semibold text-white">Incoming Webhooks</h2>
+            </div>
+
+            <div className="px-5 py-5 space-y-4">
+              <p className="text-xs text-slate-500">
+                Generate webhook URLs that allow external services to post messages to a channel.
+              </p>
+
+              {webhookError && (
+                <div className="flex items-center gap-2 px-3 py-2 bg-red-900/30 border border-red-800/50 rounded-lg text-red-300 text-xs">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                  {webhookError}
+                </div>
+              )}
+
+              {/* Add new webhook form */}
+              <div className="space-y-2 p-4 bg-[#1a1d21] border border-white/5 rounded-lg">
+                <p className="text-xs font-medium text-slate-400 mb-3">Add new webhook</p>
+                <input
+                  className="w-full bg-[#222529] border border-white/10 rounded-lg px-3 py-2 text-white text-sm placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-[#4a154b]"
+                  value={newWebhookName}
+                  onChange={(e) => setNewWebhookName(e.target.value)}
+                  placeholder="Webhook name (e.g. CI Notifications)"
+                  disabled={savingWebhook}
+                />
+                <select
+                  className="w-full bg-[#222529] border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-1 focus:ring-[#4a154b] disabled:opacity-50"
+                  value={newWebhookChannelId}
+                  onChange={(e) => setNewWebhookChannelId(e.target.value)}
+                  disabled={savingWebhook}
+                >
+                  <option value="">Select a channel…</option>
+                  {webhookChannels.map((ch) => (
+                    <option key={ch.id} value={ch.id}>#{ch.name}</option>
+                  ))}
+                </select>
+                <button
+                  onClick={handleAddWebhook}
+                  disabled={savingWebhook || !newWebhookName.trim() || !newWebhookChannelId}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-[#4a154b] hover:bg-[#611f6a] text-white text-xs font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {savingWebhook ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Plus className="w-3.5 h-3.5" />
+                  )}
+                  Create Webhook
+                </button>
+              </div>
+
+              {/* Existing webhooks list */}
+              {loadingWebhooks ? (
+                <div className="flex items-center justify-center py-4">
+                  <Loader2 className="w-4 h-4 text-slate-400 animate-spin" />
+                </div>
+              ) : webhooks.length === 0 ? (
+                <p className="text-xs text-slate-600 text-center py-3">No webhooks yet.</p>
+              ) : (
+                <ul className="space-y-2">
+                  {webhooks.map((wh) => {
+                    const webhookUrl = typeof window !== 'undefined'
+                      ? `${window.location.origin}/api/webhooks/incoming/${wh.token}`
+                      : `/api/webhooks/incoming/${wh.token}`;
+                    return (
+                      <li key={wh.id} className="flex items-start gap-3 p-3 bg-[#1a1d21] border border-white/5 rounded-lg">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium text-white">{wh.name}</span>
+                            <span className="text-xs text-slate-500">#{wh.channelName}</span>
+                          </div>
+                          <div className="flex items-center gap-1.5 mt-1">
+                            <code className="text-xs text-slate-400 font-mono truncate max-w-xs">{webhookUrl}</code>
+                            <button
+                              onClick={() => handleCopyWebhookUrl(wh.token)}
+                              className="p-1 rounded text-slate-500 hover:text-slate-300 transition-colors shrink-0"
+                              title="Copy URL"
+                            >
+                              {copiedToken === wh.token ? (
+                                <Check className="w-3 h-3 text-green-400" />
+                              ) : (
+                                <Copy className="w-3 h-3" />
+                              )}
+                            </button>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => {
+                            if (confirm(`Delete webhook "${wh.name}"?`)) handleRemoveWebhook(wh.id);
+                          }}
+                          disabled={removingWebhookId === wh.id}
+                          className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-900/20 transition-colors disabled:opacity-50 shrink-0"
+                          title="Delete webhook"
+                        >
+                          {removingWebhookId === wh.id ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <Trash2 className="w-3.5 h-3.5" />
+                          )}
+                        </button>
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
             </div>

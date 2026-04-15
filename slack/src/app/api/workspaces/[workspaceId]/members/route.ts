@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth/middleware";
 import { db } from "@/lib/db";
-import { workspaceMembers, users, channels, channelMembers } from "@/lib/db/schema";
+import { workspaceMembers, users, channels } from "@/lib/db/schema";
 import { eq, and, sql } from "drizzle-orm";
 
 export async function GET(
@@ -106,6 +106,74 @@ export async function DELETE(
 
   await db
     .delete(workspaceMembers)
+    .where(
+      and(
+        eq(workspaceMembers.workspaceId, workspaceId),
+        eq(workspaceMembers.userId, userId)
+      )
+    );
+
+  return NextResponse.json({ success: true });
+}
+
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ workspaceId: string }> }
+) {
+  const auth = await requireAuth();
+  if ("error" in auth) return auth.error;
+
+  const { workspaceId } = await params;
+
+  // Only owner can change roles
+  const [callerMembership] = await db
+    .select({ role: workspaceMembers.role })
+    .from(workspaceMembers)
+    .where(
+      and(
+        eq(workspaceMembers.workspaceId, workspaceId),
+        eq(workspaceMembers.userId, auth.user.id)
+      )
+    )
+    .limit(1);
+
+  if (!callerMembership || callerMembership.role !== "owner") {
+    return NextResponse.json({ error: "Only the workspace owner can change roles" }, { status: 403 });
+  }
+
+  const body = await request.json();
+  const { userId, role } = body as { userId?: string; role?: string };
+
+  if (!userId || !role) {
+    return NextResponse.json({ error: "userId and role are required" }, { status: 400 });
+  }
+
+  if (!["admin", "member"].includes(role)) {
+    return NextResponse.json({ error: "Role must be 'admin' or 'member'" }, { status: 400 });
+  }
+
+  // Cannot change role of the owner
+  const [targetMembership] = await db
+    .select({ role: workspaceMembers.role })
+    .from(workspaceMembers)
+    .where(
+      and(
+        eq(workspaceMembers.workspaceId, workspaceId),
+        eq(workspaceMembers.userId, userId)
+      )
+    )
+    .limit(1);
+
+  if (!targetMembership) {
+    return NextResponse.json({ error: "Member not found" }, { status: 404 });
+  }
+  if (targetMembership.role === "owner") {
+    return NextResponse.json({ error: "Cannot change role of workspace owner" }, { status: 400 });
+  }
+
+  await db
+    .update(workspaceMembers)
+    .set({ role })
     .where(
       and(
         eq(workspaceMembers.workspaceId, workspaceId),

@@ -33,6 +33,7 @@ export const users = pgTable("users", {
   isAgent: boolean("is_agent").default(false).notNull(),
   a2aUrl: text("a2a_url"),
   agentCardJson: jsonb("agent_card_json"),
+  timezone: text("timezone"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -355,6 +356,29 @@ export const channelMcpIntegrations = pgTable(
   (t) => [
     uniqueIndex("channel_mcp_unique").on(t.channelId, t.serverId),
     index("channel_mcp_channel_idx").on(t.channelId),
+  ]
+);
+
+export const webhooks = pgTable(
+  "webhooks",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id")
+      .references(() => workspaces.id, { onDelete: "cascade" })
+      .notNull(),
+    channelId: uuid("channel_id")
+      .references(() => channels.id, { onDelete: "cascade" })
+      .notNull(),
+    name: text("name").notNull(),
+    token: text("token").unique().notNull(),
+    createdBy: uuid("created_by")
+      .references(() => users.id)
+      .notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("webhooks_token_unique").on(t.token),
+    index("webhooks_workspace_idx").on(t.workspaceId),
   ]
 );
 
