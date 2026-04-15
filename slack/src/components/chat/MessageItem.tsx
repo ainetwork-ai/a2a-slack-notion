@@ -90,12 +90,12 @@ export function renderInlineMarkdown(text: string): string {
   html = html.replace(/\x00URL(\d+)\x00/g, (_match, idxStr: string) => {
     const url = urlPlaceholders[parseInt(idxStr)];
     const displayUrl = url.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-    return `<a href="${url}" target="_blank" rel="noopener noreferrer" class="text-[#36c5f0] hover:underline">${displayUrl}</a>`;
+    return `<a href="${url}" target="_blank" rel="noopener noreferrer" class="text-[#1d9bd1] hover:underline">${displayUrl}</a>`;
   });
 
   // Item 2 & 13: Style @channel/@here/@everyone and regular @mentions
   html = html.replace(/@(channel|here|everyone)\b/g, '<span class="bg-[#4a154b]/30 px-1 rounded text-white font-semibold">@$1</span>');
-  html = html.replace(/@([\w-]+)/g, '<span class="text-[#36c5f0] bg-[#36c5f0]/10 px-0.5 rounded cursor-pointer hover:underline">@$1</span>');
+  html = html.replace(/@([\w-]+)/g, '<span class="text-[#1d9bd1] bg-[#1d9bd1]/10 px-0.5 rounded cursor-pointer hover:underline">@$1</span>');
   html = html.replace(/\n/g, '<br>');
   html = html.replace(/\x00BQSTART\x00([\s\S]*?)\x00BQEND\x00/g, '<blockquote class="border-l-4 border-[#4a154b] pl-3 text-slate-400 bg-white/5 my-0.5">$1</blockquote>');
   return html;
@@ -438,7 +438,7 @@ export default function MessageItem({
             avatarUrl={message.senderAvatar}
             isAgent={message.isAgent}
           >
-            <button className="font-semibold text-sm hover:underline cursor-pointer" style={{ color: getNameColor(senderName) }}>{senderName}</button>
+            <button className="font-black text-[15px] hover:underline cursor-pointer" style={{ color: getNameColor(senderName) }}>{senderName}</button>
           </UserProfilePopup>
           {message.isAgent && (
             <Badge className="text-[10px] px-1 py-0 h-4 bg-[#36c5f0]/20 text-[#36c5f0] border-[#36c5f0]/30">
@@ -519,7 +519,7 @@ export default function MessageItem({
           </div>
         ) : (
           <div>
-            <p className="text-slate-200 text-sm leading-relaxed break-words">
+            <p className="text-[#d1d2d3] text-[15px] leading-[1.46667] break-words">
               {renderMessageContent(message.content)}
             </p>
 

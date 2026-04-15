@@ -16,6 +16,7 @@ import SearchModal from '@/components/modals/SearchModal';
 import CreateChannelModal from '@/components/modals/CreateChannelModal';
 import BrowseChannelsModal from '@/components/modals/BrowseChannelsModal';
 import AgentInviteModal from '@/components/agent/AgentInviteModal';
+import AgentBuildModal from '@/components/agent/AgentBuildModal';
 import WorkspaceModal from '@/components/modals/WorkspaceModal';
 import KeyboardShortcutsModal from '@/components/modals/KeyboardShortcutsModal';
 import ConnectionStatus from '@/components/layout/ConnectionStatus';
@@ -236,6 +237,7 @@ export default function WorkspaceLayout({
       <CreateChannelModal />
       <BrowseChannelsModal />
       <AgentInviteModal />
+      <AgentBuildModal />
       <WorkspaceModal open={workspaceModalOpen} onOpenChange={setWorkspaceModalOpen} />
       <KeyboardShortcutsModal />
 

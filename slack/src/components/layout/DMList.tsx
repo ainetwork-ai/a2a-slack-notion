@@ -115,7 +115,7 @@ export default function DMList() {
                   aria-selected={isActive(convo.id)}
                   onClick={() => router.push(`/workspace/dm/${convo.id}`)}
                   className={cn(
-                    'w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm transition-colors text-left',
+                    'w-full flex items-center gap-2 px-2 py-1.5 rounded text-[15px] transition-colors text-left',
                     isActive(convo.id)
                       ? 'bg-[#4a154b]/60 text-white'
                       : 'text-[#bcabbc] hover:bg-white/5 hover:text-white',
@@ -160,7 +160,7 @@ export default function DMList() {
                 aria-selected={isActive(convo.id)}
                 onClick={() => router.push(`/workspace/dm/${convo.id}`)}
                 className={cn(
-                  'w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm transition-colors text-left',
+                  'w-full flex items-center gap-2 px-2 py-1.5 rounded text-[15px] transition-colors text-left',
                   isActive(convo.id)
                     ? 'bg-[#4a154b]/60 text-white'
                     : 'text-[#bcabbc] hover:bg-white/5 hover:text-white',

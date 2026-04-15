@@ -63,9 +63,9 @@ export async function POST(
     )
     .limit(1);
 
-  if (!membership || !["admin", "owner"].includes(membership.role)) {
+  if (!membership) {
     return NextResponse.json(
-      { error: "Admin role required" },
+      { error: "Not a member" },
       { status: 403 }
     );
   }
@@ -129,9 +129,9 @@ export async function PATCH(
     )
     .limit(1);
 
-  if (!membership || !["admin", "owner"].includes(membership.role)) {
+  if (!membership) {
     return NextResponse.json(
-      { error: "Admin role required" },
+      { error: "Not a member" },
       { status: 403 }
     );
   }
@@ -187,9 +187,9 @@ export async function DELETE(
     )
     .limit(1);
 
-  if (!membership || !["admin", "owner"].includes(membership.role)) {
+  if (!membership) {
     return NextResponse.json(
-      { error: "Admin role required" },
+      { error: "Not a member" },
       { status: 403 }
     );
   }

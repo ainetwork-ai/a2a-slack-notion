@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { Plus, ChevronDown, ChevronRight, Bot, Zap } from 'lucide-react';
+import { Plus, ChevronDown, ChevronRight, Bot, Zap, UserPlus, Wrench } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useAppStore } from '@/lib/stores/app-store';
 import { cn } from '@/lib/utils';
@@ -23,7 +23,7 @@ export default function AgentList() {
   const router = useRouter();
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
-  const { setAgentInviteOpen } = useAppStore();
+  const { setAgentInviteOpen, setAgentBuildOpen } = useAppStore();
   const { mutate } = useSWRConfig();
 
   const { data } = useSWR<Agent[]>(
@@ -118,8 +118,15 @@ export default function AgentList() {
             onClick={() => setAgentInviteOpen(true)}
             className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm text-[#bcabbc] hover:text-white hover:bg-white/5 transition-colors"
           >
-            <Plus className="w-4 h-4" />
-            <span>Add an agent</span>
+            <UserPlus className="w-4 h-4" />
+            <span>Invite agent</span>
+          </button>
+          <button
+            onClick={() => setAgentBuildOpen(true)}
+            className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm text-[#bcabbc] hover:text-white hover:bg-white/5 transition-colors"
+          >
+            <Wrench className="w-4 h-4" />
+            <span>Build agent</span>
           </button>
         </div>
       )}

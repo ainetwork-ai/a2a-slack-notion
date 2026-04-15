@@ -9,10 +9,19 @@ interface NewsItem {
 
 const GOOGLE_NEWS_RSS = "https://news.google.com/rss";
 
+// Detect if query contains CJK characters (Korean, Chinese, Japanese)
+function detectLocale(query: string): { hl: string; gl: string } {
+  if (/[\uAC00-\uD7AF\u3131-\u3163]/.test(query)) return { hl: "ko", gl: "KR" };
+  if (/[\u4E00-\u9FFF]/.test(query)) return { hl: "zh-CN", gl: "CN" };
+  if (/[\u3040-\u309F\u30A0-\u30FF]/.test(query)) return { hl: "ja", gl: "JP" };
+  return { hl: "en", gl: "US" };
+}
+
 export async function search(params: { query: string; limit?: number }): Promise<string> {
   const limit = params.limit || 5;
   try {
-    const url = `${GOOGLE_NEWS_RSS}/search?q=${encodeURIComponent(params.query)}&hl=en&gl=US&ceid=US:en`;
+    const { hl, gl } = detectLocale(params.query);
+    const url = `${GOOGLE_NEWS_RSS}/search?q=${encodeURIComponent(params.query)}&hl=${hl}&gl=${gl}&ceid=${gl}:${hl}`;
     const items = await fetchRss(url, limit);
 
     if (items.length === 0) return `No news found for "${params.query}".`;

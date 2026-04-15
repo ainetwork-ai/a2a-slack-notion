@@ -191,7 +191,7 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
       <div className="channel-header flex items-center justify-between px-4 h-12 border-b border-white/5 shrink-0 bg-[#1a1d21]">
         <div className="flex items-center gap-2 min-w-0">
           <Hash className="w-5 h-5 text-slate-400 shrink-0" />
-          <span className="font-semibold text-white truncate">
+          <span className="font-black text-[18px] text-white truncate">
             {channel?.name ?? '...'}
           </span>
           {editingDescription ? (

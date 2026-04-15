@@ -153,7 +153,7 @@ export default function ChannelList({ workspaceId }: ChannelListProps) {
           aria-selected={active}
           onClick={() => router.push(`/workspace/channel/${channel.id}`)}
           className={cn(
-            'w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm transition-colors text-left',
+            'w-full flex items-center gap-2 px-2 py-1.5 rounded text-[15px] transition-colors text-left',
             indent && 'pl-5',
             active
               ? 'bg-[#4a154b]/60 text-white'
@@ -416,7 +416,7 @@ export default function ChannelList({ workspaceId }: ChannelListProps) {
                   key={channel.id}
                   onClick={() => router.push(`/workspace/channel/${channel.id}`)}
                   className={cn(
-                    'w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm transition-colors text-left opacity-60',
+                    'w-full flex items-center gap-2 px-2 py-1.5 rounded text-[15px] transition-colors text-left opacity-60',
                     isActive(channel.id)
                       ? 'bg-[#4a154b]/60 text-white opacity-100'
                       : 'text-[#bcabbc] hover:bg-white/5 hover:text-white hover:opacity-80'

@@ -781,7 +781,7 @@ export default function MessageInput({
             rows={1}
             autoFocus
             aria-label={placeholder}
-            className="flex-1 bg-transparent text-white placeholder:text-slate-500 text-sm resize-none focus:outline-none leading-relaxed py-1 max-h-[200px] overflow-y-auto"
+            className="flex-1 bg-transparent text-[#d1d2d3] placeholder:text-[#ababad] text-[15px] resize-none focus:outline-none leading-[1.46667] py-1 max-h-[200px] overflow-y-auto"
           />
         </div>
 

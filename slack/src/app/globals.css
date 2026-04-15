@@ -144,8 +144,10 @@
   --slack-sidebar-bg: #3F0E40;
   --slack-sidebar-text: #FFFFFF;
   --slack-channel-bg: #3F0E40;
-  --slack-input-bg: #f8f8f8;
-  --slack-input-border: #e0e0e0;
+  --slack-input-bg: #ffffff;
+  --slack-input-border: #868686;
+  --slack-link: #1264a3;
+  --slack-mention: #1264a3;
 }
 
 .dark {
@@ -154,14 +156,16 @@
   --slack-bg-tertiary: #2c2d30;
   --slack-text-primary: #d1d2d3;
   --slack-text-secondary: #ababad;
-  --slack-text-muted: #868686;
-  --slack-border: rgba(255,255,255,0.1);
+  --slack-text-muted: #ababad;
+  --slack-border: rgba(255,255,255,0.08);
   --slack-hover: rgba(255,255,255,0.04);
   --slack-sidebar-bg: #19171d;
   --slack-sidebar-text: #FFFFFF;
   --slack-channel-bg: #19171d;
   --slack-input-bg: #222529;
-  --slack-input-border: rgba(255, 255, 255, 0.1);
+  --slack-input-border: rgba(255, 255, 255, 0.08);
+  --slack-link: #1d9bd1;
+  --slack-mention: #1d9bd1;
 }
 
 /* Dark sidebar — always dark regardless of theme */
@@ -275,7 +279,8 @@
   color: #1d1c1d;
 }
 
-.light .border-white\/5 {
+.light .border-white\/5,
+.light .border-white\/\[0\.08\] {
   border-color: rgba(0, 0, 0, 0.08) !important;
 }
 
@@ -352,8 +357,8 @@
 
 /* Slack-like message timestamp */
 .message-timestamp {
-  font-size: 0.7rem;
-  color: #717274;
+  font-size: 12px;
+  color: #ababad;
   white-space: nowrap;
 }
 

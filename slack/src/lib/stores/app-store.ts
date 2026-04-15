@@ -4,6 +4,7 @@ interface AppStore {
   activeThread: string | null;
   searchOpen: boolean;
   agentInviteOpen: boolean;
+  agentBuildOpen: boolean;
   createChannelOpen: boolean;
   browseChannelsOpen: boolean;
   sidebarCollapsed: boolean;
@@ -13,6 +14,7 @@ interface AppStore {
   setActiveThread: (messageId: string | null) => void;
   setSearchOpen: (open: boolean) => void;
   setAgentInviteOpen: (open: boolean) => void;
+  setAgentBuildOpen: (open: boolean) => void;
   setCreateChannelOpen: (open: boolean) => void;
   setBrowseChannelsOpen: (open: boolean) => void;
   setSidebarCollapsed: (collapsed: boolean) => void;
@@ -26,6 +28,7 @@ export const useAppStore = create<AppStore>((set) => ({
   activeThread: null,
   searchOpen: false,
   agentInviteOpen: false,
+  agentBuildOpen: false,
   createChannelOpen: false,
   browseChannelsOpen: false,
   sidebarCollapsed: false,
@@ -35,6 +38,7 @@ export const useAppStore = create<AppStore>((set) => ({
   setActiveThread: (messageId) => set({ activeThread: messageId }),
   setSearchOpen: (open) => set({ searchOpen: open }),
   setAgentInviteOpen: (open) => set({ agentInviteOpen: open }),
+  setAgentBuildOpen: (open) => set({ agentBuildOpen: open }),
   setCreateChannelOpen: (open) => set({ createChannelOpen: open }),
   setBrowseChannelsOpen: (open) => set({ browseChannelsOpen: open }),
   setSidebarCollapsed: (collapsed) => set({ sidebarCollapsed: collapsed }),
