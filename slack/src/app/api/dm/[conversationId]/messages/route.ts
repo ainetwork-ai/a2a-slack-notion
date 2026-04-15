@@ -4,6 +4,7 @@ import { eq, and, desc, lt, sql, inArray, or, ilike } from "drizzle-orm";
 import { requireAuth } from "@/lib/auth/middleware";
 import { NextRequest, NextResponse } from "next/server";
 import { sendToAgent } from "@/lib/a2a/message-bridge";
+import { handleBuilderMessage } from "@/lib/a2a/builder-agent";
 
 export async function GET(
   request: NextRequest,
@@ -152,6 +153,7 @@ export async function POST(
       displayName: users.displayName,
       isAgent: users.isAgent,
       a2aUrl: users.a2aUrl,
+      agentCardJson: users.agentCardJson,
       isMuted: dmMembers.isMuted,
     })
     .from(dmMembers)
@@ -186,9 +188,39 @@ export async function POST(
       }))
     );
 
-    // Send to external A2A agents async (built agents are handled by frontend streaming)
+    // Send to agents async (built agents are handled by frontend streaming)
     for (const member of otherMembers) {
-      if (member.isAgent && member.a2aUrl) {
+      if (!member.isAgent) continue;
+
+      // Builder agent: intercept and handle via natural conversation
+      if (isBuilderAgent(member)) {
+        handleBuilderMessage(content, user.id)
+          .then(async (result) => {
+            await db.insert(messages).values({
+              conversationId,
+              userId: member.userId,
+              content: result.response,
+              contentType: "agent-response",
+              metadata: {
+                agentName: member.displayName,
+                builder: true,
+                createdAgents: result.createdAgents,
+                createdChannel: result.createdChannel,
+              },
+            });
+            await db
+              .update(dmConversations)
+              .set({ updatedAt: new Date() })
+              .where(eq(dmConversations.id, conversationId));
+          })
+          .catch(() => {
+            // Fire-and-forget
+          });
+        continue;
+      }
+
+      // External A2A agent
+      if (member.a2aUrl) {
         sendToAgent({
           agentId: member.userId,
           text: content,
@@ -225,4 +257,22 @@ export async function POST(
     .limit(1);
 
   return NextResponse.json(messageWithUser, { status: 201 });
+}
+
+/**
+ * Detect whether a DM member is a Builder agent.
+ * Matches by display name containing "builder" or agentCardJson.isBuilder flag.
+ */
+function isBuilderAgent(member: {
+  displayName: string;
+  isAgent: boolean;
+  agentCardJson: unknown;
+}): boolean {
+  if (!member.isAgent) return false;
+  if (/builder/i.test(member.displayName)) return true;
+  const card = member.agentCardJson as Record<string, unknown> | null;
+  if (card?.isBuilder === true) return true;
+  const skills = card?.skills as Array<{ id?: string }> | undefined;
+  if (skills?.some((s) => s.id === "create-agent" || s.id === "build-agent")) return true;
+  return false;
 }
