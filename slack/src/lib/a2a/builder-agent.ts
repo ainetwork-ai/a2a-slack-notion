@@ -112,9 +112,10 @@ interface LLMAction {
   engagementLevels?: Record<string, number>;
 }
 
-// ─── LLM via a2a-builder ──────────────────────────────────────────────────────
+// ─── LLM via local vLLM (Gemma4) ────────────────────────────────────────────
 
-const BUILDER_URL = "https://a2a-builder.ainetwork.ai/api/agents";
+const VLLM_URL = process.env.VLLM_URL || "http://localhost:8100/v1/chat/completions";
+const VLLM_MODEL = process.env.VLLM_MODEL || "gemma-4-31B-it";
 
 const SYSTEM_PROMPT = `You are a Builder agent for Slack-A2A. You help users create new AI agents and channels.
 
@@ -136,54 +137,25 @@ Channel names should be lowercase with hyphens (e.g. newsroom, ai-research).`;
 
 async function queryLLM(message: string): Promise<string | null> {
   try {
-    const res = await fetch(BUILDER_URL, {
+    const res = await fetch(VLLM_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        jsonrpc: "2.0",
-        method: "message/send",
-        params: {
-          message: {
-            messageId: uuidv4(),
-            role: "user",
-            parts: [{ kind: "text", text: message }],
-            kind: "message",
-          },
-          configuration: {
-            blocking: true,
-            acceptedOutputModes: ["text/plain"],
-          },
-          metadata: {
-            systemPrompt: SYSTEM_PROMPT,
-          },
-        },
-        id: uuidv4(),
+        model: VLLM_MODEL,
+        messages: [
+          { role: "system", content: SYSTEM_PROMPT },
+          { role: "user", content: message },
+        ],
+        max_tokens: 2000,
+        temperature: 0.3,
       }),
-      signal: AbortSignal.timeout(20000),
+      signal: AbortSignal.timeout(30000),
     });
 
     if (!res.ok) return null;
 
     const data = await res.json();
-    const result = data?.result;
-
-    // Task response (artifacts)
-    if (result?.artifacts?.[0]?.parts) {
-      const textPart = result.artifacts[0].parts.find(
-        (p: { kind: string; text?: string }) => p.kind === "text"
-      );
-      return textPart?.text ?? null;
-    }
-
-    // Message response (parts)
-    if (result?.parts) {
-      const textPart = result.parts.find(
-        (p: { kind: string; text?: string }) => p.kind === "text"
-      );
-      return textPart?.text ?? null;
-    }
-
-    return null;
+    return data?.choices?.[0]?.message?.content ?? null;
   } catch {
     return null;
   }
