@@ -54,7 +54,23 @@ export async function GET() {
         .orderBy(desc(messages.createdAt))
         .limit(1);
 
-      return { ...conv, members, latestMessage: latestMessage || null };
+      // For 1-on-1 DMs, expose otherUser for backwards compat; for group DMs members array is used
+      const otherMembers = members.filter((m) => m.userId !== user.id);
+      const otherUser = otherMembers.length === 1 ? {
+        id: otherMembers[0].userId,
+        displayName: otherMembers[0].displayName,
+        avatarUrl: otherMembers[0].avatarUrl,
+        isAgent: otherMembers[0].isAgent,
+        status: otherMembers[0].status,
+      } : null;
+
+      return {
+        ...conv,
+        members,
+        otherUser,
+        isGroup: members.length > 2,
+        latestMessage: latestMessage || null,
+      };
     })
   );
 
