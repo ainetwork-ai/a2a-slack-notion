@@ -81,6 +81,8 @@ export default function NotificationPanel() {
                   'w-full flex items-start gap-3 px-4 py-3 text-left transition-colors border-b border-white/5 last:border-0',
                   notification.isRead
                     ? 'hover:bg-white/5'
+                    : notification.type === 'mention'
+                    ? 'bg-yellow-500/10 hover:bg-yellow-500/20 border-l-2 border-l-yellow-500'
                     : 'bg-[#4a154b]/10 hover:bg-[#4a154b]/20'
                 )}
               >
@@ -90,7 +92,11 @@ export default function NotificationPanel() {
                 <div className="flex-1 min-w-0">
                   <p className={cn(
                     'text-sm leading-snug line-clamp-2',
-                    notification.isRead ? 'text-slate-300' : 'text-white font-medium'
+                    notification.isRead
+                      ? 'text-slate-300'
+                      : notification.type === 'mention'
+                      ? 'text-yellow-100 font-medium'
+                      : 'text-white font-medium'
                   )}>
                     {notification.message?.content || 'New notification'}
                   </p>
@@ -102,7 +108,10 @@ export default function NotificationPanel() {
                   </p>
                 </div>
                 {!notification.isRead && (
-                  <span className="w-2 h-2 rounded-full bg-[#4a154b] mt-1.5 shrink-0" />
+                  <span className={cn(
+                    'w-2 h-2 rounded-full mt-1.5 shrink-0',
+                    notification.type === 'mention' ? 'bg-yellow-500' : 'bg-[#4a154b]'
+                  )} />
                 )}
               </button>
             ))

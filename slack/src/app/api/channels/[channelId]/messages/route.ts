@@ -146,52 +146,74 @@ export async function POST(
     })
     .returning();
 
-  // Parse @mentions from content — collect full token and first-word variant
-  const mentionPattern = /@(\S+)/g;
-  const mentionedNames: string[] = [];
-  let match;
-  while ((match = mentionPattern.exec(content)) !== null) {
-    const token = match[1];
-    mentionedNames.push(token);
-    // Also try first word in case display name has spaces (e.g. "Techa" from "@Techa (Bill Gates)")
-    const firstWord = token.split(/[(,]/)[0];
-    if (firstWord && firstWord !== token) mentionedNames.push(firstWord);
-  }
+  // Parse @mentions from content
+  const broadcastMentionPattern = /@(channel|here|everyone)\b/i;
+  const isBroadcast = broadcastMentionPattern.test(content);
 
-  if (mentionedNames.length > 0) {
-    const mentionedUsers = await db
-      .select()
-      .from(users)
-      .where(
-        or(
-          inArray(users.displayName, mentionedNames),
-          ...mentionedNames.map(n => ilike(users.displayName, `${n}%`))
-        )
-      );
+  if (isBroadcast) {
+    // @channel/@here/@everyone — notify all channel members except sender
+    const allMembers = await db
+      .select({ userId: channelMembers.userId })
+      .from(channelMembers)
+      .where(and(eq(channelMembers.channelId, channelId), sql`${channelMembers.userId} != ${user.id}`));
 
-    if (mentionedUsers.length > 0) {
-      await db.insert(mentions).values(
-        mentionedUsers.map((u) => ({ messageId: message.id, userId: u.id }))
-      );
-
+    if (allMembers.length > 0) {
       await db.insert(notifications).values(
-        mentionedUsers.map((u) => ({
-          userId: u.id,
+        allMembers.map((m) => ({
+          userId: m.userId,
           messageId: message.id,
           type: "mention",
         }))
       );
+    }
+  } else {
+    // Parse named @mentions — collect full token and first-word variant
+    const mentionPattern = /@(\S+)/g;
+    const mentionedNames: string[] = [];
+    let match;
+    while ((match = mentionPattern.exec(content)) !== null) {
+      const token = match[1];
+      mentionedNames.push(token);
+      // Also try first word in case display name has spaces (e.g. "Techa" from "@Techa (Bill Gates)")
+      const firstWord = token.split(/[(,]/)[0];
+      if (firstWord && firstWord !== token) mentionedNames.push(firstWord);
+    }
 
-      // Send to agent users asynchronously
-      const agentUsers = mentionedUsers.filter((u) => u.isAgent && u.a2aUrl);
-      for (const agent of agentUsers) {
-        sendToAgent({
-          agentId: agent.id,
-          text: content,
-          channelId,
-        }).catch(() => {
-          // Async fire-and-forget, don't block response
-        });
+    if (mentionedNames.length > 0) {
+      const mentionedUsers = await db
+        .select()
+        .from(users)
+        .where(
+          or(
+            inArray(users.displayName, mentionedNames),
+            ...mentionedNames.map(n => ilike(users.displayName, `${n}%`))
+          )
+        );
+
+      if (mentionedUsers.length > 0) {
+        await db.insert(mentions).values(
+          mentionedUsers.map((u) => ({ messageId: message.id, userId: u.id }))
+        );
+
+        await db.insert(notifications).values(
+          mentionedUsers.map((u) => ({
+            userId: u.id,
+            messageId: message.id,
+            type: "mention",
+          }))
+        );
+
+        // Send to agent users asynchronously
+        const agentUsers = mentionedUsers.filter((u) => u.isAgent && u.a2aUrl);
+        for (const agent of agentUsers) {
+          sendToAgent({
+            agentId: agent.id,
+            text: content,
+            channelId,
+          }).catch(() => {
+            // Async fire-and-forget, don't block response
+          });
+        }
       }
     }
   }

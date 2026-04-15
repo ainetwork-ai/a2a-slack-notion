@@ -144,6 +144,7 @@ export async function POST(
   const otherMembers = await db
     .select({
       userId: dmMembers.userId,
+      displayName: users.displayName,
       isAgent: users.isAgent,
       a2aUrl: users.a2aUrl,
     })
@@ -151,13 +152,30 @@ export async function POST(
     .innerJoin(users, eq(dmMembers.userId, users.id))
     .where(and(eq(dmMembers.conversationId, conversationId), sql`${dmMembers.userId} != ${user.id}`));
 
+  // Determine notification type: "mention" if a member is @mentioned, otherwise "dm"
+  const mentionPattern = /@(\S+)/g;
+  const mentionedNames: string[] = [];
+  let mentionMatch;
+  while ((mentionMatch = mentionPattern.exec(content)) !== null) {
+    const token = mentionMatch[1];
+    mentionedNames.push(token.toLowerCase());
+    const firstWord = token.split(/[(,]/)[0];
+    if (firstWord && firstWord !== token) mentionedNames.push(firstWord.toLowerCase());
+  }
+
+  const mentionedMemberIds = new Set(
+    otherMembers
+      .filter((m) => mentionedNames.some((n) => m.displayName.toLowerCase().startsWith(n)))
+      .map((m) => m.userId)
+  );
+
   // Create notifications for all other members
   if (otherMembers.length > 0) {
     await db.insert(notifications).values(
       otherMembers.map((m) => ({
         userId: m.userId,
         messageId: message.id,
-        type: "dm",
+        type: mentionedMemberIds.has(m.userId) ? "mention" : "dm",
       }))
     );
 

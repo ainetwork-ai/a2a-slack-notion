@@ -34,7 +34,8 @@ export default function MessageInput({
   const [content, setContent] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
-  const [pendingFile, setPendingFile] = useState<{ fileName: string; url: string; mimeType: string } | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [pendingFile, setPendingFile] = useState<{ fileName: string; url: string; mimeType: string; size: number } | null>(null);
   const [mentionSuggestions, setMentionSuggestions] = useState<MentionSuggestion[]>([]);
   const [mentionQuery, setMentionQuery] = useState('');
   const [mentionIndex, setMentionIndex] = useState(0);
@@ -363,15 +364,20 @@ export default function MessageInput({
     const file = e.target.files?.[0];
     if (!file) return;
     setIsUploading(true);
+    setUploadError(null);
     try {
       const formData = new FormData();
       formData.append('file', file);
       const res = await fetch('/api/upload', { method: 'POST', body: formData });
-      if (!res.ok) throw new Error('Upload failed');
-      const { url, fileName, mimeType } = await res.json();
-      setPendingFile({ url, fileName, mimeType });
+      const data = await res.json();
+      if (!res.ok) {
+        setUploadError(data.error || 'Upload failed');
+        return;
+      }
+      const { url, fileName, mimeType, size } = data;
+      setPendingFile({ url, fileName, mimeType, size });
     } catch {
-      // Silently fail for now
+      setUploadError('Upload failed. Please try again.');
     } finally {
       setIsUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -380,15 +386,20 @@ export default function MessageInput({
 
   async function uploadFile(file: File) {
     setIsUploading(true);
+    setUploadError(null);
     try {
       const formData = new FormData();
       formData.append('file', file);
       const res = await fetch('/api/upload', { method: 'POST', body: formData });
-      if (!res.ok) throw new Error('Upload failed');
-      const { url, fileName, mimeType } = await res.json();
-      setPendingFile({ url, fileName, mimeType });
+      const data = await res.json();
+      if (!res.ok) {
+        setUploadError(data.error || 'Upload failed');
+        return;
+      }
+      const { url, fileName, mimeType, size } = data;
+      setPendingFile({ url, fileName, mimeType, size });
     } catch {
-      // Silently fail
+      setUploadError('Upload failed. Please try again.');
     } finally {
       setIsUploading(false);
     }
@@ -426,8 +437,26 @@ export default function MessageInput({
       {pendingFile && (
         <div className="mb-2 flex items-center gap-2 bg-[#222529] border border-white/10 rounded-lg px-3 py-2">
           <span className="text-slate-300 text-xs truncate flex-1">{pendingFile.fileName}</span>
+          <span className="text-slate-500 text-xs shrink-0">
+            {pendingFile.size < 1024 * 1024
+              ? `${(pendingFile.size / 1024).toFixed(1)} KB`
+              : `${(pendingFile.size / (1024 * 1024)).toFixed(1)} MB`}
+          </span>
           <button
             onClick={() => setPendingFile(null)}
+            className="text-slate-500 hover:text-white text-xs shrink-0"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
+      {/* Upload error */}
+      {uploadError && (
+        <div className="mb-2 flex items-start gap-2 bg-[#222529] border border-red-500/30 rounded-lg px-3 py-2">
+          <span className="text-red-400 text-xs flex-1">{uploadError}</span>
+          <button
+            onClick={() => setUploadError(null)}
             className="text-slate-500 hover:text-white text-xs shrink-0"
           >
             ✕

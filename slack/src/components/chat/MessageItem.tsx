@@ -217,7 +217,7 @@ import {
   TooltipProvider,
 } from '@/components/ui/tooltip';
 import { Button } from '@/components/ui/button';
-import { MoreHorizontal, SmilePlus, MessageSquare, Pencil, Trash2, Pin, Paperclip, Share2, Bookmark } from 'lucide-react';
+import { MoreHorizontal, SmilePlus, MessageSquare, Pencil, Trash2, Pin, Paperclip, Share2, Bookmark, FileText, FileSpreadsheet, FileArchive, File } from 'lucide-react';
 import { Message } from '@/lib/hooks/use-messages';
 import ReactionPicker from './ReactionPicker';
 import ImageLightbox from './ImageLightbox';
@@ -515,6 +515,33 @@ export default function MessageItem({
                       </div>
                     );
                   }
+                  const ext = (meta.fileName ?? '').split('.').pop()?.toLowerCase() ?? '';
+                  const isPdf = meta.mimeType === 'application/pdf' || ext === 'pdf';
+                  const isSpreadsheet = ['xls', 'xlsx', 'csv'].includes(ext) ||
+                    (meta.mimeType ?? '').includes('spreadsheet') || (meta.mimeType ?? '').includes('excel');
+                  const isArchive = ['zip', 'tar', 'gz'].includes(ext) ||
+                    (meta.mimeType ?? '').includes('zip') || (meta.mimeType ?? '').includes('tar') || (meta.mimeType ?? '').includes('gzip');
+                  const isDoc = ['doc', 'docx', 'txt', 'ppt', 'pptx'].includes(ext) ||
+                    (meta.mimeType ?? '').includes('word') || (meta.mimeType ?? '').includes('presentation') || (meta.mimeType ?? '') === 'text/plain';
+
+                  const FileIcon = isSpreadsheet
+                    ? FileSpreadsheet
+                    : isArchive
+                    ? FileArchive
+                    : (isPdf || isDoc)
+                    ? FileText
+                    : File;
+
+                  const iconColor = isPdf
+                    ? 'text-red-400'
+                    : isSpreadsheet
+                    ? 'text-green-400'
+                    : isArchive
+                    ? 'text-yellow-400'
+                    : isDoc
+                    ? 'text-blue-400'
+                    : 'text-slate-400';
+
                   return (
                     <a
                       href={meta.fileUrl}
@@ -522,10 +549,12 @@ export default function MessageItem({
                       rel="noopener noreferrer"
                       className="inline-flex items-center gap-3 bg-white/5 border border-white/10 rounded-lg p-3 hover:bg-white/10 transition-colors max-w-sm"
                     >
-                      <Paperclip className="w-5 h-5 text-slate-400 shrink-0" />
+                      <FileIcon className={`w-6 h-6 shrink-0 ${iconColor}`} />
                       <div className="min-w-0">
                         <p className="text-sm text-white truncate">{meta.fileName ?? 'File'}</p>
-                        <p className="text-xs text-slate-400">Click to download</p>
+                        <p className="text-xs text-slate-400">
+                          {ext ? ext.toUpperCase() : 'File'} · Click to download
+                        </p>
                       </div>
                     </a>
                   );
