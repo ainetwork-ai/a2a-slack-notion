@@ -4,17 +4,30 @@ import { eq, and, desc, lt, sql, inArray, or, ilike } from "drizzle-orm";
 import { requireAuth } from "@/lib/auth/middleware";
 import { NextRequest, NextResponse } from "next/server";
 
-export async function POST() {
+const VALID_STATUSES = ["online", "away", "idle", "dnd", "offline"] as const;
+type UserStatus = typeof VALID_STATUSES[number];
+
+export async function POST(request: NextRequest) {
   const auth = await requireAuth();
   if ("error" in auth) return auth.error;
   const { user } = auth;
 
+  let status: UserStatus = "online";
+  try {
+    const body = await request.json();
+    if (body?.status && VALID_STATUSES.includes(body.status)) {
+      status = body.status as UserStatus;
+    }
+  } catch {
+    // No body — default to online
+  }
+
   await db
     .update(users)
-    .set({ status: "online", updatedAt: new Date() })
+    .set({ status, updatedAt: new Date() })
     .where(eq(users.id, user.id));
 
-  return NextResponse.json({ status: "online" });
+  return NextResponse.json({ status });
 }
 
 export async function PATCH(request: NextRequest) {
@@ -23,14 +36,23 @@ export async function PATCH(request: NextRequest) {
   const { user } = auth;
 
   const body = await request.json();
-  const { statusMessage } = body;
+  const { statusMessage, status } = body;
+
+  const validStatus: UserStatus | undefined =
+    status !== undefined && VALID_STATUSES.includes(status as UserStatus)
+      ? (status as UserStatus)
+      : undefined;
 
   await db
     .update(users)
-    .set({ statusMessage: statusMessage ?? "", updatedAt: new Date() })
+    .set({
+      ...(statusMessage !== undefined ? { statusMessage: statusMessage ?? "" } : {}),
+      ...(validStatus !== undefined ? { status: validStatus } : {}),
+      updatedAt: new Date(),
+    })
     .where(eq(users.id, user.id));
 
-  return NextResponse.json({ statusMessage });
+  return NextResponse.json({ statusMessage, status: validStatus });
 }
 
 export async function GET(request: NextRequest) {

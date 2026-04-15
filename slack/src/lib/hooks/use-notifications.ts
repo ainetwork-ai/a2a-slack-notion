@@ -1,6 +1,7 @@
 import useSWR from 'swr';
 import { useRef, useEffect } from 'react';
 import { sendBrowserNotification } from '@/lib/notifications/browser-notify';
+import { playNotificationSound } from '@/lib/notifications/notification-sound';
 
 const fetcher = (url: string) => fetch(url).then(r => r.json());
 
@@ -32,10 +33,14 @@ export function useNotifications() {
       return;
     }
     if (unreadCount > prevUnreadCountRef.current) {
-      const newest = notifications.find(n => !n.isRead);
-      const title = newest?.channel ? `#${newest.channel.name}` : 'New message';
-      const body = newest?.message?.content ?? 'You have a new notification';
-      sendBrowserNotification(title, body);
+      const dndEnabled = typeof window !== 'undefined' && localStorage.getItem('dndEnabled') === 'true';
+      if (!dndEnabled) {
+        const newest = notifications.find(n => !n.isRead);
+        const title = newest?.channel ? `#${newest.channel.name}` : 'New message';
+        const body = newest?.message?.content ?? 'You have a new notification';
+        sendBrowserNotification(title, body);
+        playNotificationSound();
+      }
     }
     prevUnreadCountRef.current = unreadCount;
   }, [unreadCount, notifications]);
