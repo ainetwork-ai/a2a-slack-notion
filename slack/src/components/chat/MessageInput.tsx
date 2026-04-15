@@ -333,11 +333,10 @@ export default function MessageInput({
           const agentRes = await fetch(`/api/agents/${agent.id}`);
           if (!agentRes.ok) { setSkillSuggestions([]); return; }
           const agentData = await agentRes.json();
-          const skills = (agentData.agentCardJson?.skills || []) as Array<{ id: string; name: string; description: string }>;
+          const skills = (agentData.agentCardJson?.skills || []) as Array<{ id: string; name: string; description: string; instruction?: string }>;
           const filtered = skills
-            .filter(s => s.id !== 'chat')
-            .filter(s => !skillQuery || s.id.includes(skillQuery) || s.name.toLowerCase().includes(skillQuery) || s.description?.toLowerCase().includes(skillQuery))
-            .map(s => ({ name: `@${agentName} ${s.id}`, description: s.description || s.name, skillId: s.id }));
+            .filter(s => !skillQuery || s.name.toLowerCase().includes(skillQuery) || s.description?.toLowerCase().includes(skillQuery) || s.id.includes(skillQuery))
+            .map(s => ({ name: `@${agentName} ${s.name}`, description: s.description || s.id, skillId: s.id }));
           setSkillSuggestions(filtered);
           setSkillIndex(0);
         } catch { setSkillSuggestions([]); }
