@@ -13,6 +13,9 @@ import SearchModal from '@/components/modals/SearchModal';
 import CreateChannelModal from '@/components/modals/CreateChannelModal';
 import AgentInviteModal from '@/components/agent/AgentInviteModal';
 import WorkspaceModal from '@/components/modals/WorkspaceModal';
+import KeyboardShortcutsModal from '@/components/modals/KeyboardShortcutsModal';
+import ConnectionStatus from '@/components/layout/ConnectionStatus';
+import { useKeyboardShortcuts } from '@/lib/hooks/use-keyboard-shortcuts';
 import { Loader2, Menu, X, ChevronDown } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 
@@ -27,6 +30,7 @@ export default function WorkspaceLayout({
 }) {
   const router = useRouter();
   const { user, isLoading } = useAuth();
+  useKeyboardShortcuts();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [workspaceModalOpen, setWorkspaceModalOpen] = useState(false);
   const { activeWorkspaceId, workspaces } = useWorkspaceStore();
@@ -82,7 +86,7 @@ export default function WorkspaceLayout({
 
   if (isLoading) {
     return (
-      <div className="flex h-full items-center justify-center bg-[#1a1d21]">
+      <div className="flex h-full items-center justify-center main-content">
         <Loader2 className="w-8 h-8 text-slate-400 animate-spin" />
       </div>
     );
@@ -91,7 +95,7 @@ export default function WorkspaceLayout({
   if (!user) return null;
 
   return (
-    <div className="flex h-full overflow-hidden bg-[#1a1d21]">
+    <div className="flex h-full overflow-hidden main-content">
       {/* Icon Sidebar */}
       <Sidebar />
 
@@ -107,7 +111,7 @@ export default function WorkspaceLayout({
       <div
         style={{ width: sidebarWidth }}
         className={[
-          'relative flex flex-col shrink-0 bg-[#19171d] border-r border-white/5 overflow-hidden',
+          'relative flex flex-col shrink-0 channel-sidebar border-r border-white/5 overflow-hidden',
           // Mobile: fixed overlay; Desktop: normal flow
           'max-md:fixed max-md:inset-y-0 max-md:left-16 max-md:z-30',
           'max-md:transition-transform max-md:duration-200 max-md:ease-in-out',
@@ -155,6 +159,9 @@ export default function WorkspaceLayout({
 
       {/* Main content */}
       <div className="flex flex-col flex-1 min-w-0 main-content overflow-hidden">
+        {/* Connection status banner */}
+        <ConnectionStatus />
+
         {/* Mobile hamburger bar */}
         <div className="flex items-center h-10 px-3 border-b border-white/5 md:hidden shrink-0">
           <button
@@ -177,6 +184,7 @@ export default function WorkspaceLayout({
       <CreateChannelModal />
       <AgentInviteModal />
       <WorkspaceModal open={workspaceModalOpen} onOpenChange={setWorkspaceModalOpen} />
+      <KeyboardShortcutsModal />
     </div>
   );
 }
