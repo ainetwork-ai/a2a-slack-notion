@@ -8,6 +8,7 @@ export interface Workspace {
   iconText: string;
   description?: string;
   role?: string;
+  createdAt?: string;
 }
 
 interface WorkspaceStore {

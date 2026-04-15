@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 
-import { Home, Search, MessageSquare, Smile, LogOut, Sun, Moon, Inbox, MessagesSquare, Plus, Bookmark, BellOff, Volume2, VolumeX, User } from 'lucide-react';
+import { Home, Search, MessageSquare, Smile, LogOut, Sun, Moon, Inbox, MessagesSquare, Plus, Bookmark, BellOff, Volume2, VolumeX, User, Settings } from 'lucide-react';
 import NotificationPanel from '@/components/modals/NotificationPanel';
 import ProfileEditModal from '@/components/modals/ProfileEditModal';
 import SetStatusModal from '@/components/modals/SetStatusModal';
@@ -228,6 +228,14 @@ export default function Sidebar() {
         onClick={() => router.push('/workspace/unreads')}
         active={pathname === '/workspace/unreads'}
       />
+      {(activeWorkspace?.role === 'owner' || activeWorkspace?.role === 'admin') && (
+        <NavButton
+          icon={<Settings className="w-5 h-5" />}
+          label="Workspace Settings"
+          onClick={() => router.push('/workspace/settings')}
+          active={pathname === '/workspace/settings'}
+        />
+      )}
 
       {/* Spacer */}
       <div className="flex-1" />
