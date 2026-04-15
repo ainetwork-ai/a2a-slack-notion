@@ -26,7 +26,7 @@ export const commands: SlashCommand[] = [
 /unflip [message] — Append ┬─┬ノ( º _ ºノ)
 /lenny [message] — Append ( ͡° ͜ʖ ͡°)
 /date — Show current date and time
-/remind <time> <message> — Set a reminder (client-side)`,
+/remind me in <N> minutes/hours to <msg> — Set a server-persisted reminder`,
       ephemeral: true,
     }),
   },
@@ -228,20 +228,65 @@ export const commands: SlashCommand[] = [
   },
   {
     name: '/remind',
-    description: 'Set a reminder (client-side)',
-    usage: '/remind <minutes> <message>',
-    execute: async (args) => {
-      const match = args.match(/^(\d+)\s+(.+)/);
-      if (!match) return { response: 'Usage: /remind <minutes> <message>\nExample: /remind 30 Check the deployment', ephemeral: true };
-      const [, minutes, message] = match;
-      const ms = parseInt(minutes) * 60 * 1000;
-      setTimeout(() => {
-        if ('Notification' in window && Notification.permission === 'granted') {
-          new Notification('Slack-A2A Reminder', { body: message, icon: '/favicon.ico' });
-        }
-        alert(`⏰ Reminder: ${message}`);
-      }, ms);
-      return { response: `⏰ Reminder set for ${minutes} minutes: "${message}"`, ephemeral: true };
+    description: 'Set a reminder',
+    usage: '/remind me in <N> minutes/hours to <message> | /remind me at <time> to <message>',
+    execute: async (args, context) => {
+      // Parse: "me in 30 minutes to check the build"
+      const relativeMatch = args.match(/^me\s+in\s+(\d+)\s+(minute|minutes|min|hour|hours|hr|hrs)\s+to\s+(.+)/i);
+      // Parse: "me at 5pm to review PR" or "me at 17:00 to review PR"
+      const absoluteMatch = args.match(/^me\s+at\s+(\d{1,2}(?::\d{2})?(?:am|pm)?)\s+to\s+(.+)/i);
+      // Fallback: legacy "<N> <message>"
+      const legacyMatch = args.match(/^(\d+)\s+(.+)/);
+
+      let remindAt: Date;
+      let message: string;
+
+      if (relativeMatch) {
+        const [, amount, unit, msg] = relativeMatch;
+        message = msg.trim();
+        const ms = parseInt(amount) * (/hour/i.test(unit) ? 3600000 : 60000);
+        remindAt = new Date(Date.now() + ms);
+      } else if (absoluteMatch) {
+        const [, timeStr, msg] = absoluteMatch;
+        message = msg.trim();
+        const now = new Date();
+        // Parse time string
+        const timeParsed = timeStr.match(/^(\d{1,2})(?::(\d{2}))?(am|pm)?$/i);
+        if (!timeParsed) return { response: 'Could not parse time. Try "/remind me at 5pm to review PR"', ephemeral: true };
+        let hours = parseInt(timeParsed[1]);
+        const mins = timeParsed[2] ? parseInt(timeParsed[2]) : 0;
+        const ampm = timeParsed[3]?.toLowerCase();
+        if (ampm === 'pm' && hours < 12) hours += 12;
+        if (ampm === 'am' && hours === 12) hours = 0;
+        remindAt = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hours, mins, 0, 0);
+        if (remindAt <= now) remindAt.setDate(remindAt.getDate() + 1);
+      } else if (legacyMatch) {
+        const [, minutes, msg] = legacyMatch;
+        message = msg.trim();
+        remindAt = new Date(Date.now() + parseInt(minutes) * 60000);
+      } else {
+        return {
+          response: 'Usage:\n• /remind me in 30 minutes to check the build\n• /remind me in 2 hours to review PR\n• /remind me at 5pm to standup',
+          ephemeral: true,
+        };
+      }
+
+      try {
+        const res = await fetch('/api/reminders', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            message,
+            remindAt: remindAt.toISOString(),
+            channelId: context.channelId,
+          }),
+        });
+        if (!res.ok) return { response: 'Failed to save reminder.', ephemeral: true };
+        const timeLabel = remindAt.toLocaleString();
+        return { response: `⏰ Reminder saved for ${timeLabel}: "${message}"`, ephemeral: true };
+      } catch {
+        return { response: 'Failed to save reminder.', ephemeral: true };
+      }
     },
   },
 ];

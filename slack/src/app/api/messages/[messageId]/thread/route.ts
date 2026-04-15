@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { users, channels, channelMembers, messages, reactions, mentions, files, notifications } from "@/lib/db/schema";
+import { users, channels, channelMembers, messages, reactions, mentions, files, notifications, threadSubscriptions } from "@/lib/db/schema";
 import { eq, and, desc, lt, sql, inArray, or, ilike } from "drizzle-orm";
 import { requireAuth } from "@/lib/auth/middleware";
 import { NextRequest, NextResponse } from "next/server";
@@ -114,8 +114,32 @@ export async function POST(
     .set({ threadCount: sql`${messages.threadCount} + 1`, updatedAt: new Date() })
     .where(eq(messages.id, messageId));
 
-  // Notify parent author if different user
-  if (parent.userId !== user.id) {
+  // Auto-subscribe the replier to the thread
+  await db
+    .insert(threadSubscriptions)
+    .values({ userId: user.id, messageId })
+    .onConflictDoNothing();
+
+  // Notify all subscribers (except the replier themselves)
+  const subscribers = await db
+    .select({ userId: threadSubscriptions.userId })
+    .from(threadSubscriptions)
+    .where(eq(threadSubscriptions.messageId, messageId));
+
+  const subscriberIds = subscribers
+    .map((s) => s.userId)
+    .filter((id) => id !== user.id);
+
+  if (subscriberIds.length > 0) {
+    await db.insert(notifications).values(
+      subscriberIds.map((userId) => ({
+        userId,
+        messageId: reply.id,
+        type: "thread_reply",
+      }))
+    );
+  } else if (parent.userId !== user.id) {
+    // Fallback: notify parent author if no subscribers yet
     await db.insert(notifications).values({
       userId: parent.userId,
       messageId: reply.id,

@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
-import { MessageSquare } from 'lucide-react';
+import { MessageSquare, Bell, BellOff } from 'lucide-react';
 import { useAppStore } from '@/lib/stores/app-store';
 import { useMessages } from '@/lib/hooks/use-messages';
 import MessageList from './MessageList';
@@ -33,8 +33,44 @@ export default function ThreadPanel({
   });
   const { typingUsers } = useTyping(channelId, conversationId);
   const [alsoSendToChannel, setAlsoSendToChannel] = useState(false);
+  const [isSubscribed, setIsSubscribed] = useState(false);
+  const [subscribeLoading, setSubscribeLoading] = useState(false);
 
   const isOpen = activeThread === parentMessageId;
+
+  // Fetch subscription status when thread opens
+  useEffect(() => {
+    if (!isOpen || !parentMessageId) return;
+    fetch(`/api/thread-subscriptions?messageId=${parentMessageId}`)
+      .then(r => r.json())
+      .then(data => setIsSubscribed(!!data.subscribed))
+      .catch(() => {});
+  }, [isOpen, parentMessageId]);
+
+  async function handleToggleSubscription() {
+    setSubscribeLoading(true);
+    try {
+      if (isSubscribed) {
+        await fetch('/api/thread-subscriptions', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ messageId: parentMessageId }),
+        });
+        setIsSubscribed(false);
+      } else {
+        await fetch('/api/thread-subscriptions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ messageId: parentMessageId }),
+        });
+        setIsSubscribed(true);
+      }
+    } catch {
+      // ignore
+    } finally {
+      setSubscribeLoading(false);
+    }
+  }
 
   async function handleSend(content: string, metadata?: Record<string, unknown>) {
     await sendMessage(content, metadata);
@@ -59,7 +95,25 @@ export default function ThreadPanel({
       >
         <SheetHeader className="px-4 py-3 border-b border-white/10 flex flex-row items-center gap-2">
           <MessageSquare className="w-5 h-5 text-slate-400" />
-          <SheetTitle className="text-white text-base font-semibold">Thread</SheetTitle>
+          <SheetTitle className="text-white text-base font-semibold flex-1">Thread</SheetTitle>
+          <button
+            onClick={handleToggleSubscription}
+            disabled={subscribeLoading}
+            title={isSubscribed ? 'Unfollow thread' : 'Follow thread'}
+            className="flex items-center gap-1.5 px-2 py-1 rounded text-xs text-slate-400 hover:text-white hover:bg-white/10 transition-colors disabled:opacity-50"
+          >
+            {isSubscribed ? (
+              <>
+                <BellOff className="w-3.5 h-3.5" />
+                <span>Unfollow</span>
+              </>
+            ) : (
+              <>
+                <Bell className="w-3.5 h-3.5" />
+                <span>Follow</span>
+              </>
+            )}
+          </button>
         </SheetHeader>
 
         {/* Parent message context */}

@@ -27,6 +27,8 @@ export const users = pgTable("users", {
   avatarUrl: text("avatar_url"),
   status: text("status").default("offline").notNull(),
   statusMessage: text("status_message"),
+  statusEmoji: text("status_emoji"),
+  statusExpiresAt: timestamp("status_expires_at"),
   isAgent: boolean("is_agent").default(false).notNull(),
   a2aUrl: text("a2a_url"),
   agentCardJson: jsonb("agent_card_json"),
@@ -238,5 +240,39 @@ export const bookmarks = pgTable(
   },
   (table) => [
     uniqueIndex("bookmarks_user_message_unique").on(table.userId, table.messageId),
+  ]
+);
+
+export const reminders = pgTable(
+  "reminders",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .references(() => users.id, { onDelete: "cascade" })
+      .notNull(),
+    channelId: uuid("channel_id").references(() => channels.id, { onDelete: "set null" }),
+    message: text("message").notNull(),
+    remindAt: timestamp("remind_at").notNull(),
+    isCompleted: boolean("is_completed").default(false).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [index("reminders_user_idx").on(t.userId, t.isCompleted, t.remindAt)]
+);
+
+export const threadSubscriptions = pgTable(
+  "thread_subscriptions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .references(() => users.id, { onDelete: "cascade" })
+      .notNull(),
+    messageId: uuid("message_id")
+      .references(() => messages.id, { onDelete: "cascade" })
+      .notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("thread_subscriptions_unique").on(t.userId, t.messageId),
+    index("thread_subscriptions_message_idx").on(t.messageId),
   ]
 );
