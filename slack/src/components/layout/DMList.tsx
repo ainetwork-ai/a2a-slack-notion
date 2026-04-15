@@ -5,7 +5,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import { Plus, ChevronDown, ChevronRight, Bot, Users } from 'lucide-react';
 import NewDMModal from '@/components/modals/NewDMModal';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { usePresence } from '@/lib/realtime/use-presence';
+import { usePresence, UserStatus } from '@/lib/realtime/use-presence';
 import { cn } from '@/lib/utils';
 import useSWR from 'swr';
 
@@ -39,7 +39,17 @@ export default function DMList() {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
   const [newDMOpen, setNewDMOpen] = useState(false);
-  const { isOnline, fetchPresence } = usePresence();
+  const { isOnline, getStatus, fetchPresence } = usePresence();
+
+  function statusDotClass(status: UserStatus): string {
+    switch (status) {
+      case 'online': return 'bg-green-400';
+      case 'dnd': return 'bg-red-500';
+      case 'away':
+      case 'idle': return 'bg-yellow-400';
+      default: return 'bg-slate-500';
+    }
+  }
 
   const { data } = useSWR<DMConversation[]>(
     '/api/dm',
@@ -128,6 +138,7 @@ export default function DMList() {
             // 1-on-1 DM rendering
             if (!convo.otherUser) return null;
             const online = isOnline(convo.otherUser.id);
+            const otherStatus = getStatus(convo.otherUser.id);
             const initials = convo.otherUser.displayName
               .split(' ')
               .map(w => w[0])
@@ -158,7 +169,7 @@ export default function DMList() {
                   <span
                     className={cn(
                       'absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border border-[#1a1d21]',
-                      online ? 'bg-green-400' : 'bg-slate-500'
+                      statusDotClass(otherStatus)
                     )}
                   />
                   {convo.otherUser.isAgent && (
