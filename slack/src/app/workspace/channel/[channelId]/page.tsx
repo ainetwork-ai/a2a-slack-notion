@@ -42,6 +42,7 @@ interface Channel {
   memberCount?: number;
   createdAt?: string;
   lastReadAt?: string | null;
+  isArchived?: boolean;
 }
 
 export default function ChannelPage({ params }: { params: Promise<{ channelId: string }> }) {
@@ -78,6 +79,18 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
       method: 'DELETE',
     });
     router.push('/workspace');
+  }
+
+  async function handleArchiveToggle(archived: boolean) {
+    await fetch(`/api/channels/${channelId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ isArchived: archived }),
+    });
+    mutate(`/api/channels/${channelId}`);
+    // Revalidate channel list so sidebar updates
+    mutate((key: string) => typeof key === 'string' && key.startsWith('/api/channels'), undefined, { revalidate: true });
+    if (archived) router.push('/workspace');
   }
 
   // Issue 1: Reset active thread when switching channels
@@ -351,7 +364,10 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
             createdAt={channel?.createdAt}
             members={channelData?.members ?? []}
             messages={messages}
+            isAdmin={true}
+            isArchived={channel?.isArchived}
             onClose={() => setDetailPanelOpen(false)}
+            onArchiveToggle={handleArchiveToggle}
           />
         )}
       </div>

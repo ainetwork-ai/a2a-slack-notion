@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { users, channels, channelMembers, messages } from "@/lib/db/schema";
-import { eq, and, desc, sql, or } from "drizzle-orm";
+import { eq, and, desc, sql } from "drizzle-orm";
 import { requireAuth } from "@/lib/auth/middleware";
 import { NextRequest, NextResponse } from "next/server";
 
