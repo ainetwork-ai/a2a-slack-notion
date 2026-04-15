@@ -57,16 +57,18 @@ export async function PATCH(
   }
 
   const body = await request.json();
-  const { name, description, iconText } = body as {
+  const { name, description, iconText, iconUrl } = body as {
     name?: string;
     description?: string;
     iconText?: string;
+    iconUrl?: string;
   };
 
-  const updates: Partial<{ name: string; description: string; iconText: string }> = {};
+  const updates: Partial<{ name: string; description: string; iconText: string; iconUrl: string | null }> = {};
   if (name) updates.name = name.trim();
   if (description !== undefined) updates.description = description;
   if (iconText) updates.iconText = iconText.trim().slice(0, 3);
+  if (iconUrl !== undefined) updates.iconUrl = iconUrl ? iconUrl.trim() : null;
 
   const [updated] = await db
     .update(workspaces)

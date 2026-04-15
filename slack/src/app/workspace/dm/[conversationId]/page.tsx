@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, use, useEffect } from 'react';
+import { useState, use, useEffect, useRef } from 'react';
 import { Bot, Phone, Video, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -40,13 +40,20 @@ export default function DMPage({ params }: { params: Promise<{ conversationId: s
   const { conversationId } = use(params);
   const { activeThread } = useAppStore();
   const [selectedSkill, setSelectedSkill] = useState<AgentSkill | null>(null);
+  const lastReadAtRef = useRef<string | null>(null);
 
   useEffect(() => {
-    fetch(`/api/dm/${conversationId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'markRead' }),
-    });
+    // Mark as read and capture the previous lastReadAt in one call
+    fetch(`/api/dm/${conversationId}/read`, { method: 'PATCH' })
+      .then(r => r.json())
+      .then((data: { previousLastReadAt?: string | null }) => {
+        if (data.previousLastReadAt) {
+          lastReadAtRef.current = typeof data.previousLastReadAt === 'string'
+            ? data.previousLastReadAt
+            : (data.previousLastReadAt as Date).toISOString();
+        }
+      })
+      .catch(() => {});
   }, [conversationId]);
 
   const { data: convoData } = useSWR<{ conversation: Conversation }>(
@@ -206,6 +213,7 @@ export default function DMPage({ params }: { params: Promise<{ conversationId: s
             onLoadMore={loadMore}
             onEdit={editMessage}
             onDelete={deleteMessage}
+            lastReadAt={lastReadAtRef.current}
           />
           <TypingIndicator typingUsers={typingUsers} />
 

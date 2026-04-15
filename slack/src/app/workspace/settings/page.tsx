@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useWorkspaceStore } from '@/lib/stores/workspace-store';
 import { useAuth } from '@/lib/hooks/use-auth';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import Image from 'next/image';
 import { Loader2, Settings, Users, Hash, Calendar, Shield, Trash2, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -52,6 +53,7 @@ export default function WorkspaceSettingsPage() {
   // Edit fields
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const [iconUrl, setIconUrl] = useState('');
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
@@ -78,6 +80,7 @@ export default function WorkspaceSettingsPage() {
     if (activeWorkspace) {
       setName(activeWorkspace.name);
       setDescription(activeWorkspace.description ?? '');
+      setIconUrl(activeWorkspace.iconUrl ?? '');
     }
   }, [activeWorkspace]);
 
@@ -100,7 +103,7 @@ export default function WorkspaceSettingsPage() {
       const res = await fetch(`/api/workspaces/${activeWorkspaceId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name.trim(), description: description.trim() }),
+        body: JSON.stringify({ name: name.trim(), description: description.trim(), iconUrl: iconUrl.trim() }),
       });
       if (!res.ok) throw new Error('Failed to save');
       await fetchWorkspaces();
@@ -223,6 +226,41 @@ export default function WorkspaceSettingsPage() {
                 disabled={!isPrivileged || saving}
                 placeholder="Describe your workspace (optional)"
               />
+            </div>
+
+            {/* Icon URL */}
+            <div>
+              <label className="block text-xs font-medium text-slate-400 mb-1.5">
+                Workspace Icon URL
+              </label>
+              <div className="flex items-center gap-3">
+                <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-[#4a154b]/30 border border-[#4a154b]/40 shrink-0 overflow-hidden">
+                  {iconUrl ? (
+                    <Image
+                      src={iconUrl}
+                      alt="Workspace icon"
+                      width={40}
+                      height={40}
+                      className="object-cover w-full h-full"
+                      unoptimized
+                    />
+                  ) : (
+                    <span className="text-white font-bold text-xs">
+                      {activeWorkspace?.iconText ?? 'WS'}
+                    </span>
+                  )}
+                </div>
+                <input
+                  className="flex-1 bg-[#1a1d21] border border-white/10 rounded-lg px-3 py-2 text-white text-sm placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-[#4a154b] disabled:opacity-50"
+                  value={iconUrl}
+                  onChange={(e) => setIconUrl(e.target.value)}
+                  disabled={!isPrivileged || saving}
+                  placeholder="https://example.com/logo.png"
+                />
+              </div>
+              <p className="text-xs text-slate-500 mt-1">
+                Paste an image URL to use as the workspace icon in the sidebar.
+              </p>
             </div>
 
             {isPrivileged && (

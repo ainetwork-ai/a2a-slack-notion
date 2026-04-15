@@ -103,19 +103,17 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
   }, [channelId]);
 
   useEffect(() => {
-    // First fetch channel to capture lastReadAt, then mark as read
-    fetch(`/api/channels/${channelId}/members`)
+    // Mark as read and capture the previous lastReadAt in one call
+    fetch(`/api/channels/${channelId}/read`, { method: 'PATCH' })
       .then(r => r.json())
-      .then(data => {
-        if (data.lastReadAt) lastReadAtRef.current = data.lastReadAt;
+      .then((data: { previousLastReadAt?: string | null }) => {
+        if (data.previousLastReadAt) {
+          lastReadAtRef.current = typeof data.previousLastReadAt === 'string'
+            ? data.previousLastReadAt
+            : (data.previousLastReadAt as Date).toISOString();
+        }
       })
       .catch(() => {});
-
-    fetch(`/api/channels/${channelId}/members`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'markRead' }),
-    });
   }, [channelId]);
 
   useEffect(() => {
