@@ -95,7 +95,7 @@ export function renderInlineMarkdown(text: string): string {
 
   // Item 2 & 13: Style @channel/@here/@everyone and regular @mentions
   html = html.replace(/@(channel|here|everyone)\b/g, '<span class="bg-[#4a154b]/30 px-1 rounded text-white font-semibold">@$1</span>');
-  html = html.replace(/@(\w+)/g, '<span class="text-[#36c5f0] bg-[#36c5f0]/10 px-0.5 rounded cursor-pointer hover:underline">@$1</span>');
+  html = html.replace(/@([\w-]+)/g, '<span class="text-[#36c5f0] bg-[#36c5f0]/10 px-0.5 rounded cursor-pointer hover:underline">@$1</span>');
   html = html.replace(/\n/g, '<br>');
   html = html.replace(/\x00BQSTART\x00([\s\S]*?)\x00BQEND\x00/g, '<blockquote class="border-l-4 border-[#4a154b] pl-3 text-slate-400 bg-white/5 my-0.5">$1</blockquote>');
   return html;
@@ -524,7 +524,22 @@ export default function MessageItem({
             </p>
 
             {/* OG link preview — T6 */}
-            {firstUrl && <OGCard url={firstUrl} />}
+            {firstUrl && (/\.(jpe?g|png|gif|webp|svg)(\?.*)?$/i.test(firstUrl) ? (
+              <div
+                className="mt-2 cursor-pointer inline-block"
+                onClick={() => setLightboxSrc(firstUrl)}
+                title="Click to enlarge"
+              >
+                <img
+                  src={firstUrl}
+                  alt="Image"
+                  className="max-w-[400px] max-h-80 rounded-lg border border-white/10 object-contain hover:opacity-90 transition-opacity"
+                  onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                />
+              </div>
+            ) : (
+              <OGCard url={firstUrl} />
+            ))}
 
             {message.metadata && typeof message.metadata === 'object' && 'fileUrl' in message.metadata && (
               <div className="mt-2">

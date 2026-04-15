@@ -217,7 +217,7 @@ export default function MessageInput({
 
       // Item 1: Check for @mentions of non-members in channel messages
       if (channelId) {
-        const mentionMatches = trimmed.match(/@(\w+)/g);
+        const mentionMatches = trimmed.match(/@([\w-]+)/g);
         if (mentionMatches) {
           try {
             const res = await fetch(`/api/channels/${channelId}/members`);
@@ -272,14 +272,46 @@ export default function MessageInput({
     reportTyping();
 
     // Slash command detection (only when input starts with /)
-    if (val.startsWith('/') && !val.includes(' ')) {
+    if (val.startsWith('/')) {
       const query = val.toLowerCase();
-      const matches = commands.filter(cmd => cmd.name.startsWith(query));
-      setSlashSuggestions(matches);
-      setSlashIndex(0);
-      setMentionSuggestions([]);
-      setMentionQuery('');
-      return;
+
+      // MCP sub-command suggestions: "/mcp " or "/mcp p..."
+      if (query.startsWith('/mcp ')) {
+        const sub = query.slice(5); // after "/mcp "
+        (async () => {
+          try {
+            const res = await fetch('/api/mcp/servers');
+            if (!res.ok) return;
+            const servers: Array<{ id: string; name: string; icon: string; tools: Array<{ name: string; description: string }> }> = await res.json();
+            const mcpSuggestions: Array<{ name: string; description: string }> = [];
+            for (const s of servers) {
+              for (const t of s.tools) {
+                const full = `/mcp ${s.id} ${t.name}`;
+                if (full.startsWith(query) || !sub.trim()) {
+                  mcpSuggestions.push({ name: full, description: `${s.icon} ${t.description}` });
+                }
+              }
+            }
+            setSlashSuggestions(mcpSuggestions);
+            setSlashIndex(0);
+          } catch { /* ignore */ }
+        })();
+        setMentionSuggestions([]);
+        setMentionQuery('');
+        return;
+      }
+
+      // Built-in command suggestions (no space yet)
+      if (!val.includes(' ')) {
+        const matches = commands.filter(cmd => cmd.name.startsWith(query));
+        setSlashSuggestions(matches);
+        setSlashIndex(0);
+        setMentionSuggestions([]);
+        setMentionQuery('');
+        return;
+      }
+
+      setSlashSuggestions([]);
     } else {
       setSlashSuggestions([]);
     }
@@ -287,7 +319,7 @@ export default function MessageInput({
     // Mention detection
     const cursor = e.target.selectionStart ?? 0;
     const textBefore = val.slice(0, cursor);
-    const mentionMatch = textBefore.match(/@(\w*)$/);
+    const mentionMatch = textBefore.match(/@([\w-]*)$/);
     if (mentionMatch) {
       const query = mentionMatch[1];
       setMentionQuery(query);
@@ -318,7 +350,7 @@ export default function MessageInput({
     const cursor = textareaRef.current?.selectionStart ?? content.length;
     const before = content.slice(0, cursor);
     const after = content.slice(cursor);
-    const newBefore = before.replace(/@\w*$/, `@${user.displayName} `);
+    const newBefore = before.replace(/@[\w-]*$/, `@${user.displayName} `);
     setContent(newBefore + after);
     setMentionSuggestions([]);
     setTimeout(() => {
@@ -447,13 +479,16 @@ export default function MessageInput({
       const res = await fetch('/api/upload', { method: 'POST', body: formData });
       const data = await res.json();
       if (!res.ok) {
-        setUploadError(data.error || 'Upload failed');
+        const msg = data.error || 'Upload failed';
+        setUploadError(msg);
+        setTimeout(() => setUploadError(''), 5000);
         return;
       }
       const { url, fileName, mimeType, size } = data;
       setPendingFile({ url, fileName, mimeType, size });
     } catch {
       setUploadError('Upload failed. Please try again.');
+      setTimeout(() => setUploadError(''), 5000);
     } finally {
       setIsUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -469,13 +504,16 @@ export default function MessageInput({
       const res = await fetch('/api/upload', { method: 'POST', body: formData });
       const data = await res.json();
       if (!res.ok) {
-        setUploadError(data.error || 'Upload failed');
+        const msg = data.error || 'Upload failed';
+        setUploadError(msg);
+        setTimeout(() => setUploadError(''), 5000);
         return;
       }
       const { url, fileName, mimeType, size } = data;
       setPendingFile({ url, fileName, mimeType, size });
     } catch {
       setUploadError('Upload failed. Please try again.');
+      setTimeout(() => setUploadError(''), 5000);
     } finally {
       setIsUploading(false);
     }

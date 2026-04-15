@@ -11,6 +11,7 @@ import {
 import { Bell, AtSign, MessageSquare, Mail, ChevronDown, ChevronRight } from 'lucide-react';
 import { useNotifications, Notification } from '@/lib/hooks/use-notifications';
 import { cn } from '@/lib/utils';
+import { useToast } from '@/components/ui/toast-provider';
 
 function NotificationIcon({ type }: { type: string }) {
   switch (type) {
@@ -61,6 +62,7 @@ function groupNotifications(notifications: Notification[]): NotificationGroup[] 
 
 export default function NotificationPanel() {
   const router = useRouter();
+  const { showToast } = useToast();
   const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
 
@@ -86,6 +88,8 @@ export default function NotificationPanel() {
       router.push(`/workspace/channel/${notification.message.channelId}`);
     } else if (notification.message?.conversationId) {
       router.push(`/workspace/dm/${notification.message.conversationId}`);
+    } else {
+      showToast('Message not found', 'error');
     }
   }
 
