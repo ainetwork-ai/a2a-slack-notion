@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { highlightCode } from '@/lib/syntax-highlight';
 import { format } from 'date-fns';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
@@ -20,6 +21,9 @@ function CodeBlock({ lang, code }: { lang: string; code: string }) {
       setTimeout(() => setCopied(false), 2000);
     });
   }
+
+  const highlighted = highlightCode(code, lang);
+
   return (
     <div className="relative group/code my-1">
       <pre className="bg-[#222529] p-3 rounded overflow-x-auto">
@@ -34,9 +38,10 @@ function CodeBlock({ lang, code }: { lang: string; code: string }) {
         >
           {copied ? 'Copied!' : 'Copy'}
         </button>
-        <code className={`text-sm font-mono text-slate-200 whitespace-pre${lang ? ' pt-4 block' : ''}`}>
-          {code}
-        </code>
+        <code
+          className={`text-sm font-mono text-slate-200 whitespace-pre${lang ? ' pt-4 block' : ''}`}
+          dangerouslySetInnerHTML={{ __html: highlighted }}
+        />
       </pre>
     </div>
   );
@@ -215,6 +220,7 @@ import { Message } from '@/lib/hooks/use-messages';
 import ReactionPicker from './ReactionPicker';
 import ImageLightbox from './ImageLightbox';
 import UserProfilePopup from './UserProfilePopup';
+import ShareMessageModal from '@/components/modals/ShareMessageModal';
 import { cn } from '@/lib/utils';
 import { useAppStore } from '@/lib/stores/app-store';
 import { useToast } from '@/components/ui/toast-provider';
@@ -252,6 +258,7 @@ export default function MessageItem({
   const [isPinned, setIsPinned] = useState(!!message.pinnedAt);
   const [isBookmarked, setIsBookmarked] = useState(false);
   const [animatingReactions, setAnimatingReactions] = useState<Set<string>>(new Set());
+  const [shareModalOpen, setShareModalOpen] = useState(false);
 
   const isOwn = message.senderId === currentUserId;
   const senderName = message.senderName || 'Unknown';
@@ -331,11 +338,7 @@ export default function MessageItem({
   }
 
   function handleShare() {
-    const channelPart = channelName ? `[#${channelName}] ` : '';
-    const text = `${channelPart}${senderName}: ${message.content}`;
-    navigator.clipboard.writeText(text).then(() => {
-      showToast('Copied to clipboard', 'success');
-    });
+    setShareModalOpen(true);
   }
 
   function handleCopyText() {
@@ -749,6 +752,14 @@ export default function MessageItem({
           onClose={() => setLightboxSrc(null)}
         />
       )}
+
+      {/* Share message modal */}
+      <ShareMessageModal
+        open={shareModalOpen}
+        onClose={() => setShareModalOpen(false)}
+        messageContent={message.content}
+        sourceChannelName={channelName}
+      />
 
     </div>
   );

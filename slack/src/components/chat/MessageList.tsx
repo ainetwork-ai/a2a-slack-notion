@@ -27,9 +27,9 @@ function DateSeparator({ date }: { date: Date }) {
   else label = format(date, 'MMMM d, yyyy');
 
   return (
-    <div className="flex items-center gap-3 px-4 py-2 my-2">
+    <div className="flex items-center gap-3 px-4 py-2 my-2 animate-in fade-in slide-in-from-top-1 duration-300">
       <div className="flex-1 h-px bg-white/10" />
-      <span className="text-xs text-slate-400 font-medium px-2 py-0.5 bg-[#1a1d21] border border-white/10 rounded-full whitespace-nowrap">
+      <span className="text-xs text-slate-400 font-medium px-3 py-1 bg-[#222529] border border-white/10 rounded-full whitespace-nowrap shadow-sm select-none">
         {label}
       </span>
       <div className="flex-1 h-px bg-white/10" />
@@ -78,9 +78,9 @@ export default function MessageList({
     if (!el || messages.length === 0) return;
 
     if (!hasScrolledInitially.current) {
-      // Use requestAnimationFrame to ensure DOM has rendered
+      // Use requestAnimationFrame to ensure DOM has rendered — instant jump on first load
       requestAnimationFrame(() => {
-        el.scrollTop = el.scrollHeight;
+        el.scrollTo({ top: el.scrollHeight, behavior: 'instant' });
       });
       hasScrolledInitially.current = true;
       prevLengthRef.current = messages.length;
@@ -90,9 +90,9 @@ export default function MessageList({
     // Auto-scroll on new messages only if near bottom
     if (messages.length > prevLengthRef.current) {
       const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-      if (distanceFromBottom <= 150) {
+      if (distanceFromBottom <= 100) {
         requestAnimationFrame(() => {
-          el.scrollTop = el.scrollHeight;
+          el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
         });
       } else {
         // Item 8: Show jump button when new messages arrive while scrolled up
@@ -135,9 +135,9 @@ export default function MessageList({
     }
   }
 
-  function scrollToBottom() {
+  function scrollToBottom(behavior: ScrollBehavior = 'smooth') {
     const el = scrollAreaRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
+    if (el) el.scrollTo({ top: el.scrollHeight, behavior });
     setShowJumpButton(false);
   }
 
@@ -155,6 +155,7 @@ export default function MessageList({
     <div className="relative flex-1 overflow-hidden">
     <div
       className="message-area h-full overflow-y-auto scrollbar-slack"
+      style={{ scrollBehavior: 'smooth' }}
       onScroll={handleScroll}
       ref={scrollAreaRef}
       aria-live="polite"
@@ -215,7 +216,7 @@ export default function MessageList({
     {showJumpButton && (
       <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20">
         <button
-          onClick={scrollToBottom}
+          onClick={() => scrollToBottom('smooth')}
           className="flex items-center gap-1.5 px-3 py-1.5 bg-[#4a154b] hover:bg-[#611f6a] text-white text-xs font-medium rounded-full shadow-lg transition-colors"
         >
           ↓ New messages
