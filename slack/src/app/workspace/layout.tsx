@@ -119,8 +119,8 @@ export default function WorkspaceLayout({
         ].join(' ')}
       >
         {/* Workspace name */}
-        <div className="flex items-center justify-between px-4 h-12 border-b border-white/5 shrink-0">
-          <button onClick={() => setWorkspaceModalOpen(true)} className="flex items-center gap-1 font-bold text-white text-base truncate hover:bg-white/10 rounded px-1 -mx-1 transition-colors">
+        <div className="flex items-center justify-between px-4 h-12 border-b border-white/5 shrink-0 channel-header">
+          <button onClick={() => setWorkspaceModalOpen(true)} className="flex items-center gap-1 font-bold text-base truncate hover:bg-white/10 rounded px-1 -mx-1 transition-colors" style={{ color: 'var(--slack-text-primary)' }}>
             {workspaces.find((w) => w.id === activeWorkspaceId)?.name ?? 'Slack-A2A'}
             <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
           </button>

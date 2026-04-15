@@ -3,8 +3,13 @@
 import { useEffect } from 'react';
 import { useThemeStore } from '@/lib/stores/theme-store';
 
-export default function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const { theme } = useThemeStore();
+/**
+ * Hook that manages dark/light theme state.
+ * Syncs the zustand theme store to the html element's `dark` class,
+ * enabling Tailwind's dark mode strategy (darkMode: 'class').
+ */
+export function useTheme() {
+  const { theme, toggleTheme } = useThemeStore();
 
   useEffect(() => {
     const html = document.documentElement;
@@ -17,5 +22,5 @@ export default function ThemeProvider({ children }: { children: React.ReactNode 
     }
   }, [theme]);
 
-  return <>{children}</>;
+  return { theme, toggleTheme, isDark: theme === 'dark' };
 }
