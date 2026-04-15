@@ -3,7 +3,7 @@
 import { useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 
-import { Home, Search, Bell, MessageSquare, Smile, LogOut, Sun, Moon, Inbox, MessagesSquare, Plus } from 'lucide-react';
+import { Home, Search, Bell, MessageSquare, Smile, LogOut, Sun, Moon, Inbox, MessagesSquare, Plus, Bookmark } from 'lucide-react';
 import NotificationPanel from '@/components/modals/NotificationPanel';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -175,6 +175,12 @@ export default function Sidebar() {
         label="Threads"
         onClick={() => router.push('/workspace/threads')}
         active={pathname === '/workspace/threads'}
+      />
+      <NavButton
+        icon={<Bookmark className="w-5 h-5" />}
+        label="Saved Items"
+        onClick={() => router.push('/workspace/saved')}
+        active={pathname === '/workspace/saved'}
       />
       <NavButton
         icon={<Inbox className="w-5 h-5" />}

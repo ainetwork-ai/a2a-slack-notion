@@ -217,7 +217,7 @@ import {
   TooltipProvider,
 } from '@/components/ui/tooltip';
 import { Button } from '@/components/ui/button';
-import { MoreHorizontal, SmilePlus, MessageSquare, Pencil, Trash2, Pin, Paperclip, Share2 } from 'lucide-react';
+import { MoreHorizontal, SmilePlus, MessageSquare, Pencil, Trash2, Pin, Paperclip, Share2, Bookmark } from 'lucide-react';
 import { Message } from '@/lib/hooks/use-messages';
 import ReactionPicker from './ReactionPicker';
 import ImageLightbox from './ImageLightbox';
@@ -259,6 +259,7 @@ export default function MessageItem({
   const toastTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [isPinned, setIsPinned] = useState(!!message.pinnedAt);
+  const [isBookmarked, setIsBookmarked] = useState(false);
 
   const isOwn = message.senderId === currentUserId;
   const senderName = message.senderName || 'Unknown';
@@ -297,6 +298,24 @@ export default function MessageItem({
     if (res.ok) {
       const data = await res.json();
       setIsPinned(data.pinned);
+    }
+  }
+
+  async function handleBookmark() {
+    if (isBookmarked) {
+      await fetch('/api/bookmarks', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messageId: message.id }),
+      });
+      setIsBookmarked(false);
+    } else {
+      await fetch('/api/bookmarks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messageId: message.id }),
+      });
+      setIsBookmarked(true);
     }
   }
 
@@ -576,6 +595,18 @@ export default function MessageItem({
               <MessageSquare className="w-3.5 h-3.5" />
             </Button>
           )}
+          <Button
+            size="icon"
+            variant="ghost"
+            className={cn(
+              'w-7 h-7 hover:bg-white/10',
+              isBookmarked ? 'text-yellow-400 hover:text-yellow-300' : 'text-slate-400 hover:text-white'
+            )}
+            onClick={handleBookmark}
+            title={isBookmarked ? 'Remove bookmark' : 'Save for later'}
+          >
+            <Bookmark className={cn('w-3.5 h-3.5', isBookmarked && 'fill-yellow-400')} />
+          </Button>
           <DropdownMenu>
             <DropdownMenuTrigger className="inline-flex items-center justify-center w-7 h-7 rounded text-slate-400 hover:text-white hover:bg-white/10 transition-colors focus:outline-none">
               <MoreHorizontal className="w-3.5 h-3.5" />

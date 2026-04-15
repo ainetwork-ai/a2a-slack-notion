@@ -223,3 +223,20 @@ export const typingStatus = pgTable("typing_status", {
     .notNull(),
   expiresAt: timestamp("expires_at").notNull(),
 });
+
+export const bookmarks = pgTable(
+  "bookmarks",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+      .references(() => users.id, { onDelete: "cascade" })
+      .notNull(),
+    messageId: uuid("message_id")
+      .references(() => messages.id, { onDelete: "cascade" })
+      .notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("bookmarks_user_message_unique").on(table.userId, table.messageId),
+  ]
+);
