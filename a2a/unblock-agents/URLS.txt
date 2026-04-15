@@ -1,0 +1,117 @@
+══════════════════════════════════════════════════════════════════════
+  UNBLOCK MEDIA — A2A AGENT URLS (10 agents)
+══════════════════════════════════════════════════════════════════════
+
+Replace {BASE} with wherever you deploy unblock-agents, e.g.
+  {BASE}=http://localhost:3000              (local dev)
+  {BASE}=https://xyz.ngrok-free.app          (ngrok tunnel)
+  {BASE}=https://unblock-agents.vercel.app   (Vercel deploy)
+
+Every agent exposes:
+  • GET  {BASE}/api/agents/{id}/.well-known/agent.json   → AgentCard
+  • POST {BASE}/api/agents/{id}                          → JSON-RPC (A2A message/send, message/stream)
+  • OPTIONS handled for CORS preflight (Access-Control-Allow-Origin: *)
+
+──────────────────────────────────────────────────────────────────────
+REPORTERS (skills: report, writing, revision)
+──────────────────────────────────────────────────────────────────────
+
+[Max]    Bitcoin maximalist — 발랄·유쾌
+  Card: {BASE}/api/agents/unblock-max/.well-known/agent.json
+  Send: {BASE}/api/agents/unblock-max
+
+[Techa]  Blockchain & tech — 차분·친절
+  Card: {BASE}/api/agents/unblock-techa/.well-known/agent.json
+  Send: {BASE}/api/agents/unblock-techa
+
+[Mark]   Web3 & macroeconomics — 직설·자신감
+  Card: {BASE}/api/agents/unblock-mark/.well-known/agent.json
+  Send: {BASE}/api/agents/unblock-mark
+
+[Roy]    Regulation & legal — 다정·확신
+  Card: {BASE}/api/agents/unblock-roy/.well-known/agent.json
+  Send: {BASE}/api/agents/unblock-roy
+
+[April]  DAO/DApp/DeFi & interviews — 활발·유치원 선생님
+  Card: {BASE}/api/agents/unblock-april/.well-known/agent.json
+  Send: {BASE}/api/agents/unblock-april
+
+──────────────────────────────────────────────────────────────────────
+MANAGERS (skills: guide, feedback)
+──────────────────────────────────────────────────────────────────────
+
+[Lilly]     Law & compliance — 거만·자신감
+  Card: {BASE}/api/agents/unblock-lilly/.well-known/agent.json
+  Send: {BASE}/api/agents/unblock-lilly
+
+[Logan]     Market analysis & tech — 과묵·딱딱
+  Card: {BASE}/api/agents/unblock-logan/.well-known/agent.json
+  Send: {BASE}/api/agents/unblock-logan
+
+[Victoria]  Finance & investment — 과장·노골적
+  Card: {BASE}/api/agents/unblock-victoria/.well-known/agent.json
+  Send: {BASE}/api/agents/unblock-victoria
+
+──────────────────────────────────────────────────────────────────────
+EDITOR-IN-CHIEF (skills: assignment, confirm)
+──────────────────────────────────────────────────────────────────────
+
+[Damien]    30년차 베테랑 편집국장 — 온건·진중
+  Card: {BASE}/api/agents/unblock-damien/.well-known/agent.json
+  Send: {BASE}/api/agents/unblock-damien
+
+──────────────────────────────────────────────────────────────────────
+DESIGNER (skills: drawing)
+──────────────────────────────────────────────────────────────────────
+
+[Olive]     Graphic/pictogram designer — 차분·이상주의
+  Card: {BASE}/api/agents/unblock-olive/.well-known/agent.json
+  Send: {BASE}/api/agents/unblock-olive
+
+══════════════════════════════════════════════════════════════════════
+  CALLING A SKILL
+══════════════════════════════════════════════════════════════════════
+
+# Fetch an AgentCard:
+curl {BASE}/api/agents/unblock-max/.well-known/agent.json
+
+# Send a message to a skill (here: Max's "report" skill):
+curl -X POST {BASE}/api/agents/unblock-max \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "message/send",
+    "params": {
+      "message": {
+        "kind": "message",
+        "messageId": "msg-1",
+        "role": "user",
+        "parts": [{ "kind": "text", "text": "비트코인 관점에서 최근 시장 분석해줘" }],
+        "metadata": { "skillId": "report" }
+      }
+    }
+  }'
+
+# Plain chat with the persona (no skillId):
+curl -X POST {BASE}/api/agents/unblock-max \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "message/send",
+    "params": {
+      "message": {
+        "kind": "message",
+        "messageId": "msg-1",
+        "role": "user",
+        "parts": [{ "kind": "text", "text": "안녕하세요!" }]
+      }
+    }
+  }'
+
+# Streaming response (Server-Sent Events):
+curl -N -X POST {BASE}/api/agents/unblock-max \
+  -H "Content-Type: application/json" \
+  -H "Accept: text/event-stream" \
+  -d '{ "jsonrpc":"2.0","id":1,"method":"message/stream","params":{ ... } }'
