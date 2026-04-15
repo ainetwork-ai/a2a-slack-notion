@@ -5,7 +5,7 @@
  */
 
 import { db } from "@/lib/db";
-import { users, workspaceMembers, channels, channelMembers } from "@/lib/db/schema";
+import { users, workspaceMembers, channels, channelMembers, agentSkillConfigs } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
 import { v4 as uuidv4 } from "uuid";
 
@@ -286,34 +286,19 @@ async function createAgent(
 
   const ainAddress = `agent-${def.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${Date.now()}`;
 
+  // Standard A2A agent card: only id, name, description, skills (with id, name, description, tags, examples)
+  const defaultSkillId = role;
   const agentCard = {
     name: def.name,
     description,
-    systemPrompt,
-    mcpAccess: template.mcpAccess,
-    skills: [],
-    builtBy: userId,
-    provider: { organization: "Slack-A2A" },
-    version: "2.0.0",
-    defaultInputModes: ["text/plain"],
-    defaultOutputModes: ["text/plain"],
-    capabilities: {
-      streaming: false,
-      pushNotifications: false,
-      stateTransitionHistory: false,
-      extensions: [
-        {
-          uri: "urn:a2a:ext:memory",
-          description: "Persistent agent memory across conversations",
-          required: false,
-        },
-        {
-          uri: "urn:a2a:ext:tool-use",
-          description: "LLM-driven MCP tool invocation",
-          required: false,
-        },
-      ],
-    },
+    skills: [
+      {
+        id: defaultSkillId,
+        name: def.name,
+        description,
+        tags: [role],
+      },
+    ],
   };
 
   const [agent] = await db
@@ -336,9 +321,22 @@ async function createAgent(
   if (a2aUrl) {
     await db
       .update(users)
-      .set({ a2aUrl, agentCardJson: { ...agentCard, url: a2aUrl } })
+      .set({ a2aUrl })
       .where(eq(users.id, agent.id));
   }
+
+  // Create skill config with internal implementation details (not in agent card)
+  await db
+    .insert(agentSkillConfigs)
+    .values({
+      agentId: agent.id,
+      skillId: defaultSkillId,
+      instruction: systemPrompt,
+      mcpTools: template.mcpAccess,
+      outputFormat: "text",
+      maxTokens: 2000,
+    })
+    .onConflictDoNothing();
 
   // Add agent to creator's workspaces and their public channels
   const creatorWorkspaces = await db

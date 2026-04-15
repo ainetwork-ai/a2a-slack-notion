@@ -485,3 +485,23 @@ export const messageEdits = pgTable(
   },
   (t) => [index("message_edits_message_idx").on(t.messageId)]
 );
+
+export const agentSkillConfigs = pgTable(
+  "agent_skill_configs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    agentId: uuid("agent_id")
+      .references(() => users.id, { onDelete: "cascade" })
+      .notNull(),
+    skillId: text("skill_id").notNull(),
+    instruction: text("instruction").notNull(),
+    mcpTools: jsonb("mcp_tools").$type<string[]>().default([]),
+    outputFormat: text("output_format").default("text"),
+    temperature: integer("temperature"),
+    maxTokens: integer("max_tokens").default(2000),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("agent_skill_configs_unique").on(t.agentId, t.skillId),
+  ]
+);

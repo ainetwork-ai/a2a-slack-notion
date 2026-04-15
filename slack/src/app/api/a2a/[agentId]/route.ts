@@ -9,8 +9,8 @@
  */
 
 import { db } from "@/lib/db";
-import { users } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { users, agentSkillConfigs } from "@/lib/db/schema";
+import { eq, and } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { callVLLM } from "@/lib/a2a/vllm-handler";
 import { v4 as uuidv4 } from "uuid";
@@ -21,43 +21,51 @@ interface AgentCardJson {
   systemPrompt?: string;
   version?: string;
   capabilities?: Record<string, unknown>;
-  skills?: unknown[];
+  skills?: Array<{ id?: string; name?: string; description?: string; tags?: string[]; examples?: string[]; [key: string]: unknown }>;
   defaultInputModes?: string[];
   defaultOutputModes?: string[];
   provider?: unknown;
   [key: string]: unknown;
 }
 
+/**
+ * Build an A2A standard-compliant agent card.
+ * Only includes: id, name, description, url, skills (with id, name, description, tags, examples).
+ * Internal fields (systemPrompt, mcpAccess, etc.) are excluded.
+ */
 function buildAgentCard(
   agentId: string,
   card: AgentCardJson,
   agentName: string,
   requestUrl: string
 ): Record<string, unknown> {
-  // The canonical base URL for this agent
   const agentBaseUrl = requestUrl.replace(/\/$/, "");
 
+  // Build skills with only standard A2A fields
+  const rawSkills = card.skills ?? [];
+  const skills = rawSkills.length > 0
+    ? rawSkills.map((s) => ({
+        id: s.id ?? "default",
+        name: s.name ?? "Chat",
+        description: s.description ?? `Talk to ${agentName}`,
+        tags: s.tags ?? ["chat"],
+        ...(s.examples ? { examples: s.examples } : {}),
+      }))
+    : [
+        {
+          id: "default",
+          name: "Chat",
+          description: card.description ?? `Talk to ${agentName}`,
+          tags: ["chat"],
+        },
+      ];
+
   return {
+    id: agentId,
     name: card.name ?? agentName,
     description: card.description ?? `${agentName} agent`,
-    version: card.version ?? "1.0.0",
     url: agentBaseUrl,
-    provider: card.provider ?? { organization: "Slack-A2A" },
-    capabilities: card.capabilities ?? {
-      streaming: false,
-      pushNotifications: false,
-      stateTransitionHistory: false,
-    },
-    defaultInputModes: card.defaultInputModes ?? ["text/plain"],
-    defaultOutputModes: card.defaultOutputModes ?? ["text/plain"],
-    skills: card.skills ?? [
-      {
-        id: "default",
-        name: "Chat",
-        description: card.description ?? `Talk to ${agentName}`,
-        tags: ["chat"],
-      },
-    ],
+    skills,
   };
 }
 
@@ -145,8 +153,9 @@ export async function POST(
     });
   }
 
-  // Extract text from A2A message parts
+  // Extract text and skillId from A2A message parts/metadata
   let userText = "";
+  let skillId: string | undefined;
   try {
     const msg = rpcParams?.message as Record<string, unknown> | undefined;
     const parts = (msg?.parts ?? []) as Array<Record<string, unknown>>;
@@ -154,6 +163,10 @@ export async function POST(
       if (part.kind === "text" && typeof part.text === "string") {
         userText += part.text;
       }
+    }
+    const metadata = msg?.metadata as Record<string, unknown> | undefined;
+    if (metadata?.skillId && typeof metadata.skillId === "string") {
+      skillId = metadata.skillId;
     }
   } catch {
     userText = "";
@@ -168,8 +181,29 @@ export async function POST(
   }
 
   const card = (agent.agentCardJson ?? {}) as AgentCardJson;
-  const systemPrompt =
+  let systemPrompt =
     card.systemPrompt ?? `You are ${agent.displayName}, a helpful assistant.`;
+
+  // If a skillId was provided, look up the skill config and append its instruction
+  if (skillId) {
+    const [skillConfig] = await db
+      .select()
+      .from(agentSkillConfigs)
+      .where(
+        and(
+          eq(agentSkillConfigs.agentId, agentId),
+          eq(agentSkillConfigs.skillId, skillId)
+        )
+      )
+      .limit(1);
+
+    if (skillConfig) {
+      systemPrompt = `${systemPrompt}\n\n## Skill: ${skillId}\n${skillConfig.instruction}`;
+      if (skillConfig.mcpTools && skillConfig.mcpTools.length > 0) {
+        systemPrompt += `\n\nAvailable tools for this skill: ${skillConfig.mcpTools.join(", ")}`;
+      }
+    }
+  }
 
   let responseText: string;
   try {
