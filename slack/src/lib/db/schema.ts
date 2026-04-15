@@ -385,6 +385,25 @@ export const webhooks = pgTable(
   ]
 );
 
+export const agentMemories = pgTable(
+  "agent_memories",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    agentId: uuid("agent_id")
+      .references(() => users.id, { onDelete: "cascade" })
+      .notNull(),
+    key: text("key").notNull(),
+    value: text("value").notNull(),
+    metadata: jsonb("metadata"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("agent_memories_unique").on(t.agentId, t.key),
+    index("agent_memories_agent_idx").on(t.agentId),
+  ]
+);
+
 export const customCommands = pgTable(
   "custom_commands",
   {

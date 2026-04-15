@@ -79,6 +79,73 @@ export const MCP_SERVERS: McpServer[] = [
       },
     ],
   },
+  {
+    id: "slack",
+    name: "Slack Workspace",
+    description: "Search messages, read threads, and get channel info from this workspace",
+    icon: "💬",
+    tools: [
+      {
+        name: "read_thread",
+        description: "Read recent messages from a channel or DM",
+        parameters: {
+          channelId: { type: "string", description: "Channel ID" },
+          conversationId: { type: "string", description: "DM conversation ID" },
+          limit: { type: "number", description: "Number of messages (default 10, max 30)" },
+        },
+      },
+      {
+        name: "get_context",
+        description: "Get messages around a specific message",
+        parameters: {
+          messageId: { type: "string", description: "Message ID to get context around", required: true },
+          before: { type: "number", description: "Messages before (default 5)" },
+          after: { type: "number", description: "Messages after (default 5)" },
+        },
+      },
+      {
+        name: "search",
+        description: "Search messages across the workspace",
+        parameters: {
+          query: { type: "string", description: "Search query", required: true },
+          channelId: { type: "string", description: "Limit to specific channel" },
+          limit: { type: "number", description: "Number of results (default 10)" },
+        },
+      },
+      {
+        name: "channel_info",
+        description: "Get channel details and member list",
+        parameters: {
+          channelId: { type: "string", description: "Channel ID", required: true },
+        },
+      },
+      {
+        name: "memory_read",
+        description: "Read agent's stored memories (all or by key)",
+        parameters: {
+          agentId: { type: "string", description: "Agent ID", required: true },
+          key: { type: "string", description: "Specific memory key (optional)" },
+        },
+      },
+      {
+        name: "memory_write",
+        description: "Store a key-value memory for the agent",
+        parameters: {
+          agentId: { type: "string", description: "Agent ID", required: true },
+          key: { type: "string", description: "Memory key", required: true },
+          value: { type: "string", description: "Memory value", required: true },
+        },
+      },
+      {
+        name: "memory_delete",
+        description: "Delete a stored memory by key",
+        parameters: {
+          agentId: { type: "string", description: "Agent ID", required: true },
+          key: { type: "string", description: "Memory key to delete", required: true },
+        },
+      },
+    ],
+  },
 ];
 
 export function getServer(serverId: string): McpServer | undefined {

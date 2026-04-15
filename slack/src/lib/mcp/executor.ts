@@ -1,5 +1,6 @@
 import * as polymarket from "./providers/polymarket";
 import * as news from "./providers/news";
+import * as slack from "./providers/slack";
 
 type ProviderFn = (params: Record<string, unknown>) => Promise<string>;
 
@@ -13,6 +14,15 @@ const providers: Record<string, Record<string, ProviderFn>> = {
     search: news.search as ProviderFn,
     trending: news.trending as ProviderFn,
     topic: news.topic as ProviderFn,
+  },
+  slack: {
+    read_thread: slack.read_thread as ProviderFn,
+    get_context: slack.get_context as ProviderFn,
+    search: slack.search as ProviderFn,
+    channel_info: slack.channel_info as ProviderFn,
+    memory_read: slack.memory_read as ProviderFn,
+    memory_write: slack.memory_write as ProviderFn,
+    memory_delete: slack.memory_delete as ProviderFn,
   },
 };
 

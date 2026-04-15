@@ -2,18 +2,34 @@ import { db } from "@/lib/db";
 import { messages, users } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { sendA2AMessage } from "./client";
-import type { AgentSkill } from "@a2a-js/sdk";
 import { executeTool } from "@/lib/mcp/executor";
+import { MCP_SERVERS } from "@/lib/mcp/registry";
 
 const VLLM_BASE_URL = process.env.VLLM_URL || "http://localhost:8100";
 const VLLM_MODEL = process.env.VLLM_MODEL || "gemma-4-31B-it";
+const MAX_TOOL_ROUNDS = 5;
+
+interface SkillDef {
+  id: string;
+  name: string;
+  description: string;
+  instruction: string;
+}
 
 interface BuiltAgentCard {
   url?: string;
   systemPrompt?: string;
-  mcpServerIds?: string[];
+  mcpAccess?: string[];
+  skills?: SkillDef[];
   builtBy?: string;
-  skills?: AgentSkill[];
+}
+
+interface MessagePointer {
+  channelId?: string;
+  conversationId?: string;
+  messageId?: string;
+  senderName?: string;
+  agentId?: string;
 }
 
 export async function sendToAgent(params: {
@@ -22,6 +38,8 @@ export async function sendToAgent(params: {
   channelId?: string;
   conversationId?: string;
   skillId?: string;
+  messageId?: string;
+  senderName?: string;
 }) {
   const [agent] = await db
     .select()
@@ -34,20 +52,28 @@ export async function sendToAgent(params: {
   const agentName = agent.displayName;
   const card = agent.agentCardJson as BuiltAgentCard | null;
 
+  const pointer: MessagePointer = {
+    channelId: params.channelId,
+    conversationId: params.conversationId,
+    messageId: params.messageId,
+    senderName: params.senderName,
+    agentId: params.agentId,
+  };
+
   let content: string;
   let metadata: Record<string, unknown>;
 
-  // Built agent (no a2aUrl) → use local vLLM + skill routing
+  // Built agent → always LLM with tool-use loop
   if (!agent.a2aUrl && card?.builtBy) {
     try {
-      content = await handleBuiltAgent(card, params.text, agentName, params.skillId);
+      content = await runAgent(card, params.text, agentName, pointer, params.skillId);
       metadata = { agentName, provider: "vllm" };
     } catch (err) {
       content = `I'm having trouble responding right now. (${err instanceof Error ? err.message : "Unknown error"})`;
       metadata = { agentName, provider: "vllm", error: true };
     }
   }
-  // External A2A agent → use SDK client
+  // External A2A agent → SDK client
   else if (agent.a2aUrl) {
     const rpcUrl = card?.url || agent.a2aUrl;
     try {
@@ -86,176 +112,182 @@ export async function sendToAgent(params: {
 }
 
 /**
- * Handle a built agent message using A2A skill routing + Gemma4 (vLLM).
- *
- * Skill routing:
- *   1. Explicit skillId → execute MCP tool directly
- *   2. Parse message for "<serverId>:<toolName>" or "<serverId> <toolName>" patterns
- *   3. Fallback → Gemma4 with auto-detected MCP context
+ * Run a built agent: build system prompt → LLM tool-use loop → response.
+ * Skills are hints, MCP tools are the actual capabilities.
+ * The LLM decides which tools to call and how.
  */
-async function handleBuiltAgent(
+async function runAgent(
   card: BuiltAgentCard,
   userMessage: string,
   agentName: string,
-  explicitSkillId?: string
+  pointer: MessagePointer,
+  skillHint?: string
 ): Promise<string> {
-  const skills = card.skills || [];
+  // ── Build system prompt ──
 
-  // 1. Explicit skillId from @Agent invocation
-  if (explicitSkillId) {
-    const directResult = await executeSkill(explicitSkillId, userMessage);
-    if (directResult) return directResult;
-  }
-
-  // 2. Try to match message against skill patterns
-  const matchedSkill = matchSkillFromMessage(userMessage, skills);
-  if (matchedSkill) {
-    const { skillId, remainingArgs } = matchedSkill;
-    const directResult = await executeSkill(skillId, remainingArgs || userMessage);
-    if (directResult) return directResult;
-  }
-
-  // 3. Fallback: Gemma4 with auto-gathered MCP context
-  return callGemma4WithContext(card, userMessage, agentName);
-}
-
-/**
- * Execute an A2A skill by ID. Skills use format "serverId:toolName".
- */
-async function executeSkill(
-  skillId: string,
-  args: string
-): Promise<string | null> {
-  // Skills are formatted as "serverId:toolName"
-  const [serverId, toolName] = skillId.split(":");
-  if (!serverId || !toolName) return null;
-
-  // Parse args for tool parameters
-  const params: Record<string, unknown> = {};
-  const trimmedArgs = args.trim();
-  if (trimmedArgs) {
-    // For search-like tools, the args are the query
-    params.query = trimmedArgs;
-  }
-
-  const result = await executeTool(serverId, toolName, params);
-  if (result.success) return result.content;
-  return null;
-}
-
-/**
- * Match user message against agent skills.
- * Patterns: "polymarket trending", "news search bitcoin", "trending markets"
- */
-function matchSkillFromMessage(
-  message: string,
-  skills: AgentSkill[]
-): { skillId: string; remainingArgs: string } | null {
-  const lower = message.toLowerCase().trim();
-
-  for (const skill of skills) {
-    if (skill.id === "chat") continue; // skip general chat skill
-
-    const [serverId, toolName] = skill.id.split(":");
-    if (!serverId || !toolName) continue;
-
-    // Match "<serverId> <toolName> [args]"
-    const pattern1 = `${serverId} ${toolName}`;
-    if (lower.startsWith(pattern1)) {
-      return {
-        skillId: skill.id,
-        remainingArgs: message.slice(pattern1.length).trim(),
-      };
-    }
-
-    // Match just "<toolName> [args]" if unambiguous
-    if (lower.startsWith(toolName + " ") || lower === toolName) {
-      return {
-        skillId: skill.id,
-        remainingArgs: message.slice(toolName.length).trim(),
-      };
-    }
-
-    // Match by skill tags
-    if (skill.tags?.some((tag) => lower.includes(tag) && tag !== "mcp")) {
-      return { skillId: skill.id, remainingArgs: message };
-    }
-  }
-
-  return null;
-}
-
-/**
- * Call Gemma4 via vLLM with auto-detected MCP context.
- */
-async function callGemma4WithContext(
-  card: BuiltAgentCard,
-  userMessage: string,
-  agentName: string
-): Promise<string> {
   const systemParts: string[] = [];
 
+  // 1. Agent identity
   if (card.systemPrompt) {
     systemParts.push(card.systemPrompt);
   } else {
     systemParts.push(`You are ${agentName}, a helpful assistant.`);
   }
 
-  // List available skills in system prompt
+  // 2. Available MCP tools (from mcpAccess)
+  const toolDocs: string[] = [];
+  for (const serverId of card.mcpAccess || []) {
+    const server = MCP_SERVERS.find((s) => s.id === serverId);
+    if (!server) continue;
+    for (const tool of server.tools) {
+      const paramDoc = tool.parameters
+        ? Object.entries(tool.parameters)
+            .map(([k, v]) => `${k}${v.required ? "*" : ""}:${v.type} (${v.description})`)
+            .join(", ")
+        : "";
+      toolDocs.push(`${serverId}:${tool.name} — ${tool.description}${paramDoc ? ` [${paramDoc}]` : ""}`);
+    }
+  }
+
+  if (toolDocs.length > 0) {
+    systemParts.push(
+      `## Available Tools\n\n${toolDocs.join("\n")}\n\n` +
+        `To call a tool, write on its own line:\n` +
+        `[TOOL_CALL: <tool> | param1=value1, param2=value2]\n\n` +
+        `Examples:\n` +
+        `[TOOL_CALL: slack:read_thread | conversationId=${pointer.conversationId || "..."}, limit=10]\n` +
+        `[TOOL_CALL: polymarket:search | query=bitcoin]\n` +
+        `[TOOL_CALL: news:search | query=AI regulations]\n` +
+        `[TOOL_CALL: slack:memory_write | agentId=${pointer.agentId || "..."}, key=user_preference, value=likes crypto]\n` +
+        `[TOOL_CALL: slack:memory_read | agentId=${pointer.agentId || "..."}]\n\n` +
+        `You can call multiple tools across rounds. After receiving tool results, use them to give a thoughtful answer.`
+    );
+  }
+
+  // 3. Agent skills (high-level abilities)
   if (card.skills?.length) {
-    const skillList = card.skills
-      .filter((s) => s.id !== "chat")
-      .map((s) => `- ${s.id}: ${s.description}`)
+    const skillDoc = card.skills
+      .map((s) => `- **${s.name}** (${s.id}): ${s.description}${s.instruction ? `\n  Guide: ${s.instruction}` : ""}`)
       .join("\n");
-    if (skillList) {
-      systemParts.push(`You have the following skills:\n${skillList}`);
+    systemParts.push(`## Your Skills\n\n${skillDoc}`);
+  }
+
+  // 4. Message context pointer
+  const pointerParts: string[] = [];
+  if (pointer.channelId) pointerParts.push(`channelId: ${pointer.channelId}`);
+  if (pointer.conversationId) pointerParts.push(`conversationId: ${pointer.conversationId}`);
+  if (pointer.messageId) pointerParts.push(`messageId: ${pointer.messageId}`);
+  if (pointer.senderName) pointerParts.push(`sender: ${pointer.senderName}`);
+  if (pointer.agentId) pointerParts.push(`your agentId: ${pointer.agentId}`);
+
+  if (pointerParts.length > 0) {
+    systemParts.push(
+      `## Current Context\n\n${pointerParts.join("\n")}\n\n` +
+        `Use slack:read_thread to read previous messages if you need conversation context.\n` +
+        `Use slack:memory_read to recall what you've learned from past conversations.\n` +
+        `Use slack:memory_write to remember important facts for future conversations.`
+    );
+  }
+
+  // 5. Skill hint — if user invoked a specific skill
+  let userContent = userMessage;
+  if (skillHint) {
+    const skill = card.skills?.find((s) => s.id === skillHint);
+    if (skill) {
+      userContent = `[Skill requested: ${skill.name}]\n${skill.instruction ? `Guide: ${skill.instruction}\n` : ""}User message: ${userMessage}`;
     }
   }
 
-  // Auto-fetch MCP data based on message content
-  let mcpContext = "";
-  if (card.mcpServerIds?.length) {
-    const lowerMsg = userMessage.toLowerCase();
-    for (const serverId of card.mcpServerIds) {
-      if (
-        serverId === "polymarket" &&
-        /market|predict|bet|odds|polymarket|election|trump|bitcoin|crypto|price/i.test(lowerMsg)
-      ) {
-        const result = await executeTool("polymarket", "search", {
-          query: userMessage,
-          limit: 3,
-        });
-        if (result.success) mcpContext += `\n\n[Polymarket Data]\n${result.content}`;
+  // ── Tool-use loop ──
+
+  const llmMessages: Array<{ role: string; content: string }> = [
+    { role: "system", content: systemParts.join("\n\n") },
+    { role: "user", content: userContent },
+  ];
+
+  let response = await callLLM(llmMessages);
+
+  for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+    // Parse all tool calls from the response
+    const toolCalls = parseToolCalls(response);
+    if (toolCalls.length === 0) break;
+
+    // Execute all tool calls
+    const results: string[] = [];
+    for (const tc of toolCalls) {
+      // Auto-inject pointer params for slack tools
+      if (tc.tool.startsWith("slack:")) {
+        if (pointer.channelId && !tc.params.channelId) tc.params.channelId = pointer.channelId;
+        if (pointer.conversationId && !tc.params.conversationId) tc.params.conversationId = pointer.conversationId;
+        if (pointer.messageId && !tc.params.messageId) tc.params.messageId = pointer.messageId;
+        if (pointer.agentId && !tc.params.agentId) tc.params.agentId = pointer.agentId;
       }
-      if (
-        serverId === "news" &&
-        /news|latest|recent|today|happening|뉴스|소식|기사/i.test(lowerMsg)
-      ) {
-        const result = await executeTool("news", "search", {
-          query: userMessage,
-          limit: 3,
-        });
-        if (result.success) mcpContext += `\n\n[News Data]\n${result.content}`;
+
+      const [serverId, toolName] = tc.tool.split(":");
+      if (serverId && toolName) {
+        const result = await executeTool(serverId, toolName, tc.params);
+        results.push(`[TOOL_RESULT: ${tc.tool}]\n${result.content}\n[/TOOL_RESULT]`);
       }
     }
 
-    if (mcpContext) {
-      systemParts.push(
-        "You have access to real-time data. Use the following data to inform your response:" +
-          mcpContext
-      );
-    }
+    // Feed results back
+    llmMessages.push({ role: "assistant", content: response });
+    llmMessages.push({
+      role: "user",
+      content: results.join("\n\n") + "\n\nUse the tool results above to answer. Do not output [TOOL_CALL] again unless you need more data.",
+    });
+
+    response = await callLLM(llmMessages);
   }
 
+  // Clean artifacts
+  return response.replace(/\[TOOL_CALL:[^\]]*\]/g, "").trim();
+}
+
+/**
+ * Parse [TOOL_CALL: tool | param1=val1, param2=val2] patterns from LLM output.
+ */
+function parseToolCalls(
+  text: string
+): Array<{ tool: string; params: Record<string, string> }> {
+  const calls: Array<{ tool: string; params: Record<string, string> }> = [];
+  const regex = /\[TOOL_CALL:\s*([^\]|]+?)(?:\s*\|\s*([^\]]*))?\]/g;
+  let match;
+
+  while ((match = regex.exec(text)) !== null) {
+    const tool = match[1].trim();
+    const paramsStr = match[2]?.trim() || "";
+    const params: Record<string, string> = {};
+
+    if (paramsStr) {
+      // Parse "key=value, key=value" or just "value" (as query)
+      if (paramsStr.includes("=")) {
+        for (const pair of paramsStr.split(/,\s*/)) {
+          const eqIdx = pair.indexOf("=");
+          if (eqIdx > 0) {
+            params[pair.slice(0, eqIdx).trim()] = pair.slice(eqIdx + 1).trim();
+          }
+        }
+      } else {
+        params.query = paramsStr;
+      }
+    }
+
+    calls.push({ tool, params });
+  }
+
+  return calls;
+}
+
+async function callLLM(
+  llmMessages: Array<{ role: string; content: string }>
+): Promise<string> {
   const res = await fetch(`${VLLM_BASE_URL}/v1/chat/completions`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       model: VLLM_MODEL,
-      messages: [
-        { role: "system", content: systemParts.join("\n\n") },
-        { role: "user", content: userMessage },
-      ],
+      messages: llmMessages,
       max_tokens: 1024,
       temperature: 0.7,
     }),

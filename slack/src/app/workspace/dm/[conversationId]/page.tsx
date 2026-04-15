@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, use, useEffect, useRef } from 'react';
-import { Bot, Phone, Video, Users, Bell, BellOff, FileJson, Trash2 } from 'lucide-react';
+import { Bot, Phone, Video, Users, Bell, BellOff, FileJson, Trash2, Copy, Check, Link } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
@@ -53,6 +53,7 @@ export default function DMPage({ params }: { params: Promise<{ conversationId: s
   const [agentCardOpen, setAgentCardOpen] = useState(false);
   const [agentCardJson, setAgentCardJson] = useState<Record<string, unknown> | null>(null);
   const [isOwner, setIsOwner] = useState(false);
+  const [cardUrlCopied, setCardUrlCopied] = useState(false);
 
   useEffect(() => {
     // Mark as read and capture the previous lastReadAt in one call
@@ -257,10 +258,29 @@ export default function DMPage({ params }: { params: Promise<{ conversationId: s
 
       {/* Agent Card JSON Viewer */}
       {agentCardOpen && agentCardJson && (
-        <div className="border-b border-white/5 bg-[#0d1117] px-4 py-3 max-h-64 overflow-y-auto shrink-0">
+        <div className="border-b border-white/5 bg-[#0d1117] px-4 py-3 max-h-80 overflow-y-auto shrink-0">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Agent Card (A2A)</span>
             <button onClick={() => setAgentCardOpen(false)} className="text-xs text-slate-500 hover:text-white">Close</button>
+          </div>
+          {/* Well-known URL */}
+          <div className="flex items-center gap-2 mb-3 bg-[#161b22] border border-white/10 rounded-lg px-3 py-2">
+            <Link className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+            <code className="text-[11px] text-[#36c5f0] flex-1 truncate">
+              {typeof window !== 'undefined' ? `${window.location.origin}/api/agents/${otherUser?.id}/card` : `/api/agents/${otherUser?.id}/card`}
+            </code>
+            <button
+              onClick={() => {
+                const url = `${window.location.origin}/api/agents/${otherUser?.id}/card`;
+                navigator.clipboard.writeText(url);
+                setCardUrlCopied(true);
+                setTimeout(() => setCardUrlCopied(false), 2000);
+              }}
+              className="shrink-0 text-slate-400 hover:text-white transition-colors"
+              title="Copy URL"
+            >
+              {cardUrlCopied ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
+            </button>
           </div>
           <pre className="text-xs text-[#36c5f0] font-mono whitespace-pre-wrap leading-relaxed">
             {JSON.stringify(agentCardJson, null, 2)}
