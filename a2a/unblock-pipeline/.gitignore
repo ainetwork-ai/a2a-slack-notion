@@ -1,0 +1,11 @@
+# Pipeline run artifacts — excluded by default.
+# `runs/e2e-01/` is force-added as a baseline snapshot for regression
+# comparison (see commit adding this file). New runs are ignored so the
+# repo doesn't bloat with every invocation.
+runs/*
+!runs/e2e-01/
+
+# Python
+__pycache__/
+*.pyc
+.venv/

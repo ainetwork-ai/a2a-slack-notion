@@ -1,0 +1,238 @@
+{
+  "today": "2026-04-16",
+  "reporter_id": "unblock-max",
+  "manager_id": "unblock-victoria",
+  "all_ok": false,
+  "steps": [
+    {
+      "step": 0,
+      "name": "Healthcheck",
+      "agent_id": "https://a2a-slack-notion.vercel.app",
+      "skill": null,
+      "ok": true,
+      "checks": [
+        {
+          "name": "10개 카드 전부 200",
+          "ok": true,
+          "note": "10/10"
+        }
+      ],
+      "output_file": "00_healthcheck.txt"
+    },
+    {
+      "step": 0,
+      "name": "Scraping",
+      "agent_id": "-",
+      "skill": null,
+      "ok": true,
+      "checks": [
+        {
+          "name": "원문 비어있지 않음",
+          "ok": true,
+          "note": ""
+        },
+        {
+          "name": "원문 최소 길이(30자)",
+          "ok": true,
+          "note": "327자"
+        }
+      ],
+      "output_file": "00_scraping.txt"
+    },
+    {
+      "step": 1,
+      "name": "Assignment",
+      "agent_id": "unblock-damien",
+      "skill": "assignment",
+      "ok": true,
+      "checks": [
+        {
+          "name": "기자 이름 파싱됨",
+          "ok": true,
+          "note": "unblock-max"
+        },
+        {
+          "name": "오늘 날짜(2026-04-16) 언급",
+          "ok": true,
+          "note": ""
+        },
+        {
+          "name": "반말 할당 어투(자네/맡기네/~게)",
+          "ok": true,
+          "note": ""
+        }
+      ],
+      "output_file": "01_assignment.txt"
+    },
+    {
+      "step": 2,
+      "name": "Report",
+      "agent_id": "unblock-max",
+      "skill": "report",
+      "ok": true,
+      "checks": [
+        {
+          "name": "리서치 길이(≥200자)",
+          "ok": true,
+          "note": "566자"
+        },
+        {
+          "name": "출처 언급(~에 따르면)",
+          "ok": true,
+          "note": ""
+        },
+        {
+          "name": "일자 언급(숫자+일/현지시각)",
+          "ok": true,
+          "note": ""
+        }
+      ],
+      "output_file": "02_report.txt"
+    },
+    {
+      "step": 3,
+      "name": "Guide",
+      "agent_id": "unblock-victoria",
+      "skill": "guide",
+      "ok": true,
+      "checks": [
+        {
+          "name": "기자명 멘션",
+          "ok": true,
+          "note": "맥스"
+        },
+        {
+          "name": "한 문단 가이드(비어있지 않음)",
+          "ok": true,
+          "note": ""
+        }
+      ],
+      "output_file": "03_guide.txt"
+    },
+    {
+      "step": 4,
+      "name": "Writing",
+      "agent_id": "unblock-max",
+      "skill": "writing",
+      "ok": true,
+      "checks": [
+        {
+          "name": "제목 존재(첫 줄 텍스트)",
+          "ok": true,
+          "note": "비트코인 ETF 옵션 거래 승인, 시장에 활력 불어넣나"
+        },
+        {
+          "name": "요약문 2개 (대시 불렛)",
+          "ok": true,
+          "note": "불렛 2개"
+        },
+        {
+          "name": "본문에 일자/출처 표기",
+          "ok": true,
+          "note": ""
+        },
+        {
+          "name": "본문 분량(≥400자)",
+          "ok": true,
+          "note": "539자"
+        }
+      ],
+      "output_file": "04_writing.txt"
+    },
+    {
+      "step": 5,
+      "name": "Feedback",
+      "agent_id": "unblock-victoria",
+      "skill": "feedback",
+      "ok": true,
+      "checks": [
+        {
+          "name": "기자명 멘션",
+          "ok": true,
+          "note": "맥스"
+        },
+        {
+          "name": "구체 지적(제목/요약/리드/본문 중 하나)",
+          "ok": true,
+          "note": ""
+        },
+        {
+          "name": "반말 톤(~해/~자/~어)",
+          "ok": true,
+          "note": ""
+        }
+      ],
+      "output_file": "05_feedback.txt"
+    },
+    {
+      "step": 6,
+      "name": "Revision",
+      "agent_id": "unblock-max",
+      "skill": "revision",
+      "ok": false,
+      "checks": [
+        {
+          "name": "수정본 제목 존재",
+          "ok": true,
+          "note": "오우 멋진 질문입니다! 😎 피드백을 반영하여 기사를 수정해 보겠습니다. 꼼꼼하게 수정했으니, 솔직히 깔끔한지"
+        },
+        {
+          "name": "수정본 요약문 2개",
+          "ok": false,
+          "note": "불렛 0개"
+        },
+        {
+          "name": "수정본 본문 일자/출처 표기",
+          "ok": true,
+          "note": ""
+        },
+        {
+          "name": "볼드(**,###) 사용 금지",
+          "ok": false,
+          "note": "사용됨"
+        },
+        {
+          "name": "분량 유지(초안의 60% 이상)",
+          "ok": true,
+          "note": "766/711자"
+        }
+      ],
+      "output_file": "06_revision.txt"
+    },
+    {
+      "step": 7,
+      "name": "Confirm",
+      "agent_id": "unblock-damien",
+      "skill": "confirm",
+      "ok": true,
+      "checks": [
+        {
+          "name": "승인/반려 판결 포함",
+          "ok": true,
+          "note": "APPROVED"
+        },
+        {
+          "name": "한 문단(불렛 없음)",
+          "ok": true,
+          "note": ""
+        }
+      ],
+      "output_file": "07_confirm.txt"
+    },
+    {
+      "step": 8,
+      "name": "Drawing",
+      "agent_id": "unblock-olive",
+      "skill": "drawing",
+      "ok": true,
+      "checks": [
+        {
+          "name": "응답 존재",
+          "ok": true,
+          "note": "176자"
+        }
+      ],
+      "output_file": "08_drawing.txt"
+    }
+  ]
+}
