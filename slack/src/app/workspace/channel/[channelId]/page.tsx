@@ -34,6 +34,8 @@ interface ChannelMember {
   displayName: string;
   avatarUrl?: string;
   role?: string;
+  isAgent?: boolean;
+  engagementLevel?: number;
 }
 
 interface Channel {
@@ -305,6 +307,21 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
               <span className="text-xs">{channel.memberCount}</span>
             </Button>
           )}
+          {(() => {
+            const activeAgents = (channelData?.members ?? []).filter(
+              m => m.isAgent && (m.engagementLevel ?? 0) >= 2
+            );
+            if (activeAgents.length === 0) return null;
+            return (
+              <button
+                onClick={() => setDetailPanelOpen(v => !v)}
+                className="text-xs text-slate-400 hover:text-slate-200 hover:bg-white/10 px-2 h-8 rounded transition-colors"
+                title="Agents in Engaged or Proactive mode"
+              >
+                🤖 {activeAgents.length} {activeAgents.length === 1 ? 'agent' : 'agents'} active
+              </button>
+            );
+          })()}
           <DropdownMenu>
             <DropdownMenuTrigger className="inline-flex items-center justify-center w-8 h-8 rounded text-slate-400 hover:text-white hover:bg-white/10 transition-colors focus:outline-none">
               <Settings className="w-4 h-4" />

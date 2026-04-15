@@ -445,6 +445,11 @@ export default function MessageItem({
               Bot
             </Badge>
           )}
+          {message.isAgent && Boolean(message.metadata?.autoEngaged) && (
+            <Badge className="text-[10px] px-1 py-0 h-4 bg-amber-500/20 text-amber-400 border border-amber-500/30">
+              ⚡ auto
+            </Badge>
+          )}
           <button
             onClick={handleTimestampClick}
             className="text-xs text-slate-500 hover:text-slate-300 hover:underline relative"
