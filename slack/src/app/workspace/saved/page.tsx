@@ -65,10 +65,10 @@ export default function SavedPage() {
 
         {!isLoading && items.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full text-slate-500 gap-2 px-8 text-center">
-            <Bookmark className="w-10 h-10 mb-2 opacity-40" />
+            <Bookmark className="w-12 h-12 mb-2 opacity-30" />
             <p className="text-base font-semibold text-white">No saved items yet</p>
-            <p className="text-sm">
-              Hover over any message and click the bookmark icon to save it here.
+            <p className="text-sm text-slate-400">
+              Click the bookmark icon on any message to save it here.
             </p>
           </div>
         )}

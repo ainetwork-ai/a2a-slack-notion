@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { Hash, Plus, ChevronDown, ChevronRight, ArrowUpDown, Clock, Archive, Folder, FolderOpen, FolderPlus, MoreHorizontal, X } from 'lucide-react';
+import { Hash, Plus, ChevronDown, ChevronRight, ArrowUpDown, Clock, Archive, Folder, FolderOpen, FolderPlus, MoreHorizontal, X, Compass } from 'lucide-react';
 import { useAppStore } from '@/lib/stores/app-store';
 import { cn } from '@/lib/utils';
 import useSWR from 'swr';
@@ -35,7 +35,7 @@ interface ChannelListProps {
 export default function ChannelList({ workspaceId }: ChannelListProps) {
   const router = useRouter();
   const pathname = usePathname();
-  const { setCreateChannelOpen } = useAppStore();
+  const { setCreateChannelOpen, setBrowseChannelsOpen } = useAppStore();
   const [collapsed, setCollapsed] = useState(false);
   const [sortAlpha, setSortAlpha] = useState(false);
   const [archivedCollapsed, setArchivedCollapsed] = useState(true);
@@ -154,7 +154,9 @@ export default function ChannelList({ workspaceId }: ChannelListProps) {
             {channel.name}
           </span>
           {(channel.unreadCount ?? 0) > 0 && !active && (
-            <span className="w-2 h-2 rounded-full bg-white shrink-0" />
+            <span className="flex items-center justify-center min-w-[18px] h-[18px] rounded-full bg-red-500 text-white text-[10px] font-bold px-1 shrink-0">
+              {(channel.unreadCount ?? 0) > 99 ? '99+' : channel.unreadCount}
+            </span>
           )}
         </button>
         {/* Move to folder button */}
@@ -349,6 +351,15 @@ export default function ChannelList({ workspaceId }: ChannelListProps) {
               <span>Add channels</span>
             </button>
           )}
+
+          {/* Browse channels button */}
+          <button
+            onClick={() => setBrowseChannelsOpen(true)}
+            className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm text-[#bcabbc] hover:text-white hover:bg-white/5 transition-colors mt-1"
+          >
+            <Compass className="w-4 h-4 shrink-0 opacity-70" />
+            <span>Browse channels</span>
+          </button>
         </div>
       )}
 

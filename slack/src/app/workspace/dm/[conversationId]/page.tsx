@@ -200,7 +200,7 @@ export default function DMPage({ params }: { params: Promise<{ conversationId: s
                     <span className="text-2xl font-bold text-white">{otherUser.displayName}</span>
                   </div>
                   <p className="text-slate-400 text-sm">
-                    This is the very beginning of your direct message history with <span className="font-semibold text-white">{otherUser.displayName}</span>.
+                    This is the beginning of your conversation with <span className="font-semibold text-white">{otherUser.displayName}</span>.
                   </p>
                 </>
               ) : null}

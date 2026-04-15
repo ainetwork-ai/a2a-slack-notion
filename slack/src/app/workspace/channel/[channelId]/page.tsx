@@ -348,7 +348,10 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
           {searchLoading ? (
             <div className="px-4 py-3 text-sm text-slate-500">Searching…</div>
           ) : searchResults.length === 0 ? (
-            <div className="px-4 py-3 text-sm text-slate-500">No results found</div>
+            <div className="px-4 py-4 flex flex-col gap-1">
+              <p className="text-sm font-medium text-slate-300">No results found for &ldquo;{searchQuery}&rdquo;</p>
+              <p className="text-xs text-slate-500">Try a different search term.</p>
+            </div>
           ) : (
             searchResults.map(msg => (
               <div key={msg.id} className="px-4 py-2 hover:bg-white/5 border-b border-white/5 last:border-0">
@@ -365,18 +368,26 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
       {/* Messages */}
       <div className="flex flex-1 overflow-hidden">
         <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
-          {/* Item 11: Channel welcome banner when < 3 messages */}
+          {/* Channel welcome banner when < 3 messages */}
           {!isLoading && messages.filter(m => m.contentType !== 'system').length < 3 && channel && (
-            <div className="px-6 pt-6 pb-3 border-b border-white/5">
-              <div className="flex items-center gap-2 mb-1">
-                <span className="text-3xl font-bold text-white">#{channel.name}</span>
+            <div className="px-6 pt-8 pb-4 border-b border-white/5">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-14 h-14 rounded-2xl bg-[#4a154b]/60 flex items-center justify-center shrink-0">
+                  <span className="text-2xl font-bold text-white">#</span>
+                </div>
+                <span className="text-2xl font-bold text-white">{channel.name}</span>
               </div>
-              <p className="text-slate-300 text-sm">
-                Welcome to <span className="font-semibold text-white">#{channel.name}</span>! This is the beginning of the channel.
-                {channel.description && (
-                  <span className="text-slate-400"> — {channel.description}</span>
-                )}
+              <p className="text-white font-semibold text-lg mb-1">
+                This is the very beginning of #{channel.name}
               </p>
+              {channel.description && (
+                <p className="text-slate-400 text-sm mb-1">{channel.description}</p>
+              )}
+              {channel.createdAt && (
+                <p className="text-slate-500 text-xs">
+                  Channel created on {new Date(channel.createdAt).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })}
+                </p>
+              )}
             </div>
           )}
           <MessageList

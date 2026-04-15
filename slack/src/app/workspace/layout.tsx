@@ -11,6 +11,7 @@ import DMList from '@/components/layout/DMList';
 import AgentList from '@/components/layout/AgentList';
 import SearchModal from '@/components/modals/SearchModal';
 import CreateChannelModal from '@/components/modals/CreateChannelModal';
+import BrowseChannelsModal from '@/components/modals/BrowseChannelsModal';
 import AgentInviteModal from '@/components/agent/AgentInviteModal';
 import WorkspaceModal from '@/components/modals/WorkspaceModal';
 import KeyboardShortcutsModal from '@/components/modals/KeyboardShortcutsModal';
@@ -182,6 +183,7 @@ export default function WorkspaceLayout({
       {/* Global modals */}
       <SearchModal />
       <CreateChannelModal />
+      <BrowseChannelsModal />
       <AgentInviteModal />
       <WorkspaceModal open={workspaceModalOpen} onOpenChange={setWorkspaceModalOpen} />
       <KeyboardShortcutsModal />

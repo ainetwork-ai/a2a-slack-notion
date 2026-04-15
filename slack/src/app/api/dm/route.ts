@@ -64,12 +64,28 @@ export async function GET() {
         status: otherMembers[0].status,
       } : null;
 
+      // Compute unread count for the current user
+      const myMember = members.find((m) => m.userId === user.id);
+      const myLastReadAt = myMember?.lastReadAt ?? new Date(0);
+      const [{ unreadCount }] = await db
+        .select({ unreadCount: sql<number>`count(*)::int` })
+        .from(messages)
+        .where(
+          and(
+            eq(messages.conversationId, conv.id),
+            sql`${messages.createdAt} > ${myLastReadAt}`,
+            sql`${messages.parentId} is null`
+          )
+        );
+
       return {
         ...conv,
         members,
         otherUser,
         isGroup: members.length > 2,
         latestMessage: latestMessage || null,
+        unreadCount,
+        unread: unreadCount > 0,
       };
     })
   );

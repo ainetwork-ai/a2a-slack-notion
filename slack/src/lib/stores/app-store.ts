@@ -5,6 +5,7 @@ interface AppStore {
   searchOpen: boolean;
   agentInviteOpen: boolean;
   createChannelOpen: boolean;
+  browseChannelsOpen: boolean;
   sidebarCollapsed: boolean;
   shortcutsModalOpen: boolean;
   notificationPanelOpen: boolean;
@@ -13,6 +14,7 @@ interface AppStore {
   setSearchOpen: (open: boolean) => void;
   setAgentInviteOpen: (open: boolean) => void;
   setCreateChannelOpen: (open: boolean) => void;
+  setBrowseChannelsOpen: (open: boolean) => void;
   setSidebarCollapsed: (collapsed: boolean) => void;
   toggleSidebar: () => void;
   setShortcutsModalOpen: (open: boolean) => void;
@@ -25,6 +27,7 @@ export const useAppStore = create<AppStore>((set) => ({
   searchOpen: false,
   agentInviteOpen: false,
   createChannelOpen: false,
+  browseChannelsOpen: false,
   sidebarCollapsed: false,
   shortcutsModalOpen: false,
   notificationPanelOpen: false,
@@ -33,6 +36,7 @@ export const useAppStore = create<AppStore>((set) => ({
   setSearchOpen: (open) => set({ searchOpen: open }),
   setAgentInviteOpen: (open) => set({ agentInviteOpen: open }),
   setCreateChannelOpen: (open) => set({ createChannelOpen: open }),
+  setBrowseChannelsOpen: (open) => set({ browseChannelsOpen: open }),
   setSidebarCollapsed: (collapsed) => set({ sidebarCollapsed: collapsed }),
   toggleSidebar: () => set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
   setShortcutsModalOpen: (open) => set({ shortcutsModalOpen: open }),

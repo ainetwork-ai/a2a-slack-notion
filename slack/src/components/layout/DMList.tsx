@@ -32,6 +32,7 @@ interface DMConversation {
   members: DMMember[];
   lastMessage?: string;
   unread?: boolean;
+  unreadCount?: number;
 }
 
 export default function DMList() {
@@ -130,8 +131,10 @@ export default function DMList() {
                   <span className="shrink-0 text-[10px] bg-white/10 text-[#bcabbc] rounded-full px-1.5 py-0.5 font-medium">
                     {memberCount}
                   </span>
-                  {convo.unread && !isActive(convo.id) && (
-                    <span className="ml-1 w-2 h-2 rounded-full bg-white shrink-0" />
+                  {(convo.unreadCount ?? 0) > 0 && !isActive(convo.id) && (
+                    <span className="flex items-center justify-center min-w-[18px] h-[18px] rounded-full bg-red-500 text-white text-[10px] font-bold px-1 shrink-0">
+                      {(convo.unreadCount ?? 0) > 99 ? '99+' : convo.unreadCount}
+                    </span>
                   )}
                 </button>
               );
@@ -185,8 +188,10 @@ export default function DMList() {
                 <span className={cn('truncate flex-1', convo.unread && !isActive(convo.id) && 'font-semibold text-white')}>
                   {convo.otherUser.displayName}
                 </span>
-                {convo.unread && !isActive(convo.id) && (
-                  <span className="ml-auto w-2 h-2 rounded-full bg-white shrink-0" />
+                {(convo.unreadCount ?? 0) > 0 && !isActive(convo.id) && (
+                  <span className="ml-auto flex items-center justify-center min-w-[18px] h-[18px] rounded-full bg-red-500 text-white text-[10px] font-bold px-1 shrink-0">
+                    {(convo.unreadCount ?? 0) > 99 ? '99+' : convo.unreadCount}
+                  </span>
                 )}
               </button>
             );
