@@ -2,11 +2,12 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Paperclip, Send, Bold, Italic, Strikethrough, Code, List, Quote, Smile, AtSign, Clock, Eye, EyeOff } from 'lucide-react';
+import { Paperclip, Send, Bold, Italic, Strikethrough, Code, List, Quote, Smile, AtSign, Clock, Eye, EyeOff, Link, ListOrdered, CodeSquare } from 'lucide-react';
 import { useTyping } from '@/lib/realtime/use-typing';
 import { cn } from '@/lib/utils';
 import { replaceShortcodes } from '@/lib/emoji-map';
-import { commands, findCommand } from '@/lib/slash-commands';
+import { commands, findCommand, findCustomCommand } from '@/lib/slash-commands';
+import { useWorkspaceStore } from '@/lib/stores/workspace-store';
 import ReactionPicker from './ReactionPicker';
 import GifPicker from './GifPicker';
 import { renderInlineMarkdown } from './MessageItem';
@@ -32,6 +33,7 @@ export default function MessageInput({
   conversationId,
   disabled,
 }: MessageInputProps) {
+  const { activeWorkspaceId } = useWorkspaceStore();
   const [content, setContent] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -163,7 +165,8 @@ export default function MessageInput({
 
     // Slash command interception
     if (trimmed.startsWith('/')) {
-      const match = findCommand(trimmed);
+      const match = findCommand(trimmed) ||
+        (activeWorkspaceId ? await findCustomCommand(trimmed, activeWorkspaceId) : null);
       if (match) {
         setIsSending(true);
         try {
@@ -425,12 +428,58 @@ export default function MessageInput({
     }
   }
 
+  function applyCodeBlock() {
+    const el = textareaRef.current;
+    if (!el) return;
+    const start = el.selectionStart;
+    const end = el.selectionEnd;
+    const selected = content.slice(start, end);
+    const marker = '```';
+    let newContent: string;
+    let newCursorStart: number;
+    let newCursorEnd: number;
+    if (selected) {
+      newContent = content.slice(0, start) + marker + '\n' + selected + '\n' + marker + content.slice(end);
+      newCursorStart = start + marker.length + 1;
+      newCursorEnd = start + marker.length + 1 + selected.length;
+    } else {
+      newContent = content.slice(0, start) + marker + '\n\n' + marker + content.slice(start);
+      newCursorStart = start + marker.length + 1;
+      newCursorEnd = start + marker.length + 1;
+    }
+    setContent(newContent);
+    setTimeout(() => {
+      el.focus();
+      el.setSelectionRange(newCursorStart, newCursorEnd);
+      autoResize();
+    }, 0);
+  }
+
+  function applyLink() {
+    const el = textareaRef.current;
+    if (!el) return;
+    const start = el.selectionStart;
+    const end = el.selectionEnd;
+    const selected = content.slice(start, end);
+    const linkText = selected || 'https://';
+    const newContent = content.slice(0, start) + linkText + content.slice(end);
+    setContent(newContent);
+    setTimeout(() => {
+      el.focus();
+      el.setSelectionRange(start, start + linkText.length);
+      autoResize();
+    }, 0);
+  }
+
   const toolbarButtons = [
     { icon: Bold, label: 'Bold', action: () => applyFormat('*') },
     { icon: Italic, label: 'Italic', action: () => applyFormat('_') },
     { icon: Strikethrough, label: 'Strikethrough', action: () => applyFormat('~') },
     { icon: Code, label: 'Code', action: () => applyFormat('`') },
-    { icon: List, label: 'List', action: () => applyFormat('', '• ') },
+    { icon: CodeSquare, label: 'Code block', action: applyCodeBlock },
+    { icon: Link, label: 'Link', action: applyLink },
+    { icon: List, label: 'Bulleted list', action: () => applyFormat('', '• ') },
+    { icon: ListOrdered, label: 'Numbered list', action: () => applyFormat('', '1. ') },
     { icon: Quote, label: 'Quote', action: () => applyFormat('', '> ') },
   ];
 

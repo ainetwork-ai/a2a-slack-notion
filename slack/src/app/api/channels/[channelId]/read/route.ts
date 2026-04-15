@@ -5,7 +5,7 @@ import { requireAuth } from "@/lib/auth/middleware";
 import { NextRequest, NextResponse } from "next/server";
 
 export async function PATCH(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ channelId: string }> }
 ) {
   const auth = await requireAuth();
@@ -23,9 +23,20 @@ export async function PATCH(
 
   const previousLastReadAt = membership?.lastReadAt ?? null;
 
+  // Allow caller to supply a specific timestamp (e.g. "mark as unread from here")
+  let newLastReadAt = new Date();
+  try {
+    const body = await request.json();
+    if (body?.timestamp) {
+      newLastReadAt = new Date(body.timestamp);
+    }
+  } catch {
+    // no body or invalid JSON — use current time
+  }
+
   await db
     .update(channelMembers)
-    .set({ lastReadAt: new Date() })
+    .set({ lastReadAt: newLastReadAt })
     .where(
       and(eq(channelMembers.channelId, channelId), eq(channelMembers.userId, user.id))
     );

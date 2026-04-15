@@ -217,7 +217,7 @@ import {
   TooltipProvider,
 } from '@/components/ui/tooltip';
 import { Button } from '@/components/ui/button';
-import { MoreHorizontal, SmilePlus, MessageSquare, Pencil, Trash2, Pin, Paperclip, Share2, Bookmark, FileText, FileSpreadsheet, FileArchive, File } from 'lucide-react';
+import { MoreHorizontal, SmilePlus, MessageSquare, Pencil, Trash2, Pin, Paperclip, Share2, Bookmark, FileText, FileSpreadsheet, FileArchive, File, Copy, Link2, BellOff } from 'lucide-react';
 import { Message } from '@/lib/hooks/use-messages';
 import ReactionPicker from './ReactionPicker';
 import ImageLightbox from './ImageLightbox';
@@ -342,6 +342,36 @@ export default function MessageItem({
       setCopyToast(true);
       if (toastTimeout.current) clearTimeout(toastTimeout.current);
       toastTimeout.current = setTimeout(() => setCopyToast(false), 2500);
+    });
+  }
+
+  function handleCopyText() {
+    navigator.clipboard.writeText(message.content).then(() => {
+      setCopyToast(true);
+      if (toastTimeout.current) clearTimeout(toastTimeout.current);
+      toastTimeout.current = setTimeout(() => setCopyToast(false), 2500);
+    });
+  }
+
+  function handleCopyLink() {
+    const base = typeof window !== 'undefined' ? window.location.origin : '';
+    const path = channelId ? `/workspace/channel/${channelId}` : window.location.pathname;
+    const permalink = `${base}${path}#msg-${message.id}`;
+    navigator.clipboard.writeText(permalink).then(() => {
+      setCopyToast(true);
+      if (toastTimeout.current) clearTimeout(toastTimeout.current);
+      toastTimeout.current = setTimeout(() => setCopyToast(false), 2500);
+    });
+  }
+
+  async function handleMarkUnread() {
+    if (!channelId) return;
+    // Set lastReadAt to 1ms before this message's timestamp so this message shows as unread
+    const ts = new Date(new Date(message.createdAt).getTime() - 1).toISOString();
+    await fetch(`/api/channels/${channelId}/read`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ timestamp: ts }),
     });
   }
 
@@ -672,6 +702,29 @@ export default function MessageItem({
                 <Share2 className="w-4 h-4 mr-2" />
                 Share message
               </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={handleCopyText}
+                className="hover:bg-white/10 cursor-pointer"
+              >
+                <Copy className="w-4 h-4 mr-2" />
+                Copy text
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={handleCopyLink}
+                className="hover:bg-white/10 cursor-pointer"
+              >
+                <Link2 className="w-4 h-4 mr-2" />
+                Copy link to message
+              </DropdownMenuItem>
+              {channelId && (
+                <DropdownMenuItem
+                  onClick={handleMarkUnread}
+                  className="hover:bg-white/10 cursor-pointer"
+                >
+                  <BellOff className="w-4 h-4 mr-2" />
+                  Mark as unread from here
+                </DropdownMenuItem>
+              )}
               {isOwn && (
                 <>
                   <DropdownMenuItem
