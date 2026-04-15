@@ -214,6 +214,11 @@ import {
   TooltipContent,
   TooltipProvider,
 } from '@/components/ui/tooltip';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
 import { MoreHorizontal, SmilePlus, MessageSquare, Pencil, Trash2, Pin, Paperclip, Share2, Bookmark, FileText, FileSpreadsheet, FileArchive, File, Copy, Link2, BellOff } from 'lucide-react';
 import { Message } from '@/lib/hooks/use-messages';
@@ -452,17 +457,17 @@ export default function MessageItem({
               </span>
             )}
           </button>
-          {message.editedAt && (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger className="text-xs text-slate-600 cursor-default bg-transparent border-0 p-0">
-                  (edited)
-                </TooltipTrigger>
-                <TooltipContent side="top" className="bg-[#1a1d21] text-white border-white/10 text-xs">
-                  Edited {format(new Date(message.editedAt), 'MMM d, yyyy h:mm a')}
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+          {(message.isEdited || message.editedAt) && (
+            <Popover>
+              <PopoverTrigger className="text-xs text-slate-600 hover:text-slate-400 cursor-pointer bg-transparent border-0 p-0 underline-offset-2 hover:underline">
+                (edited)
+              </PopoverTrigger>
+              <PopoverContent side="top" className="bg-[#1a1d21] border-white/10 text-white p-2 w-auto text-xs">
+                {message.editedAt
+                  ? `Edited at ${format(new Date(message.editedAt), 'MMM d, yyyy h:mm a')}`
+                  : 'This message has been edited'}
+              </PopoverContent>
+            </Popover>
           )}
           {isPinned && (
             <span className="pin-indicator flex items-center gap-0.5 text-xs" title="Pinned message">

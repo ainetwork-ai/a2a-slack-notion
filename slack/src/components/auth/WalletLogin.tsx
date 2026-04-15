@@ -81,6 +81,20 @@ export default function WalletLogin() {
         throw new Error(errData.error || 'Verification failed');
       }
 
+      // Auto-save detected timezone before navigating
+      try {
+        const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        if (tz) {
+          await fetch('/api/users/me', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ timezone: tz }),
+          });
+        }
+      } catch {
+        // Non-critical — ignore timezone save errors
+      }
+
       window.location.href = '/workspace';
       await new Promise(() => {}); // Block until navigation
     } catch (err: unknown) {

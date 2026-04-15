@@ -20,6 +20,7 @@ export interface Message {
   isAgent?: boolean;
   createdAt: string;
   editedAt?: string;
+  isEdited?: boolean;
   threadCount?: number;
   reactions?: Reaction[];
   metadata?: Record<string, unknown>;
@@ -39,6 +40,7 @@ function mapApiMessage(m: any): Message {
     isAgent: m.user?.isAgent || m.isAgent || false,
     createdAt: m.createdAt,
     editedAt: m.updatedAt !== m.createdAt ? m.updatedAt : undefined,
+    isEdited: m.isEdited ?? false,
     threadCount: m.threadCount || 0,
     reactions: m.reactions
       ? Object.entries(m.reactions).map(([emoji, reactors]) => {

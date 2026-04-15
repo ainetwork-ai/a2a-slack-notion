@@ -10,6 +10,7 @@ export interface User {
   statusMessage?: string;
   statusEmoji?: string;
   statusExpiresAt?: string;
+  timezone?: string;
   createdAt: string;
 }
 
@@ -43,7 +44,24 @@ export function useAuth() {
     }
 
     await mutate();
-    return verifyRes.json();
+    const result = await verifyRes.json();
+
+    // Auto-save detected timezone
+    try {
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      if (tz) {
+        await fetch('/api/users/me', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ timezone: tz }),
+        });
+        await mutate();
+      }
+    } catch {
+      // Non-critical — ignore timezone save errors
+    }
+
+    return result;
   }
 
   async function logout() {

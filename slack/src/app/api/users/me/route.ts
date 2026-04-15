@@ -10,7 +10,7 @@ export async function PATCH(request: NextRequest) {
   const { user } = auth;
 
   const body = await request.json();
-  const { displayName, avatarUrl } = body;
+  const { displayName, avatarUrl, timezone } = body;
 
   const updates: Partial<typeof users.$inferInsert> = { updatedAt: new Date() };
   if (typeof displayName === "string" && displayName.trim().length > 0) {
@@ -18,6 +18,9 @@ export async function PATCH(request: NextRequest) {
   }
   if (typeof avatarUrl === "string") {
     updates.avatarUrl = avatarUrl.trim() || null;
+  }
+  if (typeof timezone === "string" && timezone.trim().length > 0) {
+    updates.timezone = timezone.trim();
   }
 
   const [updated] = await db
@@ -28,6 +31,7 @@ export async function PATCH(request: NextRequest) {
       id: users.id,
       displayName: users.displayName,
       avatarUrl: users.avatarUrl,
+      timezone: users.timezone,
     });
 
   return NextResponse.json({ user: updated });
