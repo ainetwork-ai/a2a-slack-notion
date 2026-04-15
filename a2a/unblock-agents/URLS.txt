@@ -75,7 +75,11 @@ DESIGNER (skills: drawing)
 # Fetch an AgentCard:
 curl {BASE}/api/agents/unblock-max/.well-known/agent.json
 
-# Send a message to a skill (here: Max's "report" skill):
+# Send a message to a skill (here: Max's "report" skill).
+# metadata.variables fills the Notion template placeholders
+# (^TODAY_DATE^, ^BASIC_ARTICLE_SOURCE^, ^CHIEF_COMMENT^, ...).
+# Any placeholder not provided becomes "(제공되지 않음)" so the LLM
+# doesn't echo the literal back in its answer.
 curl -X POST {BASE}/api/agents/unblock-max \
   -H "Content-Type: application/json" \
   -d '{
@@ -88,7 +92,14 @@ curl -X POST {BASE}/api/agents/unblock-max \
         "messageId": "msg-1",
         "role": "user",
         "parts": [{ "kind": "text", "text": "비트코인 관점에서 최근 시장 분석해줘" }],
-        "metadata": { "skillId": "report" }
+        "metadata": {
+          "skillId": "report",
+          "variables": {
+            "TODAY_DATE": "2025-11-17",
+            "BASIC_ARTICLE_SOURCE": "비트코인 현물 ETF 승인 후 ... (실제 원문)",
+            "CHIEF_COMMENT": "이번 주 핵심 건으로 다뤄줘"
+          }
+        }
       }
     }
   }'

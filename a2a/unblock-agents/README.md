@@ -56,10 +56,36 @@ curl -X POST http://localhost:3000/api/agents/unblock-max \
         "messageId": "msg-1",
         "role": "user",
         "parts": [{ "kind": "text", "text": "비트코인 관점에서 최근 시장 분석해줘" }],
-        "metadata": { "skillId": "report" }
+        "metadata": {
+          "skillId": "report",
+          "variables": {
+            "TODAY_DATE": "2025-11-17",
+            "BASIC_ARTICLE_SOURCE": "비트코인 현물 ETF 승인 후 ... (실제 원문)",
+            "CHIEF_COMMENT": "이번 주 핵심 건으로 다뤄줘"
+          }
+        }
       }
     }
   }'
 ```
 
-Leave `metadata.skillId` out to chat with Max's persona directly.
+Leave `metadata.skillId` out to chat with the agent's persona directly.
+Leave `metadata.variables` out if a skill doesn't need templating — any
+`^VAR^` not substituted is replaced with `(제공되지 않음)` so the LLM
+doesn't echo literal placeholders back to the caller.
+
+### Variables each skill expects
+
+| Skill        | Role              | Variables (all optional but recommended)                        |
+| ------------ | ----------------- | --------------------------------------------------------------- |
+| `assignment` | editor-in-chief   | `TODAY_DATE`, `BASIC_ARTICLE_SOURCE`                            |
+| `report`     | reporter          | `TODAY_DATE`, `BASIC_ARTICLE_SOURCE`, `CHIEF_COMMENT`           |
+| `guide`      | manager           | `REPORTER`, `MARKET_RESEARCH`                                   |
+| `writing`    | reporter          | `MARKET_RESEARCH`, `ARTICLE_GUIDE`                              |
+| `feedback`   | manager           | `REPORTER`, `TODAY_DATE`, `BASIC_ARTICLE_SOURCE`, `ARTICLE_DRAFT` |
+| `revision`   | reporter          | `ARTICLE_DRAFT`, `MANAGER_FEEDBACK`                             |
+| `confirm`    | editor-in-chief   | `REPORTER`, `TODAY_DATE`, `CORRECTED_ARTICLE`                   |
+| `drawing`    | designer          | (none — produces a free-form response)                          |
+
+Variable keys are case-insensitive on the server side; `TODAY_DATE` and
+`today_date` both match `^TODAY_DATE^`.
