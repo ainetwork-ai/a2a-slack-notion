@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
-import { users, channels, channelMembers, messages, reactions, mentions, files, notifications } from "@/lib/db/schema";
-import { eq, and, desc, lt, sql, inArray, or, ilike } from "drizzle-orm";
+import { users, channels, channelMembers, messages, reactions, mentions, files, notifications, outgoingWebhooks } from "@/lib/db/schema";
+import { eq, and, desc, lt, sql, inArray, or, ilike, isNull } from "drizzle-orm";
 import { requireAuth } from "@/lib/auth/middleware";
 import { NextRequest, NextResponse } from "next/server";
 import { sendToAgent } from "@/lib/a2a/message-bridge";
@@ -147,6 +147,51 @@ export async function POST(
       parentId: parentId || null,
     })
     .returning();
+
+  // Fire outgoing webhooks that match this message
+  {
+    const [channel] = await db
+      .select({ name: channels.name, workspaceId: channels.workspaceId })
+      .from(channels)
+      .where(eq(channels.id, channelId))
+      .limit(1);
+
+    if (channel) {
+      const hooks = await db
+        .select()
+        .from(outgoingWebhooks)
+        .where(
+          and(
+            eq(outgoingWebhooks.workspaceId, channel.workspaceId!),
+            or(
+              isNull(outgoingWebhooks.channelId),
+              eq(outgoingWebhooks.channelId, channelId)
+            )
+          )
+        );
+
+      for (const hook of hooks) {
+        const words = hook.triggerWords.split(",").map((w) => w.trim().toLowerCase()).filter(Boolean);
+        const lowerContent = content.trimStart().toLowerCase();
+        const matched = words.find((w) => lowerContent.startsWith(w));
+        if (matched) {
+          fetch(hook.url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              text: content,
+              user_name: user.displayName,
+              channel_name: channel.name,
+              trigger_word: matched,
+              timestamp: message.createdAt.toISOString(),
+            }),
+          }).catch(() => {
+            // Fire-and-forget, don't block response
+          });
+        }
+      }
+    }
+  }
 
   // Parse @mentions from content
   const broadcastMentionPattern = /@(channel|here|everyone)\b/i;

@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth/session";
 import { verifyEthSignature } from "@/lib/auth/eth-verify";
 import { db } from "@/lib/db";
 import { users, channels, channelMembers, workspaces, workspaceMembers, inviteTokens } from "@/lib/db/schema";
+import { inArray } from "drizzle-orm";
 import { eq, and, gt } from "drizzle-orm";
 
 export async function POST(req: NextRequest) {
@@ -123,10 +124,24 @@ export async function POST(req: NextRequest) {
   }
 
   if (targetWorkspaceId) {
+    // Load workspace to get defaults
+    const [targetWorkspace] = await db
+      .select({
+        id: workspaces.id,
+        defaultNotificationPref: workspaces.defaultNotificationPref,
+        defaultChannels: workspaces.defaultChannels,
+      })
+      .from(workspaces)
+      .where(eq(workspaces.id, targetWorkspaceId))
+      .limit(1);
+
     await db
       .insert(workspaceMembers)
       .values({ workspaceId: targetWorkspaceId, userId: user.id, role: "member" })
       .onConflictDoNothing();
+
+    const defaultNotifPref = targetWorkspace?.defaultNotificationPref ?? "all";
+    const defaultChannelIds: string[] = (targetWorkspace?.defaultChannels as string[] | null) ?? [];
 
     // Auto-join the #general channel of the workspace
     const [generalChannel] = await db
@@ -144,8 +159,39 @@ export async function POST(req: NextRequest) {
     if (generalChannel) {
       await db
         .insert(channelMembers)
-        .values({ channelId: generalChannel.id, userId: user.id, role: "member" })
+        .values({
+          channelId: generalChannel.id,
+          userId: user.id,
+          role: "member",
+          notificationPref: defaultNotifPref,
+        })
         .onConflictDoNothing();
+    }
+
+    // Join default channels configured on the workspace
+    if (defaultChannelIds.length > 0) {
+      const defaultChans = await db
+        .select({ id: channels.id })
+        .from(channels)
+        .where(
+          and(
+            eq(channels.workspaceId, targetWorkspaceId),
+            inArray(channels.id, defaultChannelIds)
+          )
+        );
+
+      for (const ch of defaultChans) {
+        if (ch.id === generalChannel?.id) continue;
+        await db
+          .insert(channelMembers)
+          .values({
+            channelId: ch.id,
+            userId: user.id,
+            role: "member",
+            notificationPref: defaultNotifPref,
+          })
+          .onConflictDoNothing();
+      }
     }
   }
 

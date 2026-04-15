@@ -6,7 +6,7 @@ import { useWorkspaceStore } from '@/lib/stores/workspace-store';
 import { useAuth } from '@/lib/hooks/use-auth';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import Image from 'next/image';
-import { Loader2, Settings, Users, Hash, Calendar, Shield, Trash2, AlertCircle, Terminal, Plus, Download, Webhook, Copy, Check } from 'lucide-react';
+import { Loader2, Settings, Users, Hash, Calendar, Shield, Trash2, AlertCircle, Terminal, Plus, Download, Webhook, Copy, Check, ArrowUpRight, Globe } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface Member {
@@ -85,6 +85,32 @@ export default function WorkspaceSettingsPage() {
   const [removingWebhookId, setRemovingWebhookId] = useState<string | null>(null);
   const [webhookError, setWebhookError] = useState<string | null>(null);
   const [copiedToken, setCopiedToken] = useState<string | null>(null);
+
+  // Outgoing Webhooks
+  interface OutgoingWebhook {
+    id: string;
+    name: string;
+    triggerWords: string;
+    url: string;
+    channelId: string | null;
+    channelName: string | null;
+    createdAt: string;
+  }
+  const [outgoingWebhooks, setOutgoingWebhooks] = useState<OutgoingWebhook[]>([]);
+  const [loadingOutgoing, setLoadingOutgoing] = useState(false);
+  const [newOutgoingName, setNewOutgoingName] = useState('');
+  const [newOutgoingTrigger, setNewOutgoingTrigger] = useState('');
+  const [newOutgoingUrl, setNewOutgoingUrl] = useState('');
+  const [newOutgoingChannelId, setNewOutgoingChannelId] = useState('');
+  const [savingOutgoing, setSavingOutgoing] = useState(false);
+  const [removingOutgoingId, setRemovingOutgoingId] = useState<string | null>(null);
+  const [outgoingError, setOutgoingError] = useState<string | null>(null);
+
+  // Workspace Defaults
+  const [defaultNotifPref, setDefaultNotifPref] = useState('all');
+  const [defaultChannelIds, setDefaultChannelIds] = useState<string[]>([]);
+  const [savingDefaults, setSavingDefaults] = useState(false);
+  const [defaultsSaved, setDefaultsSaved] = useState(false);
 
   // Export
   const [exporting, setExporting] = useState(false);
@@ -232,6 +258,89 @@ export default function WorkspaceSettingsPage() {
     });
   }
 
+  const loadOutgoingWebhooks = useCallback(async () => {
+    if (!activeWorkspaceId) return;
+    setLoadingOutgoing(true);
+    try {
+      const res = await fetch(`/api/webhooks/outgoing?workspaceId=${activeWorkspaceId}`);
+      if (res.ok) setOutgoingWebhooks(await res.json());
+    } finally {
+      setLoadingOutgoing(false);
+    }
+  }, [activeWorkspaceId]);
+
+  useEffect(() => {
+    if (isPrivileged) loadOutgoingWebhooks();
+  }, [isPrivileged, loadOutgoingWebhooks]);
+
+  async function handleAddOutgoingWebhook() {
+    if (!activeWorkspaceId || !newOutgoingName.trim() || !newOutgoingTrigger.trim() || !newOutgoingUrl.trim()) return;
+    setSavingOutgoing(true);
+    setOutgoingError(null);
+    try {
+      const res = await fetch('/api/webhooks/outgoing', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          workspaceId: activeWorkspaceId,
+          channelId: newOutgoingChannelId || undefined,
+          name: newOutgoingName.trim(),
+          triggerWords: newOutgoingTrigger.trim(),
+          url: newOutgoingUrl.trim(),
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.json();
+        setOutgoingError(body.error ?? 'Failed to create outgoing webhook');
+      } else {
+        setNewOutgoingName('');
+        setNewOutgoingTrigger('');
+        setNewOutgoingUrl('');
+        setNewOutgoingChannelId('');
+        await loadOutgoingWebhooks();
+      }
+    } catch {
+      setOutgoingError('Failed to create outgoing webhook');
+    } finally {
+      setSavingOutgoing(false);
+    }
+  }
+
+  async function handleRemoveOutgoingWebhook(id: string) {
+    if (!activeWorkspaceId) return;
+    setRemovingOutgoingId(id);
+    try {
+      await fetch('/api/webhooks/outgoing', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, workspaceId: activeWorkspaceId }),
+      });
+      await loadOutgoingWebhooks();
+    } finally {
+      setRemovingOutgoingId(null);
+    }
+  }
+
+  async function handleSaveDefaults() {
+    if (!activeWorkspaceId) return;
+    setSavingDefaults(true);
+    setDefaultsSaved(false);
+    try {
+      const res = await fetch(`/api/workspaces/${activeWorkspaceId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ defaultNotificationPref: defaultNotifPref, defaultChannels: defaultChannelIds }),
+      });
+      if (!res.ok) throw new Error('Failed to save defaults');
+      setDefaultsSaved(true);
+      setTimeout(() => setDefaultsSaved(false), 3000);
+    } catch {
+      setError('Failed to save workspace defaults');
+    } finally {
+      setSavingDefaults(false);
+    }
+  }
+
   async function handleRoleChange(userId: string, newRole: string) {
     if (!activeWorkspaceId) return;
     setUpdatingRoleId(userId);
@@ -321,6 +430,9 @@ export default function WorkspaceSettingsPage() {
       setName(activeWorkspace.name);
       setDescription(activeWorkspace.description ?? '');
       setIconUrl(activeWorkspace.iconUrl ?? '');
+      const ws = activeWorkspace as unknown as { defaultNotificationPref?: string; defaultChannels?: string[] };
+      setDefaultNotifPref(ws.defaultNotificationPref ?? 'all');
+      setDefaultChannelIds(ws.defaultChannels ?? []);
     }
   }, [activeWorkspace]);
 
@@ -836,6 +948,207 @@ export default function WorkspaceSettingsPage() {
                   })}
                 </ul>
               )}
+            </div>
+          </section>
+        )}
+
+        {/* Outgoing Webhooks */}
+        {isPrivileged && (
+          <section className="bg-[#222529] border border-white/10 rounded-xl overflow-hidden">
+            <div className="px-5 py-4 border-b border-white/5 flex items-center gap-2">
+              <ArrowUpRight className="w-4 h-4 text-slate-400" />
+              <h2 className="text-sm font-semibold text-white">Outgoing Webhooks</h2>
+            </div>
+
+            <div className="px-5 py-5 space-y-4">
+              <p className="text-xs text-slate-500">
+                Trigger HTTP POST requests to external URLs when messages match certain trigger words. The message must start with the trigger word.
+              </p>
+
+              {outgoingError && (
+                <div className="flex items-center gap-2 px-3 py-2 bg-red-900/30 border border-red-800/50 rounded-lg text-red-300 text-xs">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                  {outgoingError}
+                </div>
+              )}
+
+              <div className="space-y-2 p-4 bg-[#1a1d21] border border-white/5 rounded-lg">
+                <p className="text-xs font-medium text-slate-400 mb-3">Add new outgoing webhook</p>
+                <input
+                  className="w-full bg-[#222529] border border-white/10 rounded-lg px-3 py-2 text-white text-sm placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-[#4a154b]"
+                  value={newOutgoingName}
+                  onChange={(e) => setNewOutgoingName(e.target.value)}
+                  placeholder="Webhook name (e.g. Alert Bot)"
+                  disabled={savingOutgoing}
+                />
+                <input
+                  className="w-full bg-[#222529] border border-white/10 rounded-lg px-3 py-2 text-white text-sm placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-[#4a154b]"
+                  value={newOutgoingTrigger}
+                  onChange={(e) => setNewOutgoingTrigger(e.target.value)}
+                  placeholder="Trigger words, comma-separated (e.g. !alert, !deploy)"
+                  disabled={savingOutgoing}
+                />
+                <input
+                  className="w-full bg-[#222529] border border-white/10 rounded-lg px-3 py-2 text-white text-sm placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-[#4a154b]"
+                  value={newOutgoingUrl}
+                  onChange={(e) => setNewOutgoingUrl(e.target.value)}
+                  placeholder="URL to POST to (e.g. https://example.com/hook)"
+                  disabled={savingOutgoing}
+                />
+                <select
+                  className="w-full bg-[#222529] border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-1 focus:ring-[#4a154b] disabled:opacity-50"
+                  value={newOutgoingChannelId}
+                  onChange={(e) => setNewOutgoingChannelId(e.target.value)}
+                  disabled={savingOutgoing}
+                >
+                  <option value="">All channels</option>
+                  {webhookChannels.map((ch) => (
+                    <option key={ch.id} value={ch.id}>#{ch.name}</option>
+                  ))}
+                </select>
+                <button
+                  onClick={handleAddOutgoingWebhook}
+                  disabled={savingOutgoing || !newOutgoingName.trim() || !newOutgoingTrigger.trim() || !newOutgoingUrl.trim()}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-[#4a154b] hover:bg-[#611f6a] text-white text-xs font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {savingOutgoing ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Plus className="w-3.5 h-3.5" />
+                  )}
+                  Create Outgoing Webhook
+                </button>
+              </div>
+
+              {loadingOutgoing ? (
+                <div className="flex items-center justify-center py-4">
+                  <Loader2 className="w-4 h-4 text-slate-400 animate-spin" />
+                </div>
+              ) : outgoingWebhooks.length === 0 ? (
+                <p className="text-xs text-slate-600 text-center py-3">No outgoing webhooks yet.</p>
+              ) : (
+                <ul className="space-y-2">
+                  {outgoingWebhooks.map((wh) => (
+                    <li key={wh.id} className="flex items-start gap-3 p-3 bg-[#1a1d21] border border-white/5 rounded-lg">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium text-white">{wh.name}</span>
+                          {wh.channelName ? (
+                            <span className="text-xs text-slate-500">#{wh.channelName}</span>
+                          ) : (
+                            <span className="text-xs text-slate-600">all channels</span>
+                          )}
+                        </div>
+                        <div className="text-xs text-slate-400 mt-0.5">
+                          <span className="text-slate-500">Triggers: </span>
+                          <span className="font-mono">{wh.triggerWords}</span>
+                        </div>
+                        <div className="text-xs text-slate-400 truncate mt-0.5 flex items-center gap-1">
+                          <Globe className="w-3 h-3 shrink-0" />
+                          <span className="truncate">{wh.url}</span>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => {
+                          if (confirm(`Delete outgoing webhook "${wh.name}"?`)) handleRemoveOutgoingWebhook(wh.id);
+                        }}
+                        disabled={removingOutgoingId === wh.id}
+                        className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-900/20 transition-colors disabled:opacity-50 shrink-0"
+                        title="Delete webhook"
+                      >
+                        {removingOutgoingId === wh.id ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <Trash2 className="w-3.5 h-3.5" />
+                        )}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </section>
+        )}
+
+        {/* Workspace Defaults */}
+        {isPrivileged && (
+          <section className="bg-[#222529] border border-white/10 rounded-xl overflow-hidden">
+            <div className="px-5 py-4 border-b border-white/5 flex items-center gap-2">
+              <Settings className="w-4 h-4 text-slate-400" />
+              <h2 className="text-sm font-semibold text-white">Workspace Defaults</h2>
+            </div>
+
+            <div className="px-5 py-5 space-y-4">
+              <p className="text-xs text-slate-500">
+                Configure default settings applied to new members when they join this workspace.
+              </p>
+
+              <div>
+                <label className="block text-xs font-medium text-slate-400 mb-1.5">
+                  Default Notification Preference
+                </label>
+                <select
+                  className="w-full bg-[#1a1d21] border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-1 focus:ring-[#4a154b] disabled:opacity-50"
+                  value={defaultNotifPref}
+                  onChange={(e) => setDefaultNotifPref(e.target.value)}
+                  disabled={savingDefaults}
+                >
+                  <option value="all">All messages</option>
+                  <option value="mentions">Mentions only</option>
+                  <option value="none">None</option>
+                </select>
+                <p className="text-xs text-slate-500 mt-1">New members will have this notification preference set for channels they join automatically.</p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-slate-400 mb-1.5">
+                  Default Channels
+                </label>
+                <p className="text-xs text-slate-500 mb-2">New members will be automatically added to these channels.</p>
+                <div className="space-y-1.5">
+                  {webhookChannels.map((ch) => (
+                    <label key={ch.id} className="flex items-center gap-2 cursor-pointer group">
+                      <input
+                        type="checkbox"
+                        className="rounded border-white/20 bg-[#1a1d21] text-[#4a154b] focus:ring-[#4a154b] focus:ring-offset-0"
+                        checked={defaultChannelIds.includes(ch.id)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setDefaultChannelIds((prev) => [...prev, ch.id]);
+                          } else {
+                            setDefaultChannelIds((prev) => prev.filter((id) => id !== ch.id));
+                          }
+                        }}
+                        disabled={savingDefaults}
+                      />
+                      <span className="text-sm text-slate-300 group-hover:text-white transition-colors">#{ch.name}</span>
+                    </label>
+                  ))}
+                  {webhookChannels.length === 0 && (
+                    <p className="text-xs text-slate-600">No channels available.</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={handleSaveDefaults}
+                  disabled={savingDefaults}
+                  className="px-4 py-2 bg-[#4a154b] hover:bg-[#611f6a] text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {savingDefaults ? (
+                    <span className="flex items-center gap-2">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      Saving…
+                    </span>
+                  ) : (
+                    'Save Defaults'
+                  )}
+                </button>
+                {defaultsSaved && (
+                  <span className="text-green-400 text-sm">Saved successfully</span>
+                )}
+              </div>
             </div>
           </section>
         )}

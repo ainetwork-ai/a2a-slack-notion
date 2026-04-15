@@ -19,6 +19,8 @@ export const workspaces = pgTable("workspaces", {
   description: text("description"),
   createdBy: uuid("created_by"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+  defaultNotificationPref: text("default_notification_pref").default("all").notNull(),
+  defaultChannels: jsonb("default_channels").$type<string[]>().default([]),
 });
 
 export const users = pgTable("users", {
@@ -137,6 +139,7 @@ export const dmMembers = pgTable(
       .references(() => users.id, { onDelete: "cascade" })
       .notNull(),
     lastReadAt: timestamp("last_read_at").defaultNow().notNull(),
+    isMuted: boolean("is_muted").default(false).notNull(),
   },
   (t) => [
     uniqueIndex("dm_members_pk").on(t.conversationId, t.userId),
@@ -401,4 +404,62 @@ export const customCommands = pgTable(
     uniqueIndex("custom_commands_workspace_name_unique").on(t.workspaceId, t.name),
     index("custom_commands_workspace_idx").on(t.workspaceId),
   ]
+);
+
+export const outgoingWebhooks = pgTable(
+  "outgoing_webhooks",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id")
+      .references(() => workspaces.id, { onDelete: "cascade" })
+      .notNull(),
+    channelId: uuid("channel_id").references(() => channels.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    triggerWords: text("trigger_words").notNull(),
+    url: text("url").notNull(),
+    createdBy: uuid("created_by")
+      .references(() => users.id)
+      .notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [
+    index("outgoing_webhooks_workspace_idx").on(t.workspaceId),
+  ]
+);
+
+export const auditLogs = pgTable(
+  "audit_logs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id")
+      .references(() => workspaces.id, { onDelete: "cascade" })
+      .notNull(),
+    userId: uuid("user_id")
+      .references(() => users.id, { onDelete: "set null" }),
+    action: text("action").notNull(),
+    targetType: text("target_type").notNull(),
+    targetId: uuid("target_id"),
+    metadata: jsonb("metadata"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [
+    index("audit_logs_workspace_idx").on(t.workspaceId, t.createdAt),
+    index("audit_logs_user_idx").on(t.userId),
+  ]
+);
+
+export const messageEdits = pgTable(
+  "message_edits",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    messageId: uuid("message_id")
+      .references(() => messages.id, { onDelete: "cascade" })
+      .notNull(),
+    previousContent: text("previous_content").notNull(),
+    editedBy: uuid("edited_by")
+      .references(() => users.id)
+      .notNull(),
+    editedAt: timestamp("edited_at").defaultNow().notNull(),
+  },
+  (t) => [index("message_edits_message_idx").on(t.messageId)]
 );
