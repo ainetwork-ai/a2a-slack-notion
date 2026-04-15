@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, use, useEffect, useRef } from 'react';
-import { Bot, Phone, Video, Users, Bell, BellOff } from 'lucide-react';
+import { Bot, Phone, Video, Users, Bell, BellOff, FileJson, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
@@ -16,6 +16,7 @@ import { useAuth } from '@/lib/hooks/use-auth';
 import { useTyping } from '@/lib/realtime/use-typing';
 import { usePresence } from '@/lib/realtime/use-presence';
 import { useAppStore } from '@/lib/stores/app-store';
+import { useWorkspaceStore } from '@/lib/stores/workspace-store';
 import useSWR from 'swr';
 import { cn } from '@/lib/utils';
 
@@ -42,10 +43,16 @@ export default function DMPage({ params }: { params: Promise<{ conversationId: s
   const { conversationId } = use(params);
   const { user: authUser } = useAuth();
   const { activeThread } = useAppStore();
+  const { workspaces, activeWorkspaceId } = useWorkspaceStore();
+  const activeWorkspace = workspaces.find(w => w.id === activeWorkspaceId);
+  const isWorkspaceOwner = activeWorkspace?.role === 'owner';
   const [selectedSkill, setSelectedSkill] = useState<AgentSkill | null>(null);
   const lastReadAtRef = useRef<string | null>(null);
   const [isMuted, setIsMuted] = useState(false);
   const [togglingMute, setTogglingMute] = useState(false);
+  const [agentCardOpen, setAgentCardOpen] = useState(false);
+  const [agentCardJson, setAgentCardJson] = useState<Record<string, unknown> | null>(null);
+  const [isOwner, setIsOwner] = useState(false);
 
   useEffect(() => {
     // Mark as read and capture the previous lastReadAt in one call
@@ -61,7 +68,7 @@ export default function DMPage({ params }: { params: Promise<{ conversationId: s
       .catch(() => {});
   }, [conversationId]);
 
-  const { data: convoData } = useSWR<{ conversation: Conversation }>(
+  const { data: convoData, mutate: mutateConvo } = useSWR<{ conversation: Conversation }>(
     `/api/dm/${conversationId}`,
     fetcher
   );
@@ -91,6 +98,30 @@ export default function DMPage({ params }: { params: Promise<{ conversationId: s
   const otherUser = conversation?.otherUser;
   const otherMembers = conversation?.otherMembers ?? [];
   const isAgent = otherUser?.isAgent ?? false;
+
+  // Fetch agent card + ownership info for bot agents
+  useEffect(() => {
+    if (!isAgent || !otherUser?.id) return;
+    fetch(`/api/agents/${otherUser.id}`)
+      .then(r => r.json())
+      .then(data => {
+        const card = data.agentCardJson;
+        if (card) {
+          setAgentCardJson(card as Record<string, unknown>);
+          setIsOwner(card.builtBy === authUser?.id);
+        }
+      })
+      .catch(() => {});
+  }, [isAgent, otherUser?.id, authUser?.id]);
+
+  async function handleDeleteAgent() {
+    if (!otherUser?.id) return;
+    if (!confirm(`Delete agent "${otherUser.displayName}"? This cannot be undone.`)) return;
+    const res = await fetch(`/api/agents/${otherUser.id}`, { method: 'DELETE' });
+    if (res.ok) {
+      window.location.href = '/workspace';
+    }
+  }
 
   const { messages, isLoading, hasMore, sendMessage, editMessage, deleteMessage, loadMore } =
     useMessages({ conversationId, currentUser: authUser ? { id: authUser.id, displayName: authUser.displayName, avatarUrl: authUser.avatarUrl } : undefined });
@@ -199,8 +230,43 @@ export default function DMPage({ params }: { params: Promise<{ conversationId: s
           >
             {isMuted ? <BellOff className="w-4 h-4" /> : <Bell className="w-4 h-4" />}
           </Button>
+          {isAgent && agentCardJson && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="w-8 h-8 text-slate-400 hover:text-[#36c5f0] hover:bg-white/10"
+              onClick={() => setAgentCardOpen(!agentCardOpen)}
+              title="View Agent Card"
+            >
+              <FileJson className="w-4 h-4" />
+            </Button>
+          )}
+          {isAgent && (isOwner || isWorkspaceOwner) && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="w-8 h-8 text-slate-400 hover:text-red-400 hover:bg-white/10"
+              onClick={handleDeleteAgent}
+              title="Delete agent"
+            >
+              <Trash2 className="w-4 h-4" />
+            </Button>
+          )}
         </div>
       </div>
+
+      {/* Agent Card JSON Viewer */}
+      {agentCardOpen && agentCardJson && (
+        <div className="border-b border-white/5 bg-[#0d1117] px-4 py-3 max-h-64 overflow-y-auto shrink-0">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Agent Card (A2A)</span>
+            <button onClick={() => setAgentCardOpen(false)} className="text-xs text-slate-500 hover:text-white">Close</button>
+          </div>
+          <pre className="text-xs text-[#36c5f0] font-mono whitespace-pre-wrap leading-relaxed">
+            {JSON.stringify(agentCardJson, null, 2)}
+          </pre>
+        </div>
+      )}
 
       {/* Messages */}
       <div className="flex flex-1 overflow-hidden">
