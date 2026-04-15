@@ -217,7 +217,7 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
               <span
                 className="text-slate-400 text-sm truncate cursor-pointer hover:text-slate-200"
                 onClick={() => { setDescriptionDraft(channel.description ?? ''); setEditingDescription(true); }}
-                title="Click to edit description"
+                title={channel.description}
               >
                 {channel.description}
               </span>
@@ -422,7 +422,7 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
           <TypingIndicator typingUsers={typingUsers} />
           <MessageInput
             onSend={sendMessage}
-            placeholder={`Message #${channel?.name ?? ''}`}
+            placeholder={`Message ${channel?.name ?? ''}`}
             channelId={channelId}
           />
         </div>
@@ -438,18 +438,20 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
 
         {/* Channel Detail Panel */}
         {detailPanelOpen && (
-          <ChannelDetailPanel
-            channelId={channelId}
-            channelName={channel?.name ?? ''}
-            channelDescription={channel?.description}
-            createdAt={channel?.createdAt}
-            members={channelData?.members ?? []}
-            messages={messages}
-            isAdmin={true}
-            isArchived={channel?.isArchived}
-            onClose={() => setDetailPanelOpen(false)}
-            onArchiveToggle={handleArchiveToggle}
-          />
+          <div className="fixed inset-y-0 right-0 z-30 lg:relative lg:inset-auto lg:z-auto">
+            <ChannelDetailPanel
+              channelId={channelId}
+              channelName={channel?.name ?? ''}
+              channelDescription={channel?.description}
+              createdAt={channel?.createdAt}
+              members={channelData?.members ?? []}
+              messages={messages}
+              isAdmin={true}
+              isArchived={channel?.isArchived}
+              onClose={() => setDetailPanelOpen(false)}
+              onArchiveToggle={handleArchiveToggle}
+            />
+          </div>
         )}
       </div>
 

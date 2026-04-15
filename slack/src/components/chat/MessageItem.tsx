@@ -90,7 +90,7 @@ export function renderInlineMarkdown(text: string): string {
   html = html.replace(/\x00URL(\d+)\x00/g, (_match, idxStr: string) => {
     const url = urlPlaceholders[parseInt(idxStr)];
     const displayUrl = url.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-    return `<a href="${url}" target="_blank" rel="noopener noreferrer" class="text-[#1d9bd1] hover:underline break-all">${displayUrl}</a>`;
+    return `<a href="${url}" target="_blank" rel="noopener noreferrer" class="text-[#1d9bd1] hover:underline break-all" style="word-break:break-all">${displayUrl}</a>`;
   });
 
   // Item 2 & 13: Style @channel/@here/@everyone and regular @mentions
@@ -524,7 +524,7 @@ export default function MessageItem({
           </div>
         ) : (
           <div>
-            <p className="text-[#d1d2d3] text-[15px] leading-[1.46667] break-words">
+            <p className="text-[#d1d2d3] text-[15px] leading-[1.46667] break-words overflow-hidden">
               {renderMessageContent(message.content)}
             </p>
 
