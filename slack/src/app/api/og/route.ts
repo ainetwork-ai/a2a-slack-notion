@@ -22,7 +22,14 @@ export async function GET(request: NextRequest) {
     clearTimeout(timeout);
 
     if (!res.ok) {
-      return NextResponse.json({ error: 'Failed to fetch URL' }, { status: 502 });
+      // Return domain-based fallback so the UI can still show a basic preview
+      const domain = new URL(url).hostname.replace('www.', '');
+      return NextResponse.json({
+        title: domain,
+        description: null,
+        image: null,
+        favicon: `https://www.google.com/s2/favicons?domain=${domain}&sz=64`,
+      });
     }
 
     const html = await res.text();

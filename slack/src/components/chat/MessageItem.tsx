@@ -126,12 +126,12 @@ interface OGData {
   title?: string | null;
   description?: string | null;
   image?: string | null;
+  favicon?: string | null;
 }
 
 function OGCard({ url }: { url: string }) {
   const [og, setOg] = useState<OGData | null>(null);
   const [failed, setFailed] = useState(false);
-  // Simple client-side cache via module-level map
   const cacheKey = url;
 
   useEffect(() => {
@@ -160,26 +160,35 @@ function OGCard({ url }: { url: string }) {
 
   if (failed || !og) return null;
 
+  const domain = (() => { try { return new URL(url).hostname.replace('www.', ''); } catch { return url; } })();
+
   return (
     <a
       href={url}
       target="_blank"
       rel="noopener noreferrer"
-      className="mt-2 flex gap-3 max-w-sm bg-white/5 border border-white/10 rounded-lg p-3 hover:bg-white/8 transition-colors no-underline"
+      className="mt-2 flex gap-3 max-w-md bg-white/5 border-l-4 border-[#36c5f0] rounded-r-lg p-3 hover:bg-white/8 transition-colors no-underline"
       onClick={e => e.stopPropagation()}
     >
-      {og.image && (
+      {og.image ? (
         <img
           src={og.image}
           alt=""
-          className="w-16 h-16 object-cover rounded shrink-0"
+          className="w-20 h-20 object-cover rounded shrink-0"
           onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
         />
-      )}
+      ) : og.favicon ? (
+        <img
+          src={og.favicon}
+          alt=""
+          className="w-8 h-8 rounded shrink-0 mt-0.5"
+          onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
+        />
+      ) : null}
       <div className="min-w-0">
-        {og.title && <p className="text-sm font-semibold text-white truncate">{og.title}</p>}
+        <p className="text-xs text-slate-500 mb-0.5">{domain}</p>
+        {og.title && <p className="text-sm font-semibold text-[#36c5f0] hover:underline truncate">{og.title}</p>}
         {og.description && <p className="text-xs text-slate-400 line-clamp-2 mt-0.5">{og.description}</p>}
-        <p className="text-xs text-[#36c5f0] truncate mt-1">{url}</p>
       </div>
     </a>
   );
