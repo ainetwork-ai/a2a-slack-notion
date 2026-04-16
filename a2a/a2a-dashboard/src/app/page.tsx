@@ -1,16 +1,18 @@
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
-import { Search, MessageSquare, Play, Boxes, Users } from "lucide-react";
+import { Search, MessageSquare, Play, Boxes, Users, FlaskConical } from "lucide-react";
 import AgentExplorer from "@/components/AgentExplorer";
 import AgentList from "@/components/AgentList";
 import AgentChat from "@/components/AgentChat";
 import ScriptRunner from "@/components/ScriptRunner";
+import AgentTester from "@/components/AgentTester";
 import type { AgentCard } from "@/lib/a2a-client";
 
-type Tab = "explorer" | "agents" | "chat" | "scripts";
+type Tab = "tester" | "explorer" | "agents" | "chat" | "scripts";
 
 const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
+  { id: "tester", label: "Agent Tester", icon: <FlaskConical className="w-4 h-4" /> },
   { id: "explorer", label: "Agent Explorer", icon: <Search className="w-4 h-4" /> },
   { id: "agents", label: "Agents", icon: <Users className="w-4 h-4" /> },
   { id: "chat", label: "Agent Chat", icon: <MessageSquare className="w-4 h-4" /> },
@@ -18,7 +20,7 @@ const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
 ];
 
 export default function Home() {
-  const [activeTab, setActiveTab] = useState<Tab>("explorer");
+  const [activeTab, setActiveTab] = useState<Tab>("tester");
   const [savedAgents, setSavedAgents] = useState<Map<string, AgentCard>>(
     () => new Map()
   );
@@ -113,6 +115,7 @@ export default function Home() {
 
       {/* Content */}
       <main className="max-w-6xl mx-auto px-6 py-6">
+        {activeTab === "tester" && <AgentTester />}
         {activeTab === "explorer" && (
           <AgentExplorer onAgentLoaded={handleAgentLoaded} />
         )}

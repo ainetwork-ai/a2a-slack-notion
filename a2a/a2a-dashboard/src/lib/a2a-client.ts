@@ -47,12 +47,16 @@ export async function sendA2AMessage(
     taskId?: string;
     agentName?: string;
     skillId?: string;
+    variables?: Record<string, string>;
+    debug?: boolean;
   }
 ): Promise<{
   kind: string;
   content: string;
   taskId?: string;
   contextId?: string;
+  systemPrompt?: string;
+  requestBody?: unknown;
   raw?: unknown;
 }> {
   const url = normalizeAgentUrl(agentUrl);
@@ -76,10 +80,13 @@ export async function sendA2AMessage(
   if (options?.agentName) {
     params.metadata = { agentName: options.agentName };
   }
-  if (options?.skillId) {
-    (message as Record<string, unknown>).metadata = {
-      skillId: options.skillId,
-    };
+  if (options?.skillId || options?.variables || options?.debug) {
+    const meta: Record<string, unknown> = {};
+    if (options?.skillId) meta.skillId = options.skillId;
+    if (options?.variables && Object.keys(options.variables).length > 0)
+      meta.variables = options.variables;
+    if (options?.debug) meta.debug = true;
+    (message as Record<string, unknown>).metadata = meta;
   }
 
   const body = {
@@ -103,6 +110,10 @@ export async function sendA2AMessage(
   }
 
   const result = data.result;
+  const sysPrompt: string | undefined =
+    result?.metadata?.systemPrompt ??
+    result?.status?.message?.metadata?.systemPrompt;
+
   if (result?.kind === "task") {
     const textPart = result.artifacts?.[0]?.parts?.find(
       (p: { kind: string }) => p.kind === "text"
@@ -112,6 +123,8 @@ export async function sendA2AMessage(
       content: textPart?.text || "No response",
       taskId: result.id,
       contextId: result.contextId,
+      systemPrompt: sysPrompt,
+      requestBody: body,
       raw: data,
     };
   }
@@ -123,6 +136,8 @@ export async function sendA2AMessage(
     kind: "message",
     content: textPart?.text || "No response",
     contextId: result?.contextId,
+    systemPrompt: sysPrompt,
+    requestBody: body,
     raw: data,
   };
 }

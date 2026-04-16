@@ -3,7 +3,7 @@ import { sendA2AMessage } from "@/lib/a2a-client";
 
 export async function POST(request: NextRequest) {
   const body = await request.json();
-  const { agentUrl, text, contextId, taskId, skillId } = body;
+  const { agentUrl, text, contextId, taskId, skillId, variables, debug } = body;
 
   if (!agentUrl || !text) {
     return NextResponse.json(
@@ -17,6 +17,8 @@ export async function POST(request: NextRequest) {
       contextId,
       taskId,
       skillId,
+      variables,
+      debug,
     });
     return NextResponse.json(result);
   } catch (e) {
