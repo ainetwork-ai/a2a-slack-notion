@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-배정 → 초안 1-turn 테스트.
+배정 → 시장 조사 1-turn 테스트.
 
-데미안이 기자를 배정하고, 배정된 기자가 기사 초안을 작성하는
+데미안이 기자를 배정하고, 배정된 기자가 시장 조사 리포트를 작성하는
 두 단계만 실행한다. 다양한 주제의 샘플 기사를 기본 제공하므로
 데미안이 주제별로 적절한 기자를 고르는지 확인할 수 있다.
 
@@ -218,7 +218,7 @@ def pick_reporter(text: str) -> str | None:
 # ─────────────────────────────────────────────────────────────
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="배정 → 초안 1-turn 테스트")
+    ap = argparse.ArgumentParser(description="배정 → 시장 조사 1-turn 테스트")
     ap.add_argument("--topic", choices=list(SAMPLES.keys()),
                     help="샘플 주제 (생략 시 랜덤)")
     ap.add_argument("--source", help="원문 텍스트 파일 경로")
@@ -271,18 +271,19 @@ def main() -> int:
     if expected:
         print(f"  기대: {expected}  {match}")
 
-    # ── Step 2: 기자 초안 작성 ───────────────────────────────
+    # ── Step 2: 기자 시장 조사 ───────────────────────────────
     print("\n" + "─" * 60)
-    print(f"STEP 2 — {rep['kor']} 초안 작성 (skill=writing)")
+    print(f"STEP 2 — {rep['kor']} 시장 조사 (skill=report)")
     print("─" * 60)
 
     draft = call_agent(
         args.base_url, reporter_id,
-        user_text="아래 자료를 바탕으로 기사 초안을 작성해줘.",
-        skill_id="writing",
+        user_text="편집장 지시에 따라 시장 조사/리서치 보고를 작성해줘.",
+        skill_id="report",
         variables={
-            "MARKET_RESEARCH": source,
-            "ARTICLE_GUIDE": f"{today} 보도된 내용을 바탕으로 기사를 작성하세요.",
+            "TODAY_DATE": today,
+            "BASIC_ARTICLE_SOURCE": source,
+            "CHIEF_COMMENT": assignment,
         },
     )
     print(draft)
@@ -295,8 +296,8 @@ def main() -> int:
     print(f"  배정 기자: {rep['kor']}({rep['en']}) — {reporter_id}")
     if expected:
         print(f"  기대 기자: {expected}  {match}")
-    print(f"  초안 길이: {len(draft.strip())}자")
-    print(f"  초안 비어있지 않음: {'✓' if draft.strip() else '✗'}")
+    print(f"  리포트 길이: {len(draft.strip())}자")
+    print(f"  리포트 비어있지 않음: {'✓' if draft.strip() else '✗'}")
     print("=" * 60)
 
     return 0 if draft.strip() else 1
