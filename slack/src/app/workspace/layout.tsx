@@ -4,6 +4,7 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/hooks/use-auth';
 import Sidebar from '@/components/layout/Sidebar';
+import TopBar from '@/components/layout/TopBar';
 import MobileNav from '@/components/layout/MobileNav';
 import { requestPermission } from '@/lib/notifications/browser-notify';
 import ChannelList from '@/components/layout/ChannelList';
@@ -139,7 +140,13 @@ export default function WorkspaceLayout({
   if (!user) return null;
 
   return (
-    <div className="flex h-full overflow-hidden main-content">
+    <div className="flex flex-col h-full overflow-hidden main-content">
+      {/* Top bar — search + history + user */}
+      <div className="hidden md:block">
+        <TopBar />
+      </div>
+
+    <div className="flex flex-1 min-h-0 overflow-hidden">
       {/* Icon Sidebar */}
       <Sidebar />
 
@@ -241,6 +248,7 @@ export default function WorkspaceLayout({
           )}
         </div>
       </div>
+    </div>
 
       {/* Global modals */}
       <SearchModal />
