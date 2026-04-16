@@ -48,7 +48,7 @@ function stepPreview(step: WorkflowStep): string {
   switch (step.type) {
     case 'send_message':
     case 'post_to_channel': {
-      const ch = (s.channelId as string) || '?';
+      const ch = (s.channel as string) || '?';
       const msg = (s.message as string) || '';
       return `in #${ch}${msg ? `: "${msg.slice(0, 40)}${msg.length > 40 ? '…' : ''}"` : ''}`;
     }
@@ -63,18 +63,18 @@ function stepPreview(step: WorkflowStep): string {
       return `#${ch}${title ? ` — "${title}"` : ''}${s.append ? ' (append)' : ''}`;
     }
     case 'ask_agent': {
-      const agent = (s.agentId as string) || '?';
+      const agent = (s.agent as string) || '?';
       const prompt = (s.prompt as string) || '';
       return `${agent}${prompt ? `: "${prompt.slice(0, 40)}${prompt.length > 40 ? '…' : ''}"` : ''}`;
     }
     case 'dm_user': {
-      const user = (s.userId as string) || '?';
+      const user = (s.user as string) || '?';
       return `to ${user}`;
     }
     case 'add_to_channel':
-      return `${(s.userId as string) || '?'} → #${(s.channelId as string) || '?'}`;
+      return `${(s.user as string) || '?'} → #${(s.channel as string) || '?'}`;
     case 'approval':
-      return `Approver: ${(s.approverUserId as string) || '?'}`;
+      return `Approver: ${(s.approver as string) || '?'}`;
     case 'wait':
       return `${(s.durationMs as number) ?? 1000}ms`;
     case 'create_channel':
@@ -92,17 +92,17 @@ function defaultStep(type: WorkflowStep['type']): WorkflowStep {
   switch (type) {
     case 'invoke_skill': return { type, agent: '', skillId: '', inputs: {}, saveAs: '' };
     case 'write_canvas': return { type, channel: '', content: '', append: false, saveAs: '' };
-    case 'ask_agent': return { type, agentId: '', prompt: '', saveAs: '' };
-    case 'send_message': return { type, channelId: '', message: '' };
-    case 'post_to_channel': return { type, channelId: '', message: '' };
-    case 'dm_user': return { type, userId: '', message: '' };
-    case 'add_to_channel': return { type, channelId: '', userId: '' };
-    case 'approval': return { type, approverUserId: '', message: '', saveAs: '' };
+    case 'ask_agent': return { type, agent: '', prompt: '', saveAs: '' };
+    case 'send_message': return { type, channel: '', message: '' };
+    case 'post_to_channel': return { type, channel: '', message: '' };
+    case 'dm_user': return { type, user: '', message: '' };
+    case 'add_to_channel': return { type, channel: '', user: '' };
+    case 'approval': return { type, approver: '', message: '', saveAs: '' };
     case 'condition': return { type, if: '', then: [] };
     case 'wait': return { type, durationMs: 1000 };
     case 'create_channel': return { type, name: '' };
     case 'form': return { type, title: '', fields: [] };
-    default: return { type: 'send_message', channelId: '', message: '' };
+    default: return { type: 'send_message', channel: '', message: '' };
   }
 }
 

@@ -22,14 +22,14 @@ function triggerSummary(triggerType: TriggerType, config: TriggerConfigData): st
       return `${freq} at ${h12}:${m} ${ampm}`;
     }
     case 'channel_message': {
-      const ch = config.channelId || 'a channel';
+      const ch = config.channel || 'a channel';
       if (config.keywordEnabled && config.keyword) {
         return `a message containing "${config.keyword}" is posted in #${ch}`;
       }
       return `a message is posted in #${ch}`;
     }
     case 'channel_join':
-      return `someone joins #${config.joinChannelId || 'a channel'}`;
+      return `someone joins #${config.joinChannel || 'a channel'}`;
     case 'webhook':
       return 'a webhook call is received';
     case 'form':
@@ -59,21 +59,21 @@ function stepSummary(step: WorkflowStep, index: number): string {
   switch (step.type) {
     case 'send_message':
     case 'post_to_channel': {
-      const ch = (s.channelId as string) || '?';
+      const ch = (s.channel as string) || '?';
       const msg = (s.message as string) || '';
       return `${n}. Send a message in #${ch}${msg ? `: "${msg.slice(0, 60)}${msg.length > 60 ? '…' : ''}"` : ''}`;
     }
     case 'ask_agent': {
-      const agent = (s.agentId as string) || '?';
+      const agent = (s.agent as string) || '?';
       const prompt = (s.prompt as string) || '';
       return `${n}. Ask ${agent}: "${prompt.slice(0, 60)}${prompt.length > 60 ? '…' : ''}"`;
     }
     case 'dm_user':
-      return `${n}. Send a DM to ${(s.userId as string) || '?'}`;
+      return `${n}. Send a DM to ${(s.user as string) || '?'}`;
     case 'add_to_channel':
-      return `${n}. Add ${(s.userId as string) || '?'} to #${(s.channelId as string) || '?'}`;
+      return `${n}. Add ${(s.user as string) || '?'} to #${(s.channel as string) || '?'}`;
     case 'approval':
-      return `${n}. Request approval from ${(s.approverUserId as string) || '?'}`;
+      return `${n}. Request approval from ${(s.approver as string) || '?'}`;
     case 'wait':
       return `${n}. Wait ${(s.durationMs as number) ?? 1000}ms`;
     case 'create_channel':

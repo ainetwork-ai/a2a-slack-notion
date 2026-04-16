@@ -21,17 +21,17 @@ const TEMPLATES: WorkflowTemplate[] = [
     description: 'When someone joins a channel, send them a welcome DM and add them to key channels.',
     icon: '👋',
     triggerType: 'channel_join',
-    triggerConfig: { channelId: '' },
+    triggerConfig: { channel: '' },
     steps: [
       {
         type: 'dm_user',
-        userId: '{{triggeredBy}}',
+        user: '{{triggeredBy}}',
         message: 'Welcome to the team! Here are some tips to get started:\n\n• Check out #general for announcements\n• Use /help for available commands\n\nLet us know if you need anything!',
       },
       {
         type: 'add_to_channel',
-        channelId: '',
-        userId: '{{triggeredBy}}',
+        channel: '',
+        user: '{{triggeredBy}}',
       },
     ],
   },
@@ -61,7 +61,7 @@ const TEMPLATES: WorkflowTemplate[] = [
       },
       {
         type: 'approval',
-        approverUserId: '',
+        approver: '',
         message: 'Time off request from {{triggeredBy}}:\n\n• Dates: {{form.start_date}} to {{form.end_date}}\n• Type: {{form.type}}\n• Reason: {{form.reason}}',
         saveAs: 'approval',
       },
@@ -71,14 +71,14 @@ const TEMPLATES: WorkflowTemplate[] = [
         then: [
           {
             type: 'dm_user',
-            userId: '{{triggeredBy}}',
+            user: '{{triggeredBy}}',
             message: 'Your time off request has been **approved**! Enjoy your time off.',
           },
         ],
         else: [
           {
             type: 'dm_user',
-            userId: '{{triggeredBy}}',
+            user: '{{triggeredBy}}',
             message: 'Your time off request was **rejected**. Please reach out to your manager for more information.',
           },
         ],
@@ -112,7 +112,7 @@ const TEMPLATES: WorkflowTemplate[] = [
       },
       {
         type: 'post_to_channel',
-        channelId: '',
+        channel: '',
         message: '**Bug Report: {{form.title}}**\n\nSeverity: {{form.severity}}\nReported by: {{triggeredBy}}\n\n**Steps to reproduce:**\n{{form.steps}}\n\n**Expected:** {{form.expected}}\n**Actual:** {{form.actual}}',
       },
     ],
@@ -136,7 +136,7 @@ const TEMPLATES: WorkflowTemplate[] = [
       },
       {
         type: 'post_to_channel',
-        channelId: '',
+        channel: '',
         message: '**Standup Update**\n\n**Yesterday:** {{standup.yesterday}}\n**Today:** {{standup.today}}\n**Blockers:** {{standup.blockers}}',
       },
     ],
@@ -194,7 +194,7 @@ const TEMPLATES: WorkflowTemplate[] = [
       },
       {
         type: 'post_to_channel',
-        channelId: '',
+        channel: '',
         message: '**[PUBLISHED ✅]** {{brief.topic}}\n\nFull article saved to the channel canvas.',
       },
     ],

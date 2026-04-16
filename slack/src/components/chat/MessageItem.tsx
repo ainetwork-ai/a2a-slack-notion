@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { useRouter } from 'next/navigation';
+import { Bot } from 'lucide-react';
 import { highlightCode } from '@/lib/syntax-highlight';
 import { format } from 'date-fns';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -99,6 +101,60 @@ export function renderInlineMarkdown(text: string): string {
   html = html.replace(/\n/g, '<br>');
   html = html.replace(/\x00BQSTART\x00([\s\S]*?)\x00BQEND\x00/g, '<blockquote class="border-l-4 border-[#4a154b] pl-3 text-slate-400 bg-white/5 my-0.5">$1</blockquote>');
   return html;
+}
+
+interface CreatedAgent {
+  id: string;
+  name: string;
+  a2aUrl: string | null;
+}
+
+function BuilderResultActions({ metadata }: { metadata: unknown }) {
+  const setAgentEditId = useAppStore((s) => s.setAgentEditId);
+  const router = useRouter();
+
+  if (!metadata || typeof metadata !== 'object') return null;
+  const m = metadata as { builder?: boolean; createdAgents?: CreatedAgent[] };
+  if (!m.builder || !Array.isArray(m.createdAgents) || m.createdAgents.length === 0) return null;
+
+  async function openDm(agentId: string) {
+    const res = await fetch('/api/dm', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userIds: [agentId] }),
+    });
+    if (res.ok) {
+      const conv = await res.json();
+      router.push(`/workspace/dm/${conv.id}`);
+    }
+  }
+
+  return (
+    <div className="mt-2 flex flex-wrap gap-1.5">
+      {m.createdAgents.map((agent) => (
+        <div
+          key={agent.id}
+          className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-[#1d9bd1]/10 border border-[#1d9bd1]/20 text-xs"
+        >
+          <Bot className="w-3 h-3 text-[#1d9bd1]" />
+          <span className="text-white font-medium">{agent.name}</span>
+          <button
+            onClick={() => openDm(agent.id)}
+            className="text-[#1d9bd1] hover:text-white transition-colors text-[11px] underline-offset-2 hover:underline"
+          >
+            DM
+          </button>
+          <span className="text-slate-600">·</span>
+          <button
+            onClick={() => setAgentEditId(agent.id)}
+            className="text-[#bcabbc] hover:text-white transition-colors flex items-center gap-1 text-[11px]"
+          >
+            <Pencil className="w-2.5 h-2.5" /> Edit
+          </button>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 function renderMessageContent(content: string): React.ReactNode {
@@ -527,6 +583,8 @@ export default function MessageItem({
             <p className="text-[#d1d2d3] text-[15px] leading-[1.46667] break-words overflow-hidden">
               {renderMessageContent(message.content)}
             </p>
+
+            <BuilderResultActions metadata={message.metadata} />
 
             {/* OG link preview — T6 */}
             {firstUrl && (/\.(jpe?g|png|gif|webp|svg)(\?.*)?$/i.test(firstUrl) ? (

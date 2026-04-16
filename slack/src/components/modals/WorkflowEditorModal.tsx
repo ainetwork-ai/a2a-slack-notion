@@ -35,7 +35,8 @@ const TRIGGER_TYPES = [
 ];
 
 const STEP_TYPES = [
-  { value: 'ask_agent', label: 'Ask agent' },
+  { value: 'invoke_skill', label: 'Invoke agent skill' },
+  { value: 'write_canvas', label: 'Write to canvas' },
   { value: 'post_to_channel', label: 'Post to channel' },
   { value: 'send_message', label: 'Send message' },
   { value: 'condition', label: 'Condition (if/then)' },
@@ -45,10 +46,11 @@ const STEP_TYPES = [
   { value: 'approval', label: 'Request approval' },
   { value: 'dm_user', label: 'Send DM to user' },
   { value: 'add_to_channel', label: 'Add user to channel' },
+  { value: 'ask_agent', label: 'Ask agent (legacy)' },
 ];
 
 function newStep(): WorkflowStep {
-  return { type: 'ask_agent', agentId: '', prompt: '', saveAs: '' } as WorkflowStep;
+  return { type: 'invoke_skill', agent: '', skillId: '', inputs: {}, saveAs: '' };
 }
 
 function FormFieldEditor({
@@ -144,15 +146,27 @@ function StepEditor({
           onChange={(e) => {
             const t = e.target.value as WorkflowStep['type'];
             if (t === 'form') {
-              onChange({ type: 'form', title: '', fields: [] } as WorkflowStep);
+              onChange({ type: 'form', title: '', fields: [] });
             } else if (t === 'approval') {
-              onChange({ type: 'approval', approverUserId: '', message: '' } as WorkflowStep);
+              onChange({ type: 'approval', approver: '', message: '' });
             } else if (t === 'dm_user') {
-              onChange({ type: 'dm_user', userId: '', message: '' } as WorkflowStep);
+              onChange({ type: 'dm_user', user: '', message: '' });
             } else if (t === 'add_to_channel') {
-              onChange({ type: 'add_to_channel', channelId: '', userId: '' } as WorkflowStep);
+              onChange({ type: 'add_to_channel', channel: '', user: '' });
+            } else if (t === 'invoke_skill') {
+              onChange({ type: 'invoke_skill', agent: '', skillId: '', inputs: {} });
+            } else if (t === 'write_canvas') {
+              onChange({ type: 'write_canvas', channel: '', content: '' });
+            } else if (t === 'post_to_channel' || t === 'send_message') {
+              onChange({ type: t, channel: '', message: '' });
+            } else if (t === 'create_channel') {
+              onChange({ type: 'create_channel', name: '' });
+            } else if (t === 'condition') {
+              onChange({ type: 'condition', if: '', then: [] });
+            } else if (t === 'wait') {
+              onChange({ type: 'wait', durationMs: 1000 });
             } else {
-              onChange({ type: t, agentId: '', prompt: '' } as WorkflowStep);
+              onChange({ type: 'ask_agent', agent: '', prompt: '' });
             }
           }}
           className="flex-1 bg-[#1a1d21] border border-white/10 rounded px-2 py-1 text-sm text-white"
@@ -172,12 +186,81 @@ function StepEditor({
         </button>
       </div>
 
-      {(step.type === 'ask_agent') && (
+      {step.type === 'invoke_skill' && (
         <>
           <Input
-            placeholder="Agent ID"
-            value={(s.agentId as string) || ''}
-            onChange={(e) => set('agentId', e.target.value)}
+            placeholder="Agent name (e.g. Reporter)"
+            value={(s.agent as string) || ''}
+            onChange={(e) => set('agent', e.target.value)}
+            className="bg-[#1a1d21] border-white/10 text-white text-sm"
+          />
+          <Input
+            placeholder="Skill ID (e.g. draft-article)"
+            value={(s.skillId as string) || ''}
+            onChange={(e) => set('skillId', e.target.value)}
+            className="bg-[#1a1d21] border-white/10 text-white text-sm"
+          />
+          <Textarea
+            placeholder='Inputs JSON (e.g. {"topic": "{{brief.topic}}"})'
+            value={s.inputs ? JSON.stringify(s.inputs, null, 2) : '{}'}
+            onChange={(e) => {
+              try {
+                set('inputs', JSON.parse(e.target.value));
+              } catch {
+                // keep text; parse on blur
+              }
+            }}
+            rows={3}
+            className="bg-[#1a1d21] border-white/10 text-white text-xs font-mono resize-none"
+          />
+          <Input
+            placeholder="Save result as (e.g. draft)"
+            value={(s.saveAs as string) || ''}
+            onChange={(e) => set('saveAs', e.target.value)}
+            className="bg-[#1a1d21] border-white/10 text-white text-sm"
+          />
+        </>
+      )}
+
+      {step.type === 'write_canvas' && (
+        <>
+          <Input
+            placeholder="Channel name (e.g. newsroom)"
+            value={(s.channel as string) || ''}
+            onChange={(e) => set('channel', e.target.value)}
+            className="bg-[#1a1d21] border-white/10 text-white text-sm"
+          />
+          <Input
+            placeholder="Title (optional, use {{varName}})"
+            value={(s.title as string) || ''}
+            onChange={(e) => set('title', e.target.value)}
+            className="bg-[#1a1d21] border-white/10 text-white text-sm"
+          />
+          <Textarea
+            placeholder="Content markdown (use {{varName}} for variables)"
+            value={(s.content as string) || ''}
+            onChange={(e) => set('content', e.target.value)}
+            rows={4}
+            className="bg-[#1a1d21] border-white/10 text-white text-sm resize-none"
+          />
+          <label className="flex items-center gap-1.5 text-xs text-slate-400">
+            <input
+              type="checkbox"
+              checked={Boolean(s.append)}
+              onChange={(e) => set('append', e.target.checked)}
+              className="rounded"
+            />
+            Append instead of replace
+          </label>
+        </>
+      )}
+
+      {step.type === 'ask_agent' && (
+        <>
+          <Input
+            placeholder="Agent name"
+            value={(s.agent as string) || ''}
+            onChange={(e) => set('agent', e.target.value)}
             className="bg-[#1a1d21] border-white/10 text-white text-sm"
           />
           <Input
@@ -205,9 +288,9 @@ function StepEditor({
       {(step.type === 'post_to_channel' || step.type === 'send_message') && (
         <>
           <Input
-            placeholder="Channel ID"
-            value={(s.channelId as string) || ''}
-            onChange={(e) => set('channelId', e.target.value)}
+            placeholder="Channel name"
+            value={(s.channel as string) || ''}
+            onChange={(e) => set('channel', e.target.value)}
             className="bg-[#1a1d21] border-white/10 text-white text-sm"
           />
           <Textarea
@@ -268,9 +351,9 @@ function StepEditor({
             className="bg-[#1a1d21] border-white/10 text-white text-sm"
           />
           <Input
-            placeholder="Post to channel ID (optional)"
-            value={(s.submitToChannelId as string) || ''}
-            onChange={(e) => set('submitToChannelId', e.target.value)}
+            placeholder="Post to channel name (optional)"
+            value={(s.submitToChannel as string) || ''}
+            onChange={(e) => set('submitToChannel', e.target.value)}
             className="bg-[#1a1d21] border-white/10 text-white text-sm"
           />
           <Input
@@ -313,9 +396,9 @@ function StepEditor({
       {step.type === 'approval' && (
         <>
           <Input
-            placeholder="Approver user ID"
-            value={(s.approverUserId as string) || ''}
-            onChange={(e) => set('approverUserId', e.target.value)}
+            placeholder="Approver (name or AIN address)"
+            value={(s.approver as string) || ''}
+            onChange={(e) => set('approver', e.target.value)}
             className="bg-[#1a1d21] border-white/10 text-white text-sm"
           />
           <Textarea
@@ -338,9 +421,9 @@ function StepEditor({
       {step.type === 'dm_user' && (
         <>
           <Input
-            placeholder="User ID to DM"
-            value={(s.userId as string) || ''}
-            onChange={(e) => set('userId', e.target.value)}
+            placeholder="User (name or AIN address)"
+            value={(s.user as string) || ''}
+            onChange={(e) => set('user', e.target.value)}
             className="bg-[#1a1d21] border-white/10 text-white text-sm"
           />
           <Textarea
@@ -356,15 +439,15 @@ function StepEditor({
       {step.type === 'add_to_channel' && (
         <>
           <Input
-            placeholder="Channel ID"
-            value={(s.channelId as string) || ''}
-            onChange={(e) => set('channelId', e.target.value)}
+            placeholder="Channel name"
+            value={(s.channel as string) || ''}
+            onChange={(e) => set('channel', e.target.value)}
             className="bg-[#1a1d21] border-white/10 text-white text-sm"
           />
           <Input
-            placeholder="User ID to add"
-            value={(s.userId as string) || ''}
-            onChange={(e) => set('userId', e.target.value)}
+            placeholder="User (name or AIN address)"
+            value={(s.user as string) || ''}
+            onChange={(e) => set('user', e.target.value)}
             className="bg-[#1a1d21] border-white/10 text-white text-sm"
           />
         </>
@@ -551,7 +634,7 @@ export default function WorkflowEditorModal({
                 onChange={(e) => setTriggerConfig(e.target.value)}
                 rows={3}
                 className="bg-[#222529] border-white/10 text-white text-xs font-mono resize-none"
-                placeholder='{"channelId": "...", "pattern": ".*"}'
+                placeholder='{"channel": "general", "pattern": ".*"}'
               />
             </div>
           )}

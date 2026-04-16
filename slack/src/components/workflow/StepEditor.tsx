@@ -101,10 +101,10 @@ export default function StepEditor({ step, onChange, onDone }: StepEditorProps) 
             <label className="text-xs text-slate-400 mb-1 block">Agent</label>
             <EntityPicker
               kind="agent"
-              value={(s.agentId as string) || ''}
+              value={(s.agent as string) || ''}
               onChange={(v) => {
                 // Changing the agent invalidates the previously selected skill.
-                onChange({ ...step, agentId: v, skillId: undefined } as WorkflowStep);
+                onChange({ ...step, agent: v, skillId: undefined } as WorkflowStep);
               }}
             />
           </div>
@@ -112,7 +112,7 @@ export default function StepEditor({ step, onChange, onDone }: StepEditorProps) 
             <label className="text-xs text-slate-400 mb-1 block">Skill (optional)</label>
             <EntityPicker
               kind="skill"
-              agentId={(s.agentId as string) || ''}
+              agentId={(s.agent as string) || ''}
               value={(s.skillId as string) || ''}
               onChange={(v) => set('skillId', v || undefined)}
               clearable
@@ -147,8 +147,8 @@ export default function StepEditor({ step, onChange, onDone }: StepEditorProps) 
             <label className="text-xs text-slate-400 mb-1 block">Channel</label>
             <EntityPicker
               kind="channel"
-              value={(s.channelId as string) || ''}
-              onChange={(v) => set('channelId', v)}
+              value={(s.channel as string) || ''}
+              onChange={(v) => set('channel', v)}
             />
           </div>
           <div>
@@ -171,8 +171,8 @@ export default function StepEditor({ step, onChange, onDone }: StepEditorProps) 
             <label className="text-xs text-slate-400 mb-1 block">User</label>
             <EntityPicker
               kind="user"
-              value={(s.userId as string) || ''}
-              onChange={(v) => set('userId', v)}
+              value={(s.user as string) || ''}
+              onChange={(v) => set('user', v)}
             />
           </div>
           <div>
@@ -195,16 +195,16 @@ export default function StepEditor({ step, onChange, onDone }: StepEditorProps) 
             <label className="text-xs text-slate-400 mb-1 block">Channel</label>
             <EntityPicker
               kind="channel"
-              value={(s.channelId as string) || ''}
-              onChange={(v) => set('channelId', v)}
+              value={(s.channel as string) || ''}
+              onChange={(v) => set('channel', v)}
             />
           </div>
           <div>
             <label className="text-xs text-slate-400 mb-1 block">User</label>
             <EntityPicker
               kind="user"
-              value={(s.userId as string) || ''}
-              onChange={(v) => set('userId', v)}
+              value={(s.user as string) || ''}
+              onChange={(v) => set('user', v)}
             />
           </div>
         </>
@@ -216,8 +216,8 @@ export default function StepEditor({ step, onChange, onDone }: StepEditorProps) 
             <label className="text-xs text-slate-400 mb-1 block">Approver</label>
             <EntityPicker
               kind="user"
-              value={(s.approverUserId as string) || ''}
-              onChange={(v) => set('approverUserId', v)}
+              value={(s.approver as string) || ''}
+              onChange={(v) => set('approver', v)}
             />
           </div>
           <div>
@@ -310,8 +310,8 @@ export default function StepEditor({ step, onChange, onDone }: StepEditorProps) 
             <label className="text-xs text-slate-400 mb-1 block">Post to channel (optional)</label>
             <EntityPicker
               kind="channel"
-              value={(s.submitToChannelId as string) || ''}
-              onChange={(v) => set('submitToChannelId', v || undefined)}
+              value={(s.submitToChannel as string) || ''}
+              onChange={(v) => set('submitToChannel', v || undefined)}
               clearable
             />
           </div>

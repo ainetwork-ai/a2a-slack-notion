@@ -58,10 +58,10 @@ function stepTitle(step: WorkflowStep): string {
     case 'invoke_skill':
       return `${step.agent || '?'}.${step.skillId || '?'}`;
     case 'ask_agent':
-      return `Ask ${step.agentId || '?'}`;
+      return `Ask ${step.agent || '?'}`;
     case 'send_message':
     case 'post_to_channel':
-      return `Post to ${step.channelId || step.channel || '?'}`;
+      return `Post to ${step.channel || '?'}`;
     case 'write_canvas':
       return `Canvas: ${step.channel || '?'}${step.title ? ` — ${step.title}` : ''}`;
     case 'condition':
