@@ -8,6 +8,27 @@ import { MCP_SERVERS } from "@/lib/mcp/registry";
 const VLLM_BASE_URL = process.env.VLLM_URL || "http://localhost:8100";
 const VLLM_MODEL = process.env.VLLM_MODEL || "gemma-4-31B-it";
 const MAX_TOOL_ROUNDS = 5;
+const VLLM_CONTEXT_LIMIT = 4096;
+const VLLM_SAFETY_MARGIN = 200; // reserve for prompt overhead, safety
+
+/**
+ * Estimate token count (rough: 1 token ~= 3 chars for mixed English/Korean/code).
+ * Conservative — overestimate to avoid context overflow.
+ */
+function estimateTokens(messages: Array<{ role: string; content: string }>): number {
+  const totalChars = messages.reduce((sum, m) => sum + m.role.length + m.content.length + 10, 0);
+  return Math.ceil(totalChars / 3);
+}
+
+/**
+ * Calculate max output tokens that fit in the remaining context window.
+ * Returns at least 256 tokens to guarantee useful output.
+ */
+function computeMaxTokens(messages: Array<{ role: string; content: string }>): number {
+  const inputTokens = estimateTokens(messages);
+  const available = VLLM_CONTEXT_LIMIT - inputTokens - VLLM_SAFETY_MARGIN;
+  return Math.max(256, Math.min(1024, available));
+}
 
 interface SkillDef {
   id: string;
@@ -199,27 +220,16 @@ async function runAgent(
     const server = MCP_SERVERS.find((s) => s.id === serverId);
     if (!server) continue;
     for (const tool of server.tools) {
-      const paramDoc = tool.parameters
-        ? Object.entries(tool.parameters)
-            .map(([k, v]) => `${k}${v.required ? "*" : ""}:${v.type} (${v.description})`)
-            .join(", ")
+      const requiredParams = tool.parameters
+        ? Object.entries(tool.parameters).filter(([, v]) => v.required).map(([k]) => k).join(",")
         : "";
-      toolDocs.push(`${serverId}:${tool.name} — ${tool.description}${paramDoc ? ` [${paramDoc}]` : ""}`);
+      toolDocs.push(`${serverId}:${tool.name} — ${tool.description.slice(0, 80)}${requiredParams ? ` (${requiredParams}*)` : ""}`);
     }
   }
 
   if (toolDocs.length > 0) {
     systemParts.push(
-      `## Available Tools\n\n${toolDocs.join("\n")}\n\n` +
-        `To call a tool, write on its own line:\n` +
-        `[TOOL_CALL: <tool> | param1=value1, param2=value2]\n\n` +
-        `Examples:\n` +
-        `[TOOL_CALL: slack:read_thread | conversationId=${pointer.conversationId || "..."}, limit=10]\n` +
-        `[TOOL_CALL: polymarket:search | query=bitcoin]\n` +
-        `[TOOL_CALL: news:search | query=AI regulations]\n` +
-        `[TOOL_CALL: slack:memory_write | agentId=${pointer.agentId || "..."}, key=user_preference, value=likes crypto]\n` +
-        `[TOOL_CALL: slack:memory_read | agentId=${pointer.agentId || "..."}]\n\n` +
-        `You can call multiple tools across rounds. After receiving tool results, use them to give a thoughtful answer.`
+      `## Available Tools\n${toolDocs.join("\n")}\n\nTo call: [TOOL_CALL: tool | key=value, key=value]`
     );
   }
 
@@ -366,7 +376,7 @@ async function callLLM(
     body: JSON.stringify({
       model: VLLM_MODEL,
       messages: llmMessages,
-      max_tokens: 1024,
+      max_tokens: computeMaxTokens(llmMessages),
       temperature: 0.7,
     }),
   });
@@ -515,7 +525,7 @@ export async function* streamAgentResponse(params: {
       body: JSON.stringify({
         model: VLLM_MODEL,
         messages: llmMessages,
-        max_tokens: 1024,
+        max_tokens: computeMaxTokens(llmMessages),
         temperature: 0.7,
         stream: true,
       }),
@@ -595,24 +605,16 @@ function buildSystemPrompt(
     const server = MCP_SERVERS.find((s) => s.id === serverId);
     if (!server) continue;
     for (const tool of server.tools) {
-      const paramDoc = tool.parameters
-        ? Object.entries(tool.parameters)
-            .map(([k, v]) => `${k}${v.required ? "*" : ""}:${v.type} (${v.description})`)
-            .join(", ")
+      const requiredParams = tool.parameters
+        ? Object.entries(tool.parameters).filter(([, v]) => v.required).map(([k]) => k).join(",")
         : "";
-      toolDocs.push(`${serverId}:${tool.name} — ${tool.description}${paramDoc ? ` [${paramDoc}]` : ""}`);
+      toolDocs.push(`${serverId}:${tool.name} — ${tool.description.slice(0, 80)}${requiredParams ? ` (${requiredParams}*)` : ""}`);
     }
   }
 
   if (toolDocs.length > 0) {
     systemParts.push(
-      `## Available Tools\n\n${toolDocs.join("\n")}\n\n` +
-        `To call a tool, write on its own line:\n[TOOL_CALL: <tool> | param1=value1, param2=value2]\n\n` +
-        `Examples:\n` +
-        `[TOOL_CALL: slack:read_thread | conversationId=${pointer.conversationId || "..."}, limit=10]\n` +
-        `[TOOL_CALL: slack:memory_read | agentId=${pointer.agentId || "..."}]\n` +
-        `[TOOL_CALL: slack:agent_create | name=MyBot, creatorId=${pointer.agentId || "..."}]\n\n` +
-        `You can call multiple tools across rounds. After receiving tool results, answer thoughtfully.`
+      `## Available Tools\n${toolDocs.join("\n")}\n\nTo call: [TOOL_CALL: tool | key=value, key=value]`
     );
   }
 
