@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useEffect, useState } from 'react';
+import { useMemo, useEffect, useState, useRef } from 'react';
 import { HocuspocusProvider } from '@hocuspocus/provider';
 import * as Y from 'yjs';
 
@@ -33,19 +33,14 @@ export function useCollaboration({ pageId, userName, userColor }: UseCollaborati
 
   const color = useMemo(() => userColor ?? randomColor(), [userColor]);
 
-  const { ydoc, provider } = useMemo(() => {
-    const doc = new Y.Doc();
-    const wsUrl = process.env['NEXT_PUBLIC_WS_URL'] ?? 'ws://localhost:3002';
-
-    const prov = new HocuspocusProvider({
-      url: wsUrl,
-      name: pageId,
-      document: doc,
-      token: 'session', // TODO: Pass actual session token
-    });
-
-    return { ydoc: doc, provider: prov };
-  }, [pageId]);
+  // ydoc is stable per pageId — ref ensures it isn't recreated on StrictMode double-render
+  const ydocRef = useRef<Y.Doc | null>(null);
+  const pageIdRef = useRef<string | null>(null);
+  if (pageIdRef.current !== pageId) {
+    ydocRef.current = new Y.Doc();
+    pageIdRef.current = pageId;
+  }
+  const ydoc = ydocRef.current!;
 
   // Fallback: mark editor as ready after 3s even if WebSocket never connects,
   // so users can edit offline without being blocked by "Connecting..." forever.
@@ -54,48 +49,47 @@ export function useCollaboration({ pageId, userName, userColor }: UseCollaborati
     return () => clearTimeout(fallback);
   }, []);
 
+  // Provider is created inside useEffect so React StrictMode's double-invoke
+  // (mount → cleanup → mount) properly destroys and recreates it instead of
+  // leaving a dead provider with listeners attached.
   useEffect(() => {
+    setSynced(false);
+    setConnectionStatus('disconnected');
+
+    const wsUrl = process.env['NEXT_PUBLIC_WS_URL'] ?? 'ws://localhost:3002';
+    const prov = new HocuspocusProvider({
+      url: wsUrl,
+      name: pageId,
+      document: ydoc,
+      token: 'session',
+    });
+
     const handleSynced = () => {
       setSynced(true);
       setConnectionStatus('connected');
     };
-
-    const handleConnect = () => {
-      setConnectionStatus('connected');
-    };
-
-    const handleDisconnect = () => {
-      setConnectionStatus('disconnected');
-    };
-
-    const handleClose = () => {
-      setConnectionStatus('disconnected');
-    };
-
+    const handleConnect = () => setConnectionStatus('connected');
+    const handleDisconnect = () => setConnectionStatus('disconnected');
+    const handleClose = () => setConnectionStatus('disconnected');
     const handleStatus = ({ status }: { status: string }) => {
-      if (status === 'connecting') {
-        setConnectionStatus('reconnecting');
-      } else if (status === 'connected') {
-        setConnectionStatus('connected');
-      } else if (status === 'disconnected') {
-        setConnectionStatus('disconnected');
-      }
+      if (status === 'connecting') setConnectionStatus('reconnecting');
+      else if (status === 'connected') setConnectionStatus('connected');
+      else if (status === 'disconnected') setConnectionStatus('disconnected');
     };
 
-    provider.on('synced', handleSynced);
-    provider.on('connect', handleConnect);
-    provider.on('disconnect', handleDisconnect);
-    provider.on('close', handleClose);
-    provider.on('status', handleStatus);
+    prov.on('synced', handleSynced);
+    prov.on('connect', handleConnect);
+    prov.on('disconnect', handleDisconnect);
+    prov.on('close', handleClose);
+    prov.on('status', handleStatus);
 
-    // Set up awareness for active users
-    const awareness = provider.awareness;
+    const awareness = prov.awareness;
+    let updateActiveUsers: (() => void) | null = null;
 
     if (awareness) {
-      // Set local user state
       awareness.setLocalStateField('user', { name: userName, color });
 
-      const updateActiveUsers = () => {
+      updateActiveUsers = () => {
         const states = awareness.getStates();
         const users: ActiveUser[] = [];
         states.forEach((state: Record<string, unknown>) => {
@@ -109,31 +103,23 @@ export function useCollaboration({ pageId, userName, userColor }: UseCollaborati
 
       updateActiveUsers();
       awareness.on('change', updateActiveUsers);
-
-      return () => {
-        provider.off('synced', handleSynced);
-        provider.off('connect', handleConnect);
-        provider.off('disconnect', handleDisconnect);
-        provider.off('close', handleClose);
-        provider.off('status', handleStatus);
-        awareness.off('change', updateActiveUsers);
-        provider.destroy();
-      };
     }
 
     return () => {
-      provider.off('synced', handleSynced);
-      provider.off('connect', handleConnect);
-      provider.off('disconnect', handleDisconnect);
-      provider.off('close', handleClose);
-      provider.off('status', handleStatus);
-      provider.destroy();
+      prov.off('synced', handleSynced);
+      prov.off('connect', handleConnect);
+      prov.off('disconnect', handleDisconnect);
+      prov.off('close', handleClose);
+      prov.off('status', handleStatus);
+      if (awareness && updateActiveUsers) {
+        awareness.off('change', updateActiveUsers);
+      }
+      prov.destroy();
     };
-  }, [provider, userName, color]);
+  }, [pageId, ydoc, userName, color]);
 
   return {
     ydoc,
-    provider,
     synced,
     user: { name: userName, color },
     connectionStatus,
