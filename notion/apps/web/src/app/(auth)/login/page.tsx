@@ -17,6 +17,7 @@ export default function LoginPage() {
   const [loadingStep, setLoadingStep] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [autoTriggered, setAutoTriggered] = useState(false);
+  const [isDemoNavigating, setIsDemoNavigating] = useState(false);
 
   const apiUrl =
     typeof window !== 'undefined'
@@ -59,6 +60,17 @@ export default function LoginPage() {
     } finally {
       setIsLoading(false);
       setLoadingStep('');
+    }
+  }
+
+  function handleDemoClick() {
+    const demoUrl = process.env['NEXT_PUBLIC_DEMO_WORKSPACE_URL'];
+    if (!demoUrl) return;
+    setIsDemoNavigating(true);
+    if (demoUrl.startsWith('/')) {
+      router.push(demoUrl);
+    } else {
+      window.location.href = demoUrl;
     }
   }
 
@@ -110,6 +122,29 @@ export default function LoginPage() {
               className="mt-3 text-xs text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
             >
               Disconnect wallet
+            </button>
+          )}
+
+          {/* Demo skip button — always last child, outside all conditionals */}
+          {!isLoading && process.env['NEXT_PUBLIC_DEMO_WORKSPACE_URL'] && (
+            <button
+              type="button"
+              onClick={handleDemoClick}
+              disabled={isDemoNavigating}
+              className="mt-3 w-full py-2 text-xs text-[var(--text-tertiary)]
+                         border border-[var(--border-default)] rounded-[var(--radius-sm)]
+                         hover:text-[var(--text-primary)] hover:border-[var(--border-active)]
+                         disabled:opacity-50 transition-opacity"
+              aria-label="Try demo workspace"
+            >
+              {isDemoNavigating ? (
+                <span className="flex items-center justify-center gap-1.5">
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  Loading...
+                </span>
+              ) : (
+                'Try Demo \u2192'
+              )}
             </button>
           )}
         </div>
