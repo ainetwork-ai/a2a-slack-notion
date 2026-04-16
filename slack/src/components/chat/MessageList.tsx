@@ -28,11 +28,11 @@ function DateSeparator({ date }: { date: Date }) {
 
   return (
     <div className="flex items-center gap-3 px-4 py-2 my-2">
-      <div className="flex-1 h-px bg-white/10" />
-      <span className="text-xs text-slate-400 font-medium px-2 py-0.5 bg-[#1a1d21] border border-white/10 rounded-full whitespace-nowrap">
+      <div className="flex-1 h-px" style={{ backgroundColor: 'var(--slack-border)' }} />
+      <span className="text-xs font-medium px-3 py-1 rounded-full whitespace-nowrap shadow-sm select-none" style={{ backgroundColor: 'var(--slack-bg-tertiary)', color: 'var(--slack-text-secondary)', border: '1px solid var(--slack-border)' }}>
         {label}
       </span>
-      <div className="flex-1 h-px bg-white/10" />
+      <div className="flex-1 h-px" style={{ backgroundColor: 'var(--slack-border)' }} />
     </div>
   );
 }
@@ -40,11 +40,11 @@ function DateSeparator({ date }: { date: Date }) {
 function NewMessageDivider() {
   return (
     <div className="flex items-center gap-3 px-4 py-2 my-1">
-      <div className="flex-1 h-px bg-red-500/60" />
-      <span className="text-xs text-red-400 font-semibold px-2 py-0.5 bg-red-500/10 border border-red-500/30 rounded-full whitespace-nowrap">
+      <div className="flex-1 h-px bg-[#1d9bd1]/60" />
+      <span className="text-xs text-[#1d9bd1] font-semibold px-2 py-0.5 bg-[#1d9bd1]/10 border border-[#1d9bd1]/30 rounded-full whitespace-nowrap">
         New
       </span>
-      <div className="flex-1 h-px bg-red-500/60" />
+      <div className="flex-1 h-px bg-[#1d9bd1]/60" />
     </div>
   );
 }
@@ -63,6 +63,7 @@ export default function MessageList({
   const { user } = useAuth();
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const prevLengthRef = useRef(0);
+  const prevScrollHeightRef = useRef(0);
   const hasScrolledInitially = useRef(false);
   const [showJumpButton, setShowJumpButton] = useState(false);
 
@@ -78,26 +79,36 @@ export default function MessageList({
     if (!el || messages.length === 0) return;
 
     if (!hasScrolledInitially.current) {
-      // Use requestAnimationFrame to ensure DOM has rendered
+      // Use requestAnimationFrame to ensure DOM has rendered — instant jump on first load
       requestAnimationFrame(() => {
-        el.scrollTop = el.scrollHeight;
+        el.scrollTo({ top: el.scrollHeight, behavior: 'instant' });
       });
       hasScrolledInitially.current = true;
       prevLengthRef.current = messages.length;
+      prevScrollHeightRef.current = el.scrollHeight;
       return;
     }
 
-    // Auto-scroll on new messages only if near bottom
     if (messages.length > prevLengthRef.current) {
-      const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-      if (distanceFromBottom <= 150) {
-        requestAnimationFrame(() => {
-          el.scrollTop = el.scrollHeight;
-        });
-      } else {
-        // Item 8: Show jump button when new messages arrive while scrolled up
-        setShowJumpButton(true);
-      }
+      const added = messages.length - prevLengthRef.current;
+      const prevScrollHeight = prevScrollHeightRef.current;
+
+      requestAnimationFrame(() => {
+        // If messages were prepended (loadMore), preserve scroll position
+        if (el.scrollTop < 50 && added > 1) {
+          const newScrollHeight = el.scrollHeight;
+          el.scrollTo({ top: newScrollHeight - prevScrollHeight, behavior: 'instant' });
+        } else {
+          // New message appended — auto-scroll only if near bottom
+          const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+          if (distanceFromBottom <= 100) {
+            el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+          } else {
+            setShowJumpButton(true);
+          }
+        }
+        prevScrollHeightRef.current = el.scrollHeight;
+      });
     }
     prevLengthRef.current = messages.length;
   }, [messages.length]);
@@ -135,9 +146,9 @@ export default function MessageList({
     }
   }
 
-  function scrollToBottom() {
+  function scrollToBottom(behavior: ScrollBehavior = 'smooth') {
     const el = scrollAreaRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
+    if (el) el.scrollTo({ top: el.scrollHeight, behavior });
     setShowJumpButton(false);
   }
 
@@ -157,6 +168,8 @@ export default function MessageList({
       className="message-area h-full overflow-y-auto scrollbar-slack"
       onScroll={handleScroll}
       ref={scrollAreaRef}
+      aria-live="polite"
+      aria-label="Message list"
     >
       {/* Load more indicator */}
       {hasMore && (
@@ -213,7 +226,7 @@ export default function MessageList({
     {showJumpButton && (
       <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20">
         <button
-          onClick={scrollToBottom}
+          onClick={() => scrollToBottom('smooth')}
           className="flex items-center gap-1.5 px-3 py-1.5 bg-[#4a154b] hover:bg-[#611f6a] text-white text-xs font-medium rounded-full shadow-lg transition-colors"
         >
           ↓ New messages

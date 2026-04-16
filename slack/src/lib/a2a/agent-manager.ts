@@ -3,7 +3,14 @@ import { users, channelMembers } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
 import { fetchAgentCard, type AgentCard } from "./client";
 
-export async function inviteAgent(a2aUrl: string) {
+export interface InviteAgentOptions {
+  invitedBy?: string;
+  visibility?: "public" | "private" | "unlisted";
+  category?: string;
+  tags?: string[];
+}
+
+export async function inviteAgent(a2aUrl: string, options: InviteAgentOptions = {}) {
   const card = await fetchAgentCard(a2aUrl);
 
   const [existing] = await db
@@ -32,6 +39,10 @@ export async function inviteAgent(a2aUrl: string) {
       a2aUrl,
       agentCardJson: card as unknown as Record<string, unknown>,
       status: "online",
+      agentInvitedBy: options.invitedBy ?? null,
+      agentVisibility: options.visibility ?? "private",
+      agentCategory: options.category ?? null,
+      agentTags: options.tags ?? [],
     })
     .returning();
 

@@ -33,6 +33,7 @@ export async function GET() {
         .select({
           userId: dmMembers.userId,
           lastReadAt: dmMembers.lastReadAt,
+          isMuted: dmMembers.isMuted,
           displayName: users.displayName,
           avatarUrl: users.avatarUrl,
           status: users.status,
@@ -54,7 +55,42 @@ export async function GET() {
         .orderBy(desc(messages.createdAt))
         .limit(1);
 
-      return { ...conv, members, latestMessage: latestMessage || null };
+      // For 1-on-1 DMs, expose otherUser for backwards compat; for group DMs members array is used
+      const otherMembers = members.filter((m) => m.userId !== user.id);
+      const otherUser = otherMembers.length === 1 ? {
+        id: otherMembers[0].userId,
+        displayName: otherMembers[0].displayName,
+        avatarUrl: otherMembers[0].avatarUrl,
+        isAgent: otherMembers[0].isAgent,
+        status: otherMembers[0].status,
+      } : null;
+
+      // Compute unread count for the current user
+      const myMember = members.find((m) => m.userId === user.id);
+      const myLastReadAt = myMember?.lastReadAt ?? new Date(0);
+      const [{ unreadCount }] = await db
+        .select({ unreadCount: sql<number>`count(*)::int` })
+        .from(messages)
+        .where(
+          and(
+            eq(messages.conversationId, conv.id),
+            sql`${messages.createdAt} > ${myLastReadAt}`,
+            sql`${messages.parentId} is null`
+          )
+        );
+
+      const isMuted = myMember?.isMuted ?? false;
+
+      return {
+        ...conv,
+        members,
+        otherUser,
+        isGroup: members.length > 2,
+        latestMessage: latestMessage || null,
+        unreadCount,
+        unread: unreadCount > 0,
+        isMuted,
+      };
     })
   );
 

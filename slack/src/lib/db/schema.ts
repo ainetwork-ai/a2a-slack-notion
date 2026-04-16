@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   pgTable,
   uuid,
@@ -15,9 +16,12 @@ export const workspaces = pgTable("workspaces", {
   name: text("name").notNull(),
   slug: text("slug").unique().notNull(),
   iconText: text("icon_text").default("WS").notNull(),
+  iconUrl: text("icon_url"),
   description: text("description"),
   createdBy: uuid("created_by"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+  defaultNotificationPref: text("default_notification_pref").default("all").notNull(),
+  defaultChannels: jsonb("default_channels").$type<string[]>().default([]),
 });
 
 export const users = pgTable("users", {
@@ -27,9 +31,19 @@ export const users = pgTable("users", {
   avatarUrl: text("avatar_url"),
   status: text("status").default("offline").notNull(),
   statusMessage: text("status_message"),
+  statusEmoji: text("status_emoji"),
+  statusExpiresAt: timestamp("status_expires_at"),
   isAgent: boolean("is_agent").default(false).notNull(),
+  a2aId: text("a2a_id").unique(),
   a2aUrl: text("a2a_url"),
   agentCardJson: jsonb("agent_card_json"),
+  agentInvitedBy: uuid("agent_invited_by"),
+  agentVisibility: text("agent_visibility").default("private"),
+  agentCategory: text("agent_category"),
+  agentTags: jsonb("agent_tags").$type<string[]>().default([]),
+  encryptedPrivateKey: text("encrypted_private_key"),
+  ownerId: uuid("owner_id"),
+  timezone: text("timezone"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -64,18 +78,46 @@ export const inviteTokens = pgTable("invite_tokens", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-export const channels = pgTable("channels", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  name: text("name").notNull(),
-  description: text("description"),
-  isPrivate: boolean("is_private").default(false).notNull(),
-  createdBy: uuid("created_by").references(() => users.id),
-  workspaceId: uuid("workspace_id").references(() => workspaces.id, {
-    onDelete: "cascade",
-  }),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+export const channels = pgTable(
+  "channels",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    name: text("name").notNull(),
+    description: text("description"),
+    isPrivate: boolean("is_private").default(false).notNull(),
+    isArchived: boolean("is_archived").default(false).notNull(),
+    createdBy: uuid("created_by").references(() => users.id),
+    workspaceId: uuid("workspace_id").references(() => workspaces.id, {
+      onDelete: "cascade",
+    }),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (t) => [
+    // Only one active (non-archived) channel per (workspace, name).
+    // Archived channels keep their original name so scroll-back references stay valid.
+    uniqueIndex("channels_workspace_name_active")
+      .on(t.workspaceId, t.name)
+      .where(sql`${t.isArchived} = false`),
+  ]
+);
+
+export const channelFolders = pgTable(
+  "channel_folders",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .references(() => users.id, { onDelete: "cascade" })
+      .notNull(),
+    workspaceId: uuid("workspace_id")
+      .references(() => workspaces.id, { onDelete: "cascade" })
+      .notNull(),
+    name: text("name").notNull(),
+    position: integer("position").default(0).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [index("channel_folders_user_workspace_idx").on(t.userId, t.workspaceId)]
+);
 
 export const channelMembers = pgTable(
   "channel_members",
@@ -86,9 +128,16 @@ export const channelMembers = pgTable(
     userId: uuid("user_id")
       .references(() => users.id, { onDelete: "cascade" })
       .notNull(),
+    folderId: uuid("folder_id").references(() => channelFolders.id, {
+      onDelete: "set null",
+    }),
     role: text("role").default("member").notNull(),
+    notificationPref: text("notification_pref").default("all").notNull(),
     joinedAt: timestamp("joined_at").defaultNow().notNull(),
     lastReadAt: timestamp("last_read_at").defaultNow().notNull(),
+    engagementLevel: integer("engagement_level").default(0).notNull(),
+    lastAutoResponseAt: timestamp("last_auto_response_at"),
+    autoResponseCount: integer("auto_response_count").default(0).notNull(),
   },
   (t) => [
     uniqueIndex("channel_members_pk").on(t.channelId, t.userId),
@@ -111,6 +160,7 @@ export const dmMembers = pgTable(
       .references(() => users.id, { onDelete: "cascade" })
       .notNull(),
     lastReadAt: timestamp("last_read_at").defaultNow().notNull(),
+    isMuted: boolean("is_muted").default(false).notNull(),
   },
   (t) => [
     uniqueIndex("dm_members_pk").on(t.conversationId, t.userId),
@@ -222,3 +272,308 @@ export const typingStatus = pgTable("typing_status", {
     .notNull(),
   expiresAt: timestamp("expires_at").notNull(),
 });
+
+export const bookmarks = pgTable(
+  "bookmarks",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+      .references(() => users.id, { onDelete: "cascade" })
+      .notNull(),
+    messageId: uuid("message_id")
+      .references(() => messages.id, { onDelete: "cascade" })
+      .notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("bookmarks_user_message_unique").on(table.userId, table.messageId),
+  ]
+);
+
+export const reminders = pgTable(
+  "reminders",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .references(() => users.id, { onDelete: "cascade" })
+      .notNull(),
+    channelId: uuid("channel_id").references(() => channels.id, { onDelete: "set null" }),
+    message: text("message").notNull(),
+    remindAt: timestamp("remind_at").notNull(),
+    isCompleted: boolean("is_completed").default(false).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [index("reminders_user_idx").on(t.userId, t.isCompleted, t.remindAt)]
+);
+
+export const threadSubscriptions = pgTable(
+  "thread_subscriptions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .references(() => users.id, { onDelete: "cascade" })
+      .notNull(),
+    messageId: uuid("message_id")
+      .references(() => messages.id, { onDelete: "cascade" })
+      .notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("thread_subscriptions_unique").on(t.userId, t.messageId),
+    index("thread_subscriptions_message_idx").on(t.messageId),
+  ]
+);
+
+export const blockedUsers = pgTable(
+  "blocked_users",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .references(() => users.id, { onDelete: "cascade" })
+      .notNull(),
+    blockedUserId: uuid("blocked_user_id")
+      .references(() => users.id, { onDelete: "cascade" })
+      .notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("blocked_users_unique").on(t.userId, t.blockedUserId),
+    index("blocked_users_user_idx").on(t.userId),
+  ]
+);
+
+export const scheduledMessages = pgTable(
+  "scheduled_messages",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .references(() => users.id, { onDelete: "cascade" })
+      .notNull(),
+    channelId: uuid("channel_id").references(() => channels.id, { onDelete: "cascade" }),
+    conversationId: uuid("conversation_id").references(() => dmConversations.id, { onDelete: "cascade" }),
+    content: text("content").notNull(),
+    scheduledFor: timestamp("scheduled_for").notNull(),
+    isSent: boolean("is_sent").default(false).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [
+    index("scheduled_messages_user_idx").on(t.userId, t.isSent),
+    index("scheduled_messages_time_idx").on(t.scheduledFor, t.isSent),
+  ]
+);
+
+export const channelMcpIntegrations = pgTable(
+  "channel_mcp_integrations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    channelId: uuid("channel_id")
+      .references(() => channels.id, { onDelete: "cascade" })
+      .notNull(),
+    serverId: text("server_id").notNull(),
+    enabled: boolean("enabled").default(true).notNull(),
+    config: jsonb("config"),
+    addedBy: uuid("added_by")
+      .references(() => users.id)
+      .notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("channel_mcp_unique").on(t.channelId, t.serverId),
+    index("channel_mcp_channel_idx").on(t.channelId),
+  ]
+);
+
+export const webhooks = pgTable(
+  "webhooks",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id")
+      .references(() => workspaces.id, { onDelete: "cascade" })
+      .notNull(),
+    channelId: uuid("channel_id")
+      .references(() => channels.id, { onDelete: "cascade" })
+      .notNull(),
+    name: text("name").notNull(),
+    token: text("token").unique().notNull(),
+    createdBy: uuid("created_by")
+      .references(() => users.id)
+      .notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("webhooks_token_unique").on(t.token),
+    index("webhooks_workspace_idx").on(t.workspaceId),
+  ]
+);
+
+export const agentMemories = pgTable(
+  "agent_memories",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    agentId: uuid("agent_id")
+      .references(() => users.id, { onDelete: "cascade" })
+      .notNull(),
+    key: text("key").notNull(),
+    value: text("value").notNull(),
+    metadata: jsonb("metadata"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("agent_memories_unique").on(t.agentId, t.key),
+    index("agent_memories_agent_idx").on(t.agentId),
+  ]
+);
+
+export const customCommands = pgTable(
+  "custom_commands",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id")
+      .references(() => workspaces.id, { onDelete: "cascade" })
+      .notNull(),
+    name: text("name").notNull(),
+    description: text("description").notNull().default(""),
+    responseText: text("response_text").notNull(),
+    createdBy: uuid("created_by")
+      .references(() => users.id)
+      .notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("custom_commands_workspace_name_unique").on(t.workspaceId, t.name),
+    index("custom_commands_workspace_idx").on(t.workspaceId),
+  ]
+);
+
+export const outgoingWebhooks = pgTable(
+  "outgoing_webhooks",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id")
+      .references(() => workspaces.id, { onDelete: "cascade" })
+      .notNull(),
+    channelId: uuid("channel_id").references(() => channels.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    triggerWords: text("trigger_words").notNull(),
+    url: text("url").notNull(),
+    createdBy: uuid("created_by")
+      .references(() => users.id)
+      .notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [
+    index("outgoing_webhooks_workspace_idx").on(t.workspaceId),
+  ]
+);
+
+export const auditLogs = pgTable(
+  "audit_logs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id")
+      .references(() => workspaces.id, { onDelete: "cascade" })
+      .notNull(),
+    userId: uuid("user_id")
+      .references(() => users.id, { onDelete: "set null" }),
+    action: text("action").notNull(),
+    targetType: text("target_type").notNull(),
+    targetId: uuid("target_id"),
+    metadata: jsonb("metadata"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [
+    index("audit_logs_workspace_idx").on(t.workspaceId, t.createdAt),
+    index("audit_logs_user_idx").on(t.userId),
+  ]
+);
+
+export const messageEdits = pgTable(
+  "message_edits",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    messageId: uuid("message_id")
+      .references(() => messages.id, { onDelete: "cascade" })
+      .notNull(),
+    previousContent: text("previous_content").notNull(),
+    editedBy: uuid("edited_by")
+      .references(() => users.id)
+      .notNull(),
+    editedAt: timestamp("edited_at").defaultNow().notNull(),
+  },
+  (t) => [index("message_edits_message_idx").on(t.messageId)]
+);
+
+export const workflows = pgTable("workflows", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  workspaceId: uuid("workspace_id")
+    .references(() => workspaces.id, { onDelete: "cascade" })
+    .notNull(),
+  name: text("name").notNull(),
+  description: text("description"),
+  triggerType: text("trigger_type").notNull(),
+  triggerConfig: jsonb("trigger_config").default({}),
+  steps: jsonb("steps").default([]).notNull(),
+  enabled: boolean("enabled").default(true).notNull(),
+  createdBy: uuid("created_by")
+    .references(() => users.id)
+    .notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const workflowRuns = pgTable("workflow_runs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  workflowId: uuid("workflow_id")
+    .references(() => workflows.id, { onDelete: "cascade" })
+    .notNull(),
+  status: text("status").default("pending").notNull(),
+  triggeredBy: uuid("triggered_by").references(() => users.id),
+  variables: jsonb("variables").default({}),
+  currentStepIndex: integer("current_step_index").default(0),
+  pendingInput: jsonb("pending_input"),
+  error: text("error"),
+  startedAt: timestamp("started_at").defaultNow().notNull(),
+  completedAt: timestamp("completed_at"),
+});
+
+export const canvases = pgTable("canvases", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  channelId: uuid("channel_id").references(() => channels.id, { onDelete: "cascade" }).unique(),
+  conversationId: uuid("conversation_id").references(() => dmConversations.id, { onDelete: "cascade" }).unique(),
+  workspaceId: uuid("workspace_id").references(() => workspaces.id, { onDelete: "cascade" }).notNull(),
+  title: text("title").notNull(),
+  content: text("content").notNull().default(""),
+  createdBy: uuid("created_by").references(() => users.id).notNull(),
+  updatedBy: uuid("updated_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const canvasRevisions = pgTable("canvas_revisions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  canvasId: uuid("canvas_id").references(() => canvases.id, { onDelete: "cascade" }).notNull(),
+  content: text("content").notNull(),
+  editedBy: uuid("edited_by").references(() => users.id).notNull(),
+  editedAt: timestamp("edited_at").defaultNow().notNull(),
+});
+
+export const agentSkillConfigs = pgTable(
+  "agent_skill_configs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    agentId: uuid("agent_id")
+      .references(() => users.id, { onDelete: "cascade" })
+      .notNull(),
+    skillId: text("skill_id").notNull(),
+    instruction: text("instruction").notNull(),
+    mcpTools: jsonb("mcp_tools").$type<string[]>().default([]),
+    outputFormat: text("output_format").default("text"),
+    temperature: integer("temperature"),
+    maxTokens: integer("max_tokens").default(2000),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("agent_skill_configs_unique").on(t.agentId, t.skillId),
+  ]
+);

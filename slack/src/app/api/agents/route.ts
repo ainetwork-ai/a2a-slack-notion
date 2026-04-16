@@ -12,18 +12,30 @@ export async function GET() {
   const agents = await db
     .select({
       id: users.id,
+      a2aId: users.a2aId,
       displayName: users.displayName,
       avatarUrl: users.avatarUrl,
       status: users.status,
       a2aUrl: users.a2aUrl,
       agentCardJson: users.agentCardJson,
+      agentInvitedBy: users.agentInvitedBy,
+      ownerId: users.ownerId,
       createdAt: users.createdAt,
     })
     .from(users)
     .where(eq(users.isAgent, true))
     .orderBy(users.displayName);
 
-  return NextResponse.json(agents);
+  return NextResponse.json(
+    agents.map((a) => {
+      const card = (a.agentCardJson || {}) as { builtBy?: string };
+      const isMine =
+        a.agentInvitedBy === auth.user.id ||
+        a.ownerId === auth.user.id ||
+        card.builtBy === auth.user.id;
+      return { ...a, isMine };
+    })
+  );
 }
 
 export async function POST(request: NextRequest) {
@@ -31,13 +43,18 @@ export async function POST(request: NextRequest) {
   if ("error" in auth) return auth.error;
 
   const body = await request.json();
-  const { a2aUrl } = body;
+  const { a2aUrl, visibility, category, tags } = body;
 
   if (!a2aUrl || typeof a2aUrl !== "string") {
     return NextResponse.json({ error: "a2aUrl is required" }, { status: 400 });
   }
 
-  const agent = await inviteAgent(a2aUrl);
+  const agent = await inviteAgent(a2aUrl, {
+    invitedBy: auth.user.id,
+    visibility: visibility as "public" | "private" | "unlisted" | undefined,
+    category,
+    tags: Array.isArray(tags) ? tags : undefined,
+  });
 
   return NextResponse.json(agent, { status: 201 });
 }

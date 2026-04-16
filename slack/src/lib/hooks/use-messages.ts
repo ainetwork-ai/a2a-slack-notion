@@ -7,6 +7,7 @@ export interface Reaction {
   emoji: string;
   count: number;
   userIds: string[];
+  userNames: string[];
 }
 
 export interface Message {
@@ -19,6 +20,7 @@ export interface Message {
   isAgent?: boolean;
   createdAt: string;
   editedAt?: string;
+  isEdited?: boolean;
   threadCount?: number;
   reactions?: Reaction[];
   metadata?: Record<string, unknown>;
@@ -38,13 +40,18 @@ function mapApiMessage(m: any): Message {
     isAgent: m.user?.isAgent || m.isAgent || false,
     createdAt: m.createdAt,
     editedAt: m.updatedAt !== m.createdAt ? m.updatedAt : undefined,
+    isEdited: m.isEdited ?? false,
     threadCount: m.threadCount || 0,
     reactions: m.reactions
-      ? Object.entries(m.reactions).map(([emoji, count]) => ({
-          emoji,
-          count: count as number,
-          userIds: [],
-        }))
+      ? Object.entries(m.reactions).map(([emoji, reactors]) => {
+          const list = reactors as { userId: string; displayName: string }[];
+          return {
+            emoji,
+            count: list.length,
+            userIds: list.map(r => r.userId),
+            userNames: list.map(r => r.displayName),
+          };
+        })
       : [],
     metadata: m.metadata,
     parentId: m.parentId,
@@ -56,26 +63,34 @@ interface UseMessagesOptions {
   channelId?: string;
   conversationId?: string;
   parentId?: string;
+  currentUser?: { id: string; displayName: string; avatarUrl?: string };
 }
 
-export function useMessages({ channelId, conversationId, parentId }: UseMessagesOptions) {
+export function useMessages({ channelId, conversationId, parentId, currentUser }: UseMessagesOptions) {
   const [cursor, setCursor] = useState<string | null>(null);
 
-  const endpoint = channelId
+  const endpoint = parentId
+    ? `/api/messages/${parentId}/thread`
+    : channelId
     ? `/api/channels/${channelId}/messages`
     : conversationId
     ? `/api/dm/${conversationId}/messages`
     : null;
 
-  const swrKey = endpoint
-    ? parentId
-      ? `${endpoint}?parentId=${parentId}`
-      : endpoint
-    : null;
+  const swrKey = endpoint;
 
   const rawFetcher = async (url: string) => {
     const res = await fetch(url);
     const json = await res.json();
+
+    // Thread API returns { parent, thread }, channel/DM API returns { messages, nextCursor }
+    if (json.thread) {
+      return {
+        messages: (json.thread ?? []).map(mapApiMessage),
+        nextCursor: null,
+      };
+    }
+
     return {
       ...json,
       messages: (json.messages ?? []).map(mapApiMessage).reverse(),
@@ -85,24 +100,26 @@ export function useMessages({ channelId, conversationId, parentId }: UseMessages
   const { data, isLoading, mutate } = useSWR<{ messages: Message[]; nextCursor?: string }>(
     swrKey,
     rawFetcher,
-    { refreshInterval: 2000 }
+    { refreshInterval: 3000 }
   );
 
   async function sendMessage(content: string, metadata?: Record<string, unknown>) {
     if (!endpoint) return;
+    if (!content.trim()) return;
 
     const optimisticMessage: Message = {
       id: `optimistic-${Date.now()}`,
       content,
       contentType: 'text',
-      senderId: 'me',
-      senderName: 'You',
+      senderId: currentUser?.id ?? 'me',
+      senderName: currentUser?.displayName ?? 'You',
+      senderAvatar: currentUser?.avatarUrl,
       createdAt: new Date().toISOString(),
       metadata,
       ...(parentId ? { parentId } : {}),
     };
 
-    // Optimistically add message, then POST, then revalidate
+    // Optimistically add message then POST — let SWR polling pick up the real message
     mutate(
       (current) => ({
         messages: [...(current?.messages ?? []), optimisticMessage],
@@ -111,21 +128,28 @@ export function useMessages({ channelId, conversationId, parentId }: UseMessages
       { revalidate: false }
     );
 
-    try {
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content, metadata, parentId }),
-      });
-      if (!res.ok) throw new Error('Failed to send message');
-    } finally {
-      // Wait briefly for the server to be consistent, then force a fresh fetch
-      await new Promise(r => setTimeout(r, 100));
-      await mutate(undefined, { revalidate: true });
-    }
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content, metadata, parentId }),
+    });
+    if (!res.ok) throw new Error('Failed to send message');
   }
 
   async function editMessage(messageId: string, content: string) {
+    // Optimistically update the message content locally
+    mutate(
+      (current) => ({
+        messages: (current?.messages ?? []).map((m) =>
+          m.id === messageId
+            ? { ...m, content, isEdited: true, editedAt: new Date().toISOString() }
+            : m
+        ),
+        nextCursor: current?.nextCursor,
+      }),
+      { revalidate: false }
+    );
+
     const res = await fetch(`/api/messages/${messageId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -136,6 +160,15 @@ export function useMessages({ channelId, conversationId, parentId }: UseMessages
   }
 
   async function deleteMessage(messageId: string) {
+    // Optimistically remove the message from local list
+    mutate(
+      (current) => ({
+        messages: (current?.messages ?? []).filter((m) => m.id !== messageId),
+        nextCursor: current?.nextCursor,
+      }),
+      { revalidate: false }
+    );
+
     const res = await fetch(`/api/messages/${messageId}`, { method: 'DELETE' });
     if (!res.ok) throw new Error('Failed to delete message');
     await mutate();

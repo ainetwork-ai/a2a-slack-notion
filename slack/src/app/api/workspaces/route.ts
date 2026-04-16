@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth/middleware";
 import { db } from "@/lib/db";
-import { workspaces, workspaceMembers } from "@/lib/db/schema";
+import { workspaces, workspaceMembers, channels, channelMembers } from "@/lib/db/schema";
 import { eq, sql } from "drizzle-orm";
 
 export async function GET() {
@@ -55,6 +55,24 @@ export async function POST(request: NextRequest) {
 
   await db.insert(workspaceMembers).values({
     workspaceId: workspace.id,
+    userId: auth.user.id,
+    role: "owner",
+  });
+
+  // Auto-create #general channel for new workspace
+  const [generalChannel] = await db
+    .insert(channels)
+    .values({
+      name: "general",
+      description: "General discussion",
+      isPrivate: false,
+      createdBy: auth.user.id,
+      workspaceId: workspace.id,
+    })
+    .returning();
+
+  await db.insert(channelMembers).values({
+    channelId: generalChannel.id,
     userId: auth.user.id,
     role: "owner",
   });

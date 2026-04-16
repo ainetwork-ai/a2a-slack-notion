@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { ConnectKitButton } from 'connectkit';
 import { useAccount, useSignMessage, useDisconnect } from 'wagmi';
 import { Button } from '@/components/ui/button';
@@ -16,21 +16,11 @@ export default function WalletLogin() {
   const [isLoading, setIsLoading] = useState(false);
   const [loadingStep, setLoadingStep] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [autoSignTriggered, setAutoSignTriggered] = useState(false);
 
   // Read invite token from URL
   const inviteToken = typeof window !== 'undefined'
     ? new URLSearchParams(window.location.search).get('invite')
     : null;
-
-  // When wallet connects, auto-start the sign flow
-  useEffect(() => {
-    if (isConnected && address && !autoSignTriggered && !isLoading) {
-      setAutoSignTriggered(true);
-      handleSign(address);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isConnected, address]);
 
   async function handleSign(walletAddress: string) {
     setIsLoading(true);
@@ -81,6 +71,20 @@ export default function WalletLogin() {
         throw new Error(errData.error || 'Verification failed');
       }
 
+      // Auto-save detected timezone before navigating
+      try {
+        const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        if (tz) {
+          await fetch('/api/users/me', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ timezone: tz }),
+          });
+        }
+      } catch {
+        // Non-critical — ignore timezone save errors
+      }
+
       window.location.href = '/workspace';
       await new Promise(() => {}); // Block until navigation
     } catch (err: unknown) {
@@ -91,19 +95,14 @@ export default function WalletLogin() {
           ? String((err as { message: unknown }).message)
           : 'Login failed. Please try again.';
 
-      if (typeof err === 'object' && err !== null && 'code' in err) {
-        const code = (err as { code: number }).code;
-        if (code === 4001) {
-          setError('Signature rejected. Please try again.');
-        } else {
-          setError(msg);
-        }
+      const isRejected = typeof err === 'object' && err !== null && 'code' in err
+        && (err as { code: number }).code === 4001;
+
+      if (isRejected) {
+        setError('Signature rejected. Click "Sign In" to try again.');
       } else {
         setError(msg);
       }
-
-      disconnect();
-      setAutoSignTriggered(false);
     } finally {
       setIsLoading(false);
       setLoadingStep('');
@@ -140,6 +139,13 @@ export default function WalletLogin() {
             <Loader2 className="w-4 h-4 mr-2 animate-spin" />
             {loadingStep || 'Connecting...'}
           </Button>
+        ) : isConnected && address ? (
+          <Button
+            onClick={() => handleSign(address)}
+            className="w-full bg-[#f6851b] hover:bg-[#e2761b] text-white font-semibold py-2.5"
+          >
+            Sign In with {address.slice(0, 6)}...{address.slice(-4)}
+          </Button>
         ) : (
           <ConnectKitButton.Custom>
             {({ show }) => (
@@ -147,7 +153,7 @@ export default function WalletLogin() {
                 onClick={show}
                 className="w-full bg-[#f6851b] hover:bg-[#e2761b] text-white font-semibold py-2.5"
               >
-                {isConnected ? `Connected: ${address?.slice(0, 6)}...${address?.slice(-4)}` : 'Connect Wallet'}
+                Connect Wallet
               </Button>
             )}
           </ConnectKitButton.Custom>
@@ -161,7 +167,7 @@ export default function WalletLogin() {
 
         {isConnected && !isLoading && (
           <button
-            onClick={() => { disconnect(); setAutoSignTriggered(false); }}
+            onClick={() => { disconnect(); setError(null); }}
             className="mt-3 w-full text-center text-xs text-slate-500 hover:text-slate-300"
           >
             Disconnect wallet

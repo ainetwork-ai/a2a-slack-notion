@@ -3,6 +3,7 @@ import { users, channels, channelMembers, messages } from "@/lib/db/schema";
 import { eq, and, desc, sql } from "drizzle-orm";
 import { requireAuth } from "@/lib/auth/middleware";
 import { NextRequest, NextResponse } from "next/server";
+import { logAudit } from "@/lib/audit";
 
 export async function GET(request: NextRequest) {
   const auth = await requireAuth();
@@ -10,12 +11,14 @@ export async function GET(request: NextRequest) {
   const { user } = auth;
 
   const workspaceId = request.nextUrl.searchParams.get("workspaceId");
+  const archivedOnly = request.nextUrl.searchParams.get("archived") === "true";
 
   const query = db
     .select({
       channel: channels,
       lastReadAt: channelMembers.lastReadAt,
       role: channelMembers.role,
+      folderId: channelMembers.folderId,
     })
     .from(channelMembers)
     .innerJoin(channels, eq(channelMembers.channelId, channels.id))
@@ -23,16 +26,20 @@ export async function GET(request: NextRequest) {
       workspaceId
         ? and(
             eq(channelMembers.userId, user.id),
-            eq(channels.workspaceId, workspaceId)
+            eq(channels.workspaceId, workspaceId),
+            eq(channels.isArchived, archivedOnly)
           )
-        : eq(channelMembers.userId, user.id)
+        : and(
+            eq(channelMembers.userId, user.id),
+            eq(channels.isArchived, archivedOnly)
+          )
     )
     .orderBy(desc(channels.updatedAt));
 
   const memberships = await query;
 
   const channelsWithUnread = await Promise.all(
-    memberships.map(async ({ channel, lastReadAt, role }) => {
+    memberships.map(async ({ channel, lastReadAt, role, folderId }) => {
       const [{ count }] = await db
         .select({ count: sql<number>`count(*)::int` })
         .from(messages)
@@ -43,7 +50,7 @@ export async function GET(request: NextRequest) {
             sql`${messages.parentId} is null`
           )
         );
-      return { ...channel, unreadCount: count, role, lastReadAt };
+      return { ...channel, unreadCount: count, role, lastReadAt, folderId };
     })
   );
 
@@ -62,10 +69,33 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Channel name is required" }, { status: 400 });
   }
 
+  const trimmed = name.trim();
+
+  if (workspaceId) {
+    const [existing] = await db
+      .select({ id: channels.id })
+      .from(channels)
+      .where(
+        and(
+          eq(channels.workspaceId, workspaceId),
+          eq(channels.name, trimmed),
+          eq(channels.isArchived, false)
+        )
+      )
+      .limit(1);
+
+    if (existing) {
+      return NextResponse.json(
+        { error: `Channel #${trimmed} already exists`, existingId: existing.id },
+        { status: 409 }
+      );
+    }
+  }
+
   const [channel] = await db
     .insert(channels)
     .values({
-      name: name.trim(),
+      name: trimmed,
       description: description || null,
       isPrivate: isPrivate ?? false,
       createdBy: user.id,
@@ -78,6 +108,10 @@ export async function POST(request: NextRequest) {
     userId: user.id,
     role: "owner",
   });
+
+  if (workspaceId) {
+    await logAudit(workspaceId, user.id, "channel.create", "channel", channel.id, { name: channel.name });
+  }
 
   return NextResponse.json(channel, { status: 201 });
 }

@@ -1,15 +1,18 @@
 import { createConfig, http } from 'wagmi';
-import { mainnet } from 'wagmi/chains';
-import { getDefaultConfig } from 'connectkit';
+import { mainnet, base, baseSepolia } from 'wagmi/chains';
+import { injected } from 'wagmi/connectors';
 
-export const config = createConfig(
-  getDefaultConfig({
-    chains: [mainnet],
-    transports: {
-      [mainnet.id]: http(),
-    },
-    walletConnectProjectId: process.env.NEXT_PUBLIC_WC_PROJECT_ID || '',
-    appName: 'Slack-A2A',
-    appDescription: 'Agent-to-Agent communication on AIN blockchain',
-  })
-);
+// Use CORS-friendly RPCs; default wagmi public RPC (eth.merkle.io) blocks browser requests
+const MAINNET_RPC = process.env.NEXT_PUBLIC_MAINNET_RPC || 'https://cloudflare-eth.com';
+const BASE_RPC = process.env.NEXT_PUBLIC_BASE_RPC || 'https://mainnet.base.org';
+const BASE_SEPOLIA_RPC = process.env.NEXT_PUBLIC_BASE_SEPOLIA_RPC || 'https://sepolia.base.org';
+
+export const config = createConfig({
+  chains: [mainnet, base, baseSepolia],
+  connectors: [injected()],
+  transports: {
+    [mainnet.id]: http(MAINNET_RPC),
+    [base.id]: http(BASE_RPC),
+    [baseSepolia.id]: http(BASE_SEPOLIA_RPC),
+  },
+});

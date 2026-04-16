@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { highlightCode } from '@/lib/syntax-highlight';
 import { format } from 'date-fns';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
@@ -20,6 +21,9 @@ function CodeBlock({ lang, code }: { lang: string; code: string }) {
       setTimeout(() => setCopied(false), 2000);
     });
   }
+
+  const highlighted = highlightCode(code, lang);
+
   return (
     <div className="relative group/code my-1">
       <pre className="bg-[#222529] p-3 rounded overflow-x-auto">
@@ -34,15 +38,21 @@ function CodeBlock({ lang, code }: { lang: string; code: string }) {
         >
           {copied ? 'Copied!' : 'Copy'}
         </button>
-        <code className={`text-sm font-mono text-slate-200 whitespace-pre${lang ? ' pt-4 block' : ''}`}>
-          {code}
-        </code>
+        <code
+          className={`text-sm font-mono text-slate-200 whitespace-pre${lang ? ' pt-4 block' : ''}`}
+          dangerouslySetInnerHTML={{ __html: highlighted }}
+        />
       </pre>
     </div>
   );
 }
 
-function renderInlineMarkdown(text: string): string {
+function cleanUrlTail(url: string): string {
+  // Strip trailing punctuation that's likely not part of the URL (like Slack does)
+  return url.replace(/[.,;:!?)]+$/, '');
+}
+
+export function renderInlineMarkdown(text: string): string {
   // Process block quotes before HTML escaping
   const lines = text.split('\n');
   const processedLines: string[] = [];
@@ -53,7 +63,20 @@ function renderInlineMarkdown(text: string): string {
       processedLines.push(line);
     }
   }
-  let html = processedLines.join('\n')
+  let joined = processedLines.join('\n');
+
+  // Extract URLs BEFORE HTML escaping to preserve & and other special chars
+  const urlPlaceholders: string[] = [];
+  joined = joined.replace(/(https?:\/\/[^\s<>"]+)/g, (_match, rawUrl: string) => {
+    const url = cleanUrlTail(rawUrl);
+    const trailing = rawUrl.slice(url.length);
+    const idx = urlPlaceholders.length;
+    urlPlaceholders.push(url);
+    return `\x00URL${idx}\x00${trailing}`;
+  });
+
+  // HTML escape
+  let html = joined
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
@@ -62,10 +85,17 @@ function renderInlineMarkdown(text: string): string {
   html = html.replace(/`([^`]+)`/g, '<code class="bg-white/10 rounded px-1 font-mono text-sm text-slate-200">$1</code>');
   html = html.replace(/\*([^*\n]+)\*/g, '<strong class="font-semibold text-white">$1</strong>');
   html = html.replace(/_([^_\n]+)_/g, '<em class="italic">$1</em>');
-  html = html.replace(/(https?:\/\/[^\s<>"]+)/g, '<a href="$1" target="_blank" rel="noopener noreferrer" class="text-[#36c5f0] hover:underline">$1</a>');
+
+  // Restore URLs with proper links (original URL in href, escaped version for display)
+  html = html.replace(/\x00URL(\d+)\x00/g, (_match, idxStr: string) => {
+    const url = urlPlaceholders[parseInt(idxStr)];
+    const displayUrl = url.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    return `<a href="${url}" target="_blank" rel="noopener noreferrer" class="text-[#1d9bd1] hover:underline break-all" style="word-break:break-all">${displayUrl}</a>`;
+  });
+
   // Item 2 & 13: Style @channel/@here/@everyone and regular @mentions
   html = html.replace(/@(channel|here|everyone)\b/g, '<span class="bg-[#4a154b]/30 px-1 rounded text-white font-semibold">@$1</span>');
-  html = html.replace(/@(\w+)/g, '<span class="text-[#36c5f0] bg-[#36c5f0]/10 px-0.5 rounded cursor-pointer hover:underline">@$1</span>');
+  html = html.replace(/@([\w-]+)/g, '<span class="text-[#1d9bd1] bg-[#1d9bd1]/10 px-0.5 rounded cursor-pointer hover:underline">@$1</span>');
   html = html.replace(/\n/g, '<br>');
   html = html.replace(/\x00BQSTART\x00([\s\S]*?)\x00BQEND\x00/g, '<blockquote class="border-l-4 border-[#4a154b] pl-3 text-slate-400 bg-white/5 my-0.5">$1</blockquote>');
   return html;
@@ -94,19 +124,19 @@ function renderMessageContent(content: string): React.ReactNode {
 
 function extractFirstUrl(content: string): string | null {
   const match = content.match(/(https?:\/\/[^\s<>"]+)/);
-  return match ? match[1] : null;
+  return match ? cleanUrlTail(match[1]) : null;
 }
 
 interface OGData {
   title?: string | null;
   description?: string | null;
   image?: string | null;
+  favicon?: string | null;
 }
 
 function OGCard({ url }: { url: string }) {
   const [og, setOg] = useState<OGData | null>(null);
   const [failed, setFailed] = useState(false);
-  // Simple client-side cache via module-level map
   const cacheKey = url;
 
   useEffect(() => {
@@ -135,26 +165,35 @@ function OGCard({ url }: { url: string }) {
 
   if (failed || !og) return null;
 
+  const domain = (() => { try { return new URL(url).hostname.replace('www.', ''); } catch { return url; } })();
+
   return (
     <a
       href={url}
       target="_blank"
       rel="noopener noreferrer"
-      className="mt-2 flex gap-3 max-w-sm bg-white/5 border border-white/10 rounded-lg p-3 hover:bg-white/8 transition-colors no-underline"
+      className="mt-2 flex gap-3 max-w-md bg-white/5 border-l-4 border-[#1d9bd1] rounded-r-lg p-3 hover:bg-white/8 transition-colors no-underline"
       onClick={e => e.stopPropagation()}
     >
-      {og.image && (
+      {og.image ? (
         <img
           src={og.image}
           alt=""
-          className="w-16 h-16 object-cover rounded shrink-0"
+          className="w-20 h-20 object-cover rounded shrink-0"
           onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
         />
-      )}
+      ) : og.favicon ? (
+        <img
+          src={og.favicon}
+          alt=""
+          className="w-8 h-8 rounded shrink-0 mt-0.5"
+          onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
+        />
+      ) : null}
       <div className="min-w-0">
-        {og.title && <p className="text-sm font-semibold text-white truncate">{og.title}</p>}
+        <p className="text-xs text-slate-500 mb-0.5">{domain}</p>
+        {og.title && <p className="text-sm font-semibold text-[#1d9bd1] hover:underline truncate">{og.title}</p>}
         {og.description && <p className="text-xs text-slate-400 line-clamp-2 mt-0.5">{og.description}</p>}
-        <p className="text-xs text-[#36c5f0] truncate mt-1">{url}</p>
       </div>
     </a>
   );
@@ -170,26 +209,26 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from '@/components/ui/dialog';
-import {
   Tooltip,
   TooltipTrigger,
   TooltipContent,
   TooltipProvider,
 } from '@/components/ui/tooltip';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
-import { MoreHorizontal, SmilePlus, MessageSquare, Pencil, Trash2, Pin, Paperclip, Share2 } from 'lucide-react';
+import { MoreHorizontal, SmilePlus, MessageSquare, Pencil, Trash2, Pin, Paperclip, Share2, Bookmark, FileText, FileSpreadsheet, FileArchive, File, Copy, Link2, BellOff } from 'lucide-react';
 import { Message } from '@/lib/hooks/use-messages';
 import ReactionPicker from './ReactionPicker';
 import ImageLightbox from './ImageLightbox';
 import UserProfilePopup from './UserProfilePopup';
+import ShareMessageModal from '@/components/modals/ShareMessageModal';
 import { cn } from '@/lib/utils';
 import { useAppStore } from '@/lib/stores/app-store';
+import { useToast } from '@/components/ui/toast-provider';
 
 interface MessageItemProps {
   message: Message;
@@ -215,16 +254,16 @@ export default function MessageItem({
   channelId,
 }: MessageItemProps) {
   const { setActiveThread } = useAppStore();
+  const { showToast } = useToast();
   const [showActions, setShowActions] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState(message.content);
   const [reactionPickerOpen, setReactionPickerOpen] = useState(false);
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
-  const [copyToast, setCopyToast] = useState(false);
-  const toastTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
-
   const [isPinned, setIsPinned] = useState(!!message.pinnedAt);
+  const [isBookmarked, setIsBookmarked] = useState(false);
+  const [animatingReactions, setAnimatingReactions] = useState<Set<string>>(new Set());
+  const [shareModalOpen, setShareModalOpen] = useState(false);
 
   const isOwn = message.senderId === currentUserId;
   const senderName = message.senderName || 'Unknown';
@@ -251,6 +290,16 @@ export default function MessageItem({
   }
 
   async function handleReaction(emoji: string) {
+    // Trigger pop animation
+    setAnimatingReactions(prev => new Set(prev).add(emoji));
+    setTimeout(() => {
+      setAnimatingReactions(prev => {
+        const next = new Set(prev);
+        next.delete(emoji);
+        return next;
+      });
+    }, 300);
+
     await fetch(`/api/messages/${message.id}/reactions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -263,21 +312,63 @@ export default function MessageItem({
     if (res.ok) {
       const data = await res.json();
       setIsPinned(data.pinned);
+      showToast(data.pinned ? 'Message pinned' : 'Message unpinned', 'success');
     }
   }
 
-  function handleConfirmDelete() {
-    onDelete?.(message.id);
-    setDeleteDialogOpen(false);
+  async function handleBookmark() {
+    if (isBookmarked) {
+      await fetch('/api/bookmarks', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messageId: message.id }),
+      });
+      setIsBookmarked(false);
+      showToast('Bookmark removed', 'info');
+    } else {
+      await fetch('/api/bookmarks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messageId: message.id }),
+      });
+      setIsBookmarked(true);
+      showToast('Message saved', 'success');
+    }
+  }
+
+  function handleDelete() {
+    if (window.confirm("Delete this message? This can't be undone.")) {
+      onDelete?.(message.id);
+    }
   }
 
   function handleShare() {
-    const channelPart = channelName ? `[#${channelName}] ` : '';
-    const text = `${channelPart}${senderName}: ${message.content}`;
-    navigator.clipboard.writeText(text).then(() => {
-      setCopyToast(true);
-      if (toastTimeout.current) clearTimeout(toastTimeout.current);
-      toastTimeout.current = setTimeout(() => setCopyToast(false), 2500);
+    setShareModalOpen(true);
+  }
+
+  function handleCopyText() {
+    navigator.clipboard.writeText(message.content).then(() => {
+      showToast('Copied to clipboard', 'success');
+    });
+  }
+
+  function handleCopyLink() {
+    const base = typeof window !== 'undefined' ? window.location.origin : '';
+    const path = channelId ? `/workspace/channel/${channelId}` : window.location.pathname;
+    const permalink = `${base}${path}#msg-${message.id}`;
+    navigator.clipboard.writeText(permalink).then(() => {
+      showToast('Copied to clipboard', 'success');
+    });
+  }
+
+  async function handleMarkUnread() {
+    if (!channelId) return;
+    // Set lastReadAt to 1ms before this message's timestamp so this message shows as unread
+    const ts = new Date(new Date(message.createdAt).getTime() - 1).toISOString();
+    await fetch(`/api/channels/${channelId}/read`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ timestamp: ts }),
     });
   }
 
@@ -304,13 +395,17 @@ export default function MessageItem({
     );
   }
 
+  const messageTime = format(new Date(message.createdAt), 'h:mm a');
+
   return (
     <div
       id={`msg-${message.id}`}
+      role="article"
+      aria-label={`Message from ${senderName} at ${messageTime}`}
       className={cn(
         'group relative flex items-start gap-3 px-4 hover:bg-white/[0.03] rounded-lg transition-colors',
         isCompact ? 'py-0.5' : 'py-1.5',
-        isAgentResponse && 'bg-[#36c5f0]/5 border-l-2 border-[#36c5f0]/30',
+        isAgentResponse && 'bg-[#1d9bd1]/5 border-l-2 border-[#1d9bd1]/30',
         isMentioned && 'border-l-4 border-yellow-500 bg-yellow-500/5'
       )}
       onMouseEnter={() => setShowActions(true)}
@@ -326,7 +421,7 @@ export default function MessageItem({
           )}
           <AvatarFallback className={cn(
             'text-xs font-semibold',
-            message.isAgent ? 'bg-[#36c5f0]/20 text-[#36c5f0]' : 'bg-[#4a154b] text-white'
+            message.isAgent ? 'bg-[#1d9bd1]/20 text-[#1d9bd1]' : 'bg-[#4a154b] text-white'
           )}>
             {initials}
           </AvatarFallback>
@@ -343,11 +438,16 @@ export default function MessageItem({
             avatarUrl={message.senderAvatar}
             isAgent={message.isAgent}
           >
-            <button className="font-semibold text-sm hover:underline cursor-pointer" style={{ color: getNameColor(senderName) }}>{senderName}</button>
+            <button className="font-black text-[15px] hover:underline cursor-pointer" style={{ color: getNameColor(senderName) }}>{senderName}</button>
           </UserProfilePopup>
           {message.isAgent && (
-            <Badge className="text-[10px] px-1 py-0 h-4 bg-[#36c5f0]/20 text-[#36c5f0] border-[#36c5f0]/30">
+            <Badge className="text-[10px] px-1 py-0 h-4 bg-[#1d9bd1]/20 text-[#1d9bd1] border-[#1d9bd1]/30">
               Bot
+            </Badge>
+          )}
+          {message.isAgent && Boolean(message.metadata?.autoEngaged) && (
+            <Badge className="text-[10px] px-1 py-0 h-4 bg-amber-500/20 text-amber-400 border border-amber-500/30">
+              ⚡ auto
             </Badge>
           )}
           <button
@@ -357,22 +457,22 @@ export default function MessageItem({
           >
             {format(new Date(message.createdAt), 'h:mm a')}
             {timestampToast && (
-              <span className="absolute left-0 -top-6 bg-[#36c5f0] text-[#1a1d21] text-xs font-medium px-2 py-0.5 rounded shadow-lg whitespace-nowrap pointer-events-none z-20">
+              <span className="absolute left-0 -top-6 bg-[#1d9bd1] text-[#1a1d21] text-xs font-medium px-2 py-0.5 rounded shadow-lg whitespace-nowrap pointer-events-none z-20">
                 Link copied!
               </span>
             )}
           </button>
-          {message.editedAt && (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger className="text-xs text-slate-600 cursor-default bg-transparent border-0 p-0">
-                  (edited)
-                </TooltipTrigger>
-                <TooltipContent side="top" className="bg-[#1a1d21] text-white border-white/10 text-xs">
-                  Edited {format(new Date(message.editedAt), 'MMM d, yyyy h:mm a')}
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+          {(message.isEdited || message.editedAt) && (
+            <Popover>
+              <PopoverTrigger className="text-xs text-slate-600 hover:text-slate-400 cursor-pointer bg-transparent border-0 p-0 underline-offset-2 hover:underline">
+                (edited)
+              </PopoverTrigger>
+              <PopoverContent side="top" className="bg-[#1a1d21] border-white/10 text-white p-2 w-auto text-xs">
+                {message.editedAt
+                  ? `Edited at ${format(new Date(message.editedAt), 'MMM d, yyyy h:mm a')}`
+                  : 'This message has been edited'}
+              </PopoverContent>
+            </Popover>
           )}
           {isPinned && (
             <span className="pin-indicator flex items-center gap-0.5 text-xs" title="Pinned message">
@@ -424,12 +524,27 @@ export default function MessageItem({
           </div>
         ) : (
           <div>
-            <p className="text-slate-200 text-sm leading-relaxed break-words">
+            <p className="text-[#d1d2d3] text-[15px] leading-[1.46667] break-words overflow-hidden">
               {renderMessageContent(message.content)}
             </p>
 
             {/* OG link preview — T6 */}
-            {firstUrl && <OGCard url={firstUrl} />}
+            {firstUrl && (/\.(jpe?g|png|gif|webp|svg)(\?.*)?$/i.test(firstUrl) ? (
+              <div
+                className="mt-2 cursor-pointer inline-block"
+                onClick={() => setLightboxSrc(firstUrl)}
+                title="Click to enlarge"
+              >
+                <img
+                  src={firstUrl}
+                  alt="Image"
+                  className="max-w-[400px] max-h-80 rounded-lg border border-white/10 object-contain hover:opacity-90 transition-opacity"
+                  onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                />
+              </div>
+            ) : (
+              <OGCard url={firstUrl} />
+            ))}
 
             {message.metadata && typeof message.metadata === 'object' && 'fileUrl' in message.metadata && (
               <div className="mt-2">
@@ -451,6 +566,33 @@ export default function MessageItem({
                       </div>
                     );
                   }
+                  const ext = (meta.fileName ?? '').split('.').pop()?.toLowerCase() ?? '';
+                  const isPdf = meta.mimeType === 'application/pdf' || ext === 'pdf';
+                  const isSpreadsheet = ['xls', 'xlsx', 'csv'].includes(ext) ||
+                    (meta.mimeType ?? '').includes('spreadsheet') || (meta.mimeType ?? '').includes('excel');
+                  const isArchive = ['zip', 'tar', 'gz'].includes(ext) ||
+                    (meta.mimeType ?? '').includes('zip') || (meta.mimeType ?? '').includes('tar') || (meta.mimeType ?? '').includes('gzip');
+                  const isDoc = ['doc', 'docx', 'txt', 'ppt', 'pptx'].includes(ext) ||
+                    (meta.mimeType ?? '').includes('word') || (meta.mimeType ?? '').includes('presentation') || (meta.mimeType ?? '') === 'text/plain';
+
+                  const FileIcon = isSpreadsheet
+                    ? FileSpreadsheet
+                    : isArchive
+                    ? FileArchive
+                    : (isPdf || isDoc)
+                    ? FileText
+                    : File;
+
+                  const iconColor = isPdf
+                    ? 'text-red-400'
+                    : isSpreadsheet
+                    ? 'text-green-400'
+                    : isArchive
+                    ? 'text-yellow-400'
+                    : isDoc
+                    ? 'text-blue-400'
+                    : 'text-slate-400';
+
                   return (
                     <a
                       href={meta.fileUrl}
@@ -458,10 +600,12 @@ export default function MessageItem({
                       rel="noopener noreferrer"
                       className="inline-flex items-center gap-3 bg-white/5 border border-white/10 rounded-lg p-3 hover:bg-white/10 transition-colors max-w-sm"
                     >
-                      <Paperclip className="w-5 h-5 text-slate-400 shrink-0" />
+                      <FileIcon className={`w-6 h-6 shrink-0 ${iconColor}`} />
                       <div className="min-w-0">
                         <p className="text-sm text-white truncate">{meta.fileName ?? 'File'}</p>
-                        <p className="text-xs text-slate-400">Click to download</p>
+                        <p className="text-xs text-slate-400">
+                          {ext ? ext.toUpperCase() : 'File'} · Click to download
+                        </p>
                       </div>
                     </a>
                   );
@@ -477,12 +621,17 @@ export default function MessageItem({
             <TooltipProvider>
               {message.reactions.map(reaction => {
                 const iReacted = reaction.userIds.includes(currentUserId ?? '');
-                const othersCount = iReacted ? reaction.count - 1 : reaction.count;
+                const names = reaction.userNames ?? [];
+                const otherNames = iReacted
+                  ? names.filter((_, i) => reaction.userIds[i] !== currentUserId)
+                  : names;
                 let tooltipText = '';
-                if (iReacted && othersCount > 0) {
-                  tooltipText = `You and ${othersCount} other${othersCount > 1 ? 's' : ''}`;
+                if (iReacted && otherNames.length > 0) {
+                  tooltipText = `You, ${otherNames.join(', ')}`;
                 } else if (iReacted) {
                   tooltipText = 'You';
+                } else if (names.length > 0) {
+                  tooltipText = names.join(', ');
                 } else {
                   tooltipText = `${reaction.count} person${reaction.count > 1 ? 's' : ''}`;
                 }
@@ -495,7 +644,8 @@ export default function MessageItem({
                         'flex items-center gap-1 px-2 py-0.5 rounded-full border text-xs transition-colors',
                         iReacted
                           ? 'bg-[#4a154b]/30 border-[#4a154b]/60 text-white'
-                          : 'bg-white/5 border-white/10 text-slate-300 hover:bg-white/10'
+                          : 'bg-white/5 border-white/10 text-slate-300 hover:bg-white/10',
+                        animatingReactions.has(reaction.emoji) && 'reaction-pop'
                       )}
                     >
                       <span>{reaction.emoji}</span>
@@ -515,7 +665,7 @@ export default function MessageItem({
         {!isThreadView && message.threadCount && message.threadCount > 0 ? (
           <button
             onClick={() => setActiveThread(message.id)}
-            className="flex items-center gap-1.5 mt-1.5 text-xs text-[#36c5f0] hover:text-[#36c5f0]/80 hover:underline"
+            className="flex items-center gap-1.5 mt-1.5 text-xs text-[#1d9bd1] hover:text-[#1d9bd1]/80 hover:underline"
           >
             <MessageSquare className="w-3.5 h-3.5" />
             {message.threadCount} {message.threadCount === 1 ? 'reply' : 'replies'}
@@ -542,6 +692,18 @@ export default function MessageItem({
               <MessageSquare className="w-3.5 h-3.5" />
             </Button>
           )}
+          <Button
+            size="icon"
+            variant="ghost"
+            className={cn(
+              'w-7 h-7 hover:bg-white/10',
+              isBookmarked ? 'text-yellow-400 hover:text-yellow-300' : 'text-slate-400 hover:text-white'
+            )}
+            onClick={handleBookmark}
+            title={isBookmarked ? 'Remove bookmark' : 'Save for later'}
+          >
+            <Bookmark className={cn('w-3.5 h-3.5', isBookmarked && 'fill-yellow-400')} />
+          </Button>
           <DropdownMenu>
             <DropdownMenuTrigger className="inline-flex items-center justify-center w-7 h-7 rounded text-slate-400 hover:text-white hover:bg-white/10 transition-colors focus:outline-none">
               <MoreHorizontal className="w-3.5 h-3.5" />
@@ -562,6 +724,29 @@ export default function MessageItem({
                 <Share2 className="w-4 h-4 mr-2" />
                 Share message
               </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={handleCopyText}
+                className="hover:bg-white/10 cursor-pointer"
+              >
+                <Copy className="w-4 h-4 mr-2" />
+                Copy text
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={handleCopyLink}
+                className="hover:bg-white/10 cursor-pointer"
+              >
+                <Link2 className="w-4 h-4 mr-2" />
+                Copy link to message
+              </DropdownMenuItem>
+              {channelId && (
+                <DropdownMenuItem
+                  onClick={handleMarkUnread}
+                  className="hover:bg-white/10 cursor-pointer"
+                >
+                  <BellOff className="w-4 h-4 mr-2" />
+                  Mark as unread from here
+                </DropdownMenuItem>
+              )}
               {isOwn && (
                 <>
                   <DropdownMenuItem
@@ -571,9 +756,8 @@ export default function MessageItem({
                     <Pencil className="w-4 h-4 mr-2" />
                     Edit message
                   </DropdownMenuItem>
-                  {/* T7: Delete with confirmation */}
                   <DropdownMenuItem
-                    onClick={() => setDeleteDialogOpen(true)}
+                    onClick={handleDelete}
                     className="text-red-400 hover:bg-red-500/10 hover:text-red-400 cursor-pointer"
                   >
                     <Trash2 className="w-4 h-4 mr-2" />
@@ -586,35 +770,6 @@ export default function MessageItem({
         </div>
       )}
 
-      {/* T7: Delete confirmation dialog */}
-      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <DialogContent className="bg-[#222529] border-white/10 text-white sm:max-w-md" showCloseButton={false}>
-          <DialogHeader>
-            <DialogTitle className="text-white">Delete message?</DialogTitle>
-          </DialogHeader>
-          <p className="text-sm text-slate-400">
-            Are you sure you want to delete this message? This can&apos;t be undone.
-          </p>
-          <DialogFooter className="border-t-white/10 bg-transparent -mx-0 -mb-0 rounded-b-none pt-2 flex-row justify-end gap-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setDeleteDialogOpen(false)}
-              className="text-slate-300 hover:text-white"
-            >
-              Cancel
-            </Button>
-            <Button
-              size="sm"
-              onClick={handleConfirmDelete}
-              className="bg-red-600 hover:bg-red-700 text-white"
-            >
-              Delete
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       {/* T10: Image lightbox */}
       {lightboxSrc && (
         <ImageLightbox
@@ -623,12 +778,14 @@ export default function MessageItem({
         />
       )}
 
-      {/* T13: Copy toast */}
-      {copyToast && (
-        <div className="absolute right-2 -top-8 z-20 bg-[#36c5f0] text-[#1a1d21] text-xs font-medium px-2 py-1 rounded shadow-lg pointer-events-none">
-          Copied to clipboard
-        </div>
-      )}
+      {/* Share message modal */}
+      <ShareMessageModal
+        open={shareModalOpen}
+        onClose={() => setShareModalOpen(false)}
+        messageContent={message.content}
+        sourceChannelName={channelName}
+      />
+
     </div>
   );
 }

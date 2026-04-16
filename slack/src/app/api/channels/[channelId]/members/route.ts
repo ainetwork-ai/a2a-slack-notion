@@ -1,8 +1,9 @@
 import { db } from "@/lib/db";
-import { users, channels, channelMembers, messages, reactions, mentions, files, notifications } from "@/lib/db/schema";
-import { eq, and, desc, lt, sql, inArray, or, ilike } from "drizzle-orm";
+import { users, channels, channelMembers, messages, workflows } from "@/lib/db/schema";
+import { eq, and } from "drizzle-orm";
 import { requireAuth } from "@/lib/auth/middleware";
 import { NextRequest, NextResponse } from "next/server";
+import { runWorkflow } from "@/lib/workflow/executor";
 
 export async function GET(
   _request: NextRequest,
@@ -133,6 +134,38 @@ export async function POST(
     contentType: "system",
   });
 
+  // Trigger channel_join workflows
+  {
+    const [chanRow] = await db
+      .select({ workspaceId: channels.workspaceId })
+      .from(channels)
+      .where(eq(channels.id, channelId))
+      .limit(1);
+
+    if (chanRow?.workspaceId) {
+      const matchingWorkflows = await db
+        .select()
+        .from(workflows)
+        .where(
+          and(
+            eq(workflows.workspaceId, chanRow.workspaceId),
+            eq(workflows.triggerType, "channel_join"),
+            eq(workflows.enabled, true)
+          )
+        );
+
+      for (const wf of matchingWorkflows) {
+        const config = wf.triggerConfig as { channelId?: string } | null;
+        if (config?.channelId && config.channelId !== channelId) continue;
+        runWorkflow(wf.id, {
+          trigger: { userId, channelId },
+        }).catch(() => {
+          // Fire-and-forget
+        });
+      }
+    }
+  }
+
   return NextResponse.json(newMember, { status: 201 });
 }
 
@@ -152,6 +185,36 @@ export async function PATCH(
       .update(channelMembers)
       .set({ lastReadAt: new Date() })
       .where(and(eq(channelMembers.channelId, channelId), eq(channelMembers.userId, user.id)));
+
+    return NextResponse.json({ success: true });
+  }
+
+  if (body.action === "setEngagementLevel") {
+    const { targetUserId, engagementLevel } = body;
+
+    if (typeof engagementLevel !== "number" || engagementLevel < 0 || engagementLevel > 3) {
+      return NextResponse.json({ error: "engagementLevel must be 0-3" }, { status: 400 });
+    }
+
+    if (!targetUserId || typeof targetUserId !== "string") {
+      return NextResponse.json({ error: "targetUserId is required" }, { status: 400 });
+    }
+
+    // Only admins/owners can change engagement level
+    const [membership] = await db
+      .select()
+      .from(channelMembers)
+      .where(and(eq(channelMembers.channelId, channelId), eq(channelMembers.userId, user.id)))
+      .limit(1);
+
+    if (!membership || !["owner", "admin"].includes(membership.role)) {
+      return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 });
+    }
+
+    await db
+      .update(channelMembers)
+      .set({ engagementLevel })
+      .where(and(eq(channelMembers.channelId, channelId), eq(channelMembers.userId, targetUserId)));
 
     return NextResponse.json({ success: true });
   }

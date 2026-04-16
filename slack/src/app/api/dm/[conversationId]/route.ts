@@ -37,9 +37,9 @@ export async function GET(
 
   const { conversationId } = await params;
 
-  // Verify membership
+  // Verify membership and get mute state
   const [membership] = await db
-    .select()
+    .select({ lastReadAt: dmMembers.lastReadAt, isMuted: dmMembers.isMuted })
     .from(dmMembers)
     .where(and(eq(dmMembers.conversationId, conversationId), eq(dmMembers.userId, user.id)))
     .limit(1);
@@ -58,7 +58,7 @@ export async function GET(
     return NextResponse.json({ error: "Conversation not found" }, { status: 404 });
   }
 
-  // Get the other member
+  // Get all members
   const members = await db
     .select({
       id: users.id,
@@ -70,13 +70,20 @@ export async function GET(
     .innerJoin(users, eq(dmMembers.userId, users.id))
     .where(eq(dmMembers.conversationId, conversationId));
 
-  const otherUser = members.find((m) => m.id !== user.id) ?? members[0];
+  const otherMembers = members.filter((m) => m.id !== user.id);
+  // For 1-on-1 DMs keep otherUser for compat; for group DMs it's null
+  const otherUser = otherMembers.length === 1 ? otherMembers[0] : null;
+  const isGroup = members.length > 2;
 
   return NextResponse.json({
     conversation: {
       id: conv.id,
       otherUser,
+      members,
+      otherMembers,
+      isGroup,
       agentSkills: [],
+      isMuted: membership.isMuted,
     },
   });
 }

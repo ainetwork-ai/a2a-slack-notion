@@ -1,10 +1,16 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 
-import { Home, Search, Bell, MessageSquare, Smile, LogOut, Sun, Moon, Inbox, MessagesSquare, Plus } from 'lucide-react';
+import {
+  Home, MessageSquare, Bell, Clock, Folder, Zap, MoreHorizontal,
+  LogOut, Sun, Moon, Smile, BellOff, Volume2, VolumeX, User, Settings, Plus,
+} from 'lucide-react';
+import Image from 'next/image';
 import NotificationPanel from '@/components/modals/NotificationPanel';
+import ProfileEditModal from '@/components/modals/ProfileEditModal';
+import SetStatusModal from '@/components/modals/SetStatusModal';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import {
@@ -21,6 +27,8 @@ import { useNotifications } from '@/lib/hooks/use-notifications';
 import { useAppStore } from '@/lib/stores/app-store';
 import { useThemeStore } from '@/lib/stores/theme-store';
 import { useWorkspaceStore } from '@/lib/stores/workspace-store';
+import { usePresence } from '@/lib/realtime/use-presence';
+import { isNotificationSoundEnabled, setNotificationSoundEnabled } from '@/lib/notifications/notification-sound';
 import { cn } from '@/lib/utils';
 
 interface NavButtonProps {
@@ -33,29 +41,24 @@ interface NavButtonProps {
 
 function NavButton({ icon, label, onClick, active, badge }: NavButtonProps) {
   return (
-    <TooltipProvider delay={300}>
-      <Tooltip>
-        <TooltipTrigger
-          onClick={onClick}
-          className={cn(
-            'relative flex items-center justify-center w-10 h-10 rounded-lg transition-all duration-150',
-            active
-              ? 'bg-white text-[#1a1d21]'
-              : 'text-[#bcabbc] hover:bg-white/10 hover:text-white'
-          )}
-        >
-          {icon}
-          {badge && badge > 0 ? (
-            <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-[18px] h-[18px] rounded-full bg-red-500 text-white text-[10px] font-bold px-1">
-              {badge > 99 ? '99+' : badge}
-            </span>
-          ) : null}
-        </TooltipTrigger>
-        <TooltipContent side="right" className="bg-[#1a1d21] text-white border-white/10">
-          {label}
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+    <button
+      onClick={onClick}
+      aria-label={label}
+      className={cn(
+        'relative flex flex-col items-center justify-center gap-0.5 w-14 py-1.5 rounded-lg transition-all duration-150',
+        active
+          ? 'bg-white text-[#1a1d21]'
+          : 'text-[#bcabbc] hover:bg-white/10 hover:text-white'
+      )}
+    >
+      {icon}
+      <span className="text-[10px] leading-tight font-medium">{label}</span>
+      {badge && badge > 0 ? (
+        <span className="absolute top-0.5 right-1 flex items-center justify-center min-w-[16px] h-[16px] rounded-full bg-red-500 text-white text-[9px] font-bold px-0.5">
+          {badge > 99 ? '99+' : badge}
+        </span>
+      ) : null}
+    </button>
   );
 }
 
@@ -64,13 +67,45 @@ export default function Sidebar() {
   const pathname = usePathname();
   const { user, logout } = useAuth();
   const { unreadCount } = useNotifications();
-  const { setSearchOpen, searchOpen } = useAppStore();
+  const { toggleNotificationPanel, notificationPanelOpen } = useAppStore();
   const { theme, toggleTheme } = useThemeStore();
   const { workspaces, activeWorkspaceId, setActive, fetchWorkspaces } = useWorkspaceStore();
+  const { myStatus, setDnd, isDndEnabled } = usePresence();
+  const [dndActive, setDndActive] = useState(false);
+  const [soundEnabled, setSoundEnabled] = useState(true);
+  const [profileModalOpen, setProfileModalOpen] = useState(false);
+  const [statusModalOpen, setStatusModalOpen] = useState(false);
 
   useEffect(() => {
     fetchWorkspaces();
   }, [fetchWorkspaces]);
+
+  useEffect(() => {
+    setDndActive(isDndEnabled());
+    setSoundEnabled(isNotificationSoundEnabled());
+  }, []);
+
+  function handleToggleDnd() {
+    const next = !dndActive;
+    setDndActive(next);
+    setDnd(next);
+  }
+
+  function handleToggleSound() {
+    const next = !soundEnabled;
+    setSoundEnabled(next);
+    setNotificationSoundEnabled(next);
+  }
+
+  function statusDotClass(): string {
+    switch (myStatus) {
+      case 'online': return 'bg-green-400';
+      case 'dnd': return 'bg-red-500';
+      case 'away':
+      case 'idle': return 'bg-yellow-400';
+      default: return 'bg-slate-500';
+    }
+  }
 
   const initials = user?.displayName
     ? user.displayName.split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2)
@@ -80,17 +115,32 @@ export default function Sidebar() {
   const otherWorkspaces = workspaces.filter((w) => w.id !== activeWorkspaceId);
 
   return (
-    <div className="sidebar-dark flex flex-col items-center w-16 h-full py-3 gap-1 border-r border-white/5 shrink-0">
+    <>
+    <ProfileEditModal open={profileModalOpen} onClose={() => setProfileModalOpen(false)} />
+    <SetStatusModal open={statusModalOpen} onClose={() => setStatusModalOpen(false)} />
+    <div className="sidebar-dark flex flex-col items-center w-[68px] h-full py-3 gap-1 border-r border-white/5 shrink-0" role="navigation" aria-label="Main navigation">
+
       {/* Active Workspace Icon */}
       <TooltipProvider delay={300}>
         <Tooltip>
           <TooltipTrigger
-            className="flex items-center justify-center w-10 h-10 rounded-xl bg-[#4a154b] mb-1 cursor-pointer shadow-md hover:bg-[#611f6a] transition-colors"
+            className="flex items-center justify-center w-10 h-10 rounded-xl bg-[#4a154b] mb-1 cursor-pointer shadow-md hover:bg-[#611f6a] transition-colors overflow-hidden"
             onClick={() => router.push('/workspace')}
           >
-            <span className="text-white font-bold text-xs">
-              {activeWorkspace?.iconText ?? 'A2A'}
-            </span>
+            {activeWorkspace?.iconUrl ? (
+              <Image
+                src={activeWorkspace.iconUrl}
+                alt={activeWorkspace.name}
+                width={40}
+                height={40}
+                className="object-cover w-full h-full"
+                unoptimized
+              />
+            ) : (
+              <span className="text-white font-bold text-xs">
+                {activeWorkspace?.iconText ?? 'A2A'}
+              </span>
+            )}
           </TooltipTrigger>
           <TooltipContent side="right" className="bg-[#1a1d21] text-white border-white/10">
             {activeWorkspace?.name ?? 'Slack-A2A'}
@@ -103,10 +153,21 @@ export default function Sidebar() {
         <TooltipProvider key={ws.id} delay={300}>
           <Tooltip>
             <TooltipTrigger
-              className="flex items-center justify-center w-10 h-10 rounded-xl bg-[#222529] cursor-pointer hover:bg-[#4a154b]/60 transition-colors border border-white/10"
+              className="flex items-center justify-center w-10 h-10 rounded-xl bg-[#222529] cursor-pointer hover:bg-[#4a154b]/60 transition-colors border border-white/10 overflow-hidden"
               onClick={() => setActive(ws.id)}
             >
-              <span className="text-white font-bold text-xs">{ws.iconText}</span>
+              {ws.iconUrl ? (
+                <Image
+                  src={ws.iconUrl}
+                  alt={ws.name}
+                  width={40}
+                  height={40}
+                  className="object-cover w-full h-full"
+                  unoptimized
+                />
+              ) : (
+                <span className="text-white font-bold text-xs">{ws.iconText}</span>
+              )}
             </TooltipTrigger>
             <TooltipContent side="right" className="bg-[#1a1d21] text-white border-white/10">
               {ws.name}
@@ -144,44 +205,91 @@ export default function Sidebar() {
 
       <div className="w-8 border-t border-white/10 mb-2 mt-2" />
 
-      {/* Nav Buttons */}
-      <NavButton
-        icon={<Home className="w-5 h-5" />}
-        label="Home"
-        onClick={() => router.push('/workspace')}
-        active={pathname === '/workspace'}
-      />
-      <NavButton
-        icon={<Search className="w-5 h-5" />}
-        label="Search (Cmd+K)"
-        onClick={() => setSearchOpen(true)}
-        active={searchOpen}
-      />
-      {/* Notifications — uses NotificationPanel dropdown */}
-      <div className="flex items-center justify-center">
-        <NotificationPanel />
-      </div>
-      <NavButton
-        icon={<MessageSquare className="w-5 h-5" />}
-        label="Direct Messages"
-        onClick={() => {
-          const dmSection = document.querySelector('[data-section="dm"]');
-          if (dmSection) dmSection.scrollIntoView({ behavior: 'smooth' });
-          router.push('/workspace');
-        }}
-      />
-      <NavButton
-        icon={<MessagesSquare className="w-5 h-5" />}
-        label="Threads"
-        onClick={() => router.push('/workspace/threads')}
-        active={pathname === '/workspace/threads'}
-      />
-      <NavButton
-        icon={<Inbox className="w-5 h-5" />}
-        label="All unreads"
-        onClick={() => router.push('/workspace/unreads')}
-        active={pathname === '/workspace/unreads'}
-      />
+      {/* Nav Buttons — Slack-style icon + label */}
+      <nav aria-label="App navigation" className="flex flex-col items-center gap-0.5 w-full px-1">
+        <NavButton
+          icon={<Home className="w-5 h-5" />}
+          label="Home"
+          onClick={() => router.push('/workspace')}
+          active={pathname === '/workspace'}
+        />
+        <NavButton
+          icon={<MessageSquare className="w-5 h-5" />}
+          label="DMs"
+          onClick={() => router.push('/workspace/dms')}
+          active={pathname === '/workspace/dms' || pathname.startsWith('/workspace/dm/')}
+        />
+        {/* Activity — toggles NotificationPanel, no navigation */}
+        <button
+          aria-label="Activity"
+          onClick={toggleNotificationPanel}
+          className={cn(
+            'relative flex flex-col items-center justify-center gap-0.5 w-14 py-1.5 rounded-lg transition-all duration-150',
+            notificationPanelOpen
+              ? 'bg-white text-[#1a1d21]'
+              : 'text-[#bcabbc] hover:bg-white/10 hover:text-white'
+          )}
+        >
+          <Bell className="w-5 h-5" />
+          <span className="text-[10px] leading-tight font-medium">Activity</span>
+          {unreadCount > 0 && (
+            <span className="absolute top-0.5 right-1 flex items-center justify-center min-w-[16px] h-[16px] rounded-full bg-red-500 text-white text-[9px] font-bold px-0.5">
+              {unreadCount > 99 ? '99+' : unreadCount}
+            </span>
+          )}
+        </button>
+        <NavButton
+          icon={<Clock className="w-5 h-5" />}
+          label="Later"
+          onClick={() => router.push('/workspace/later')}
+          active={pathname === '/workspace/later' || pathname === '/workspace/saved'}
+        />
+        <NavButton
+          icon={<Folder className="w-5 h-5" />}
+          label="Files"
+          onClick={() => router.push('/workspace/files')}
+          active={pathname === '/workspace/files'}
+        />
+        <NavButton
+          icon={<Zap className="w-5 h-5" />}
+          label="Tools"
+          onClick={() => router.push('/workspace/workflows')}
+          active={pathname === '/workspace/workflows'}
+        />
+        {/* More — dropdown with additional items */}
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            aria-label="More"
+            className="flex flex-col items-center justify-center gap-0.5 w-14 py-1.5 rounded-lg transition-all duration-150 text-[#bcabbc] hover:bg-white/10 hover:text-white focus:outline-none"
+          >
+            <MoreHorizontal className="w-5 h-5" />
+            <span className="text-[10px] leading-tight font-medium">More</span>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent side="right" sideOffset={8} className="w-52 bg-[#1a1d21] border-white/10 text-white">
+            <DropdownMenuItem
+              className="text-slate-200 focus:bg-white/10 focus:text-white cursor-pointer"
+              onClick={() => router.push('/workspace/threads')}
+            >
+              Threads
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              className="text-slate-200 focus:bg-white/10 focus:text-white cursor-pointer"
+              onClick={() => router.push('/workspace/unreads')}
+            >
+              All unreads
+            </DropdownMenuItem>
+            {(activeWorkspace?.role === 'owner' || activeWorkspace?.role === 'admin') && (
+              <DropdownMenuItem
+                className="text-slate-200 focus:bg-white/10 focus:text-white cursor-pointer"
+                onClick={() => router.push('/workspace/settings')}
+              >
+                <Settings className="w-4 h-4" />
+                Workspace Settings
+              </DropdownMenuItem>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </nav>
 
       {/* Spacer */}
       <div className="flex-1" />
@@ -210,12 +318,18 @@ export default function Sidebar() {
               {initials}
             </AvatarFallback>
           </Avatar>
-          <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-green-400 border-2 border-[#1a1d21]" />
+          <span className={cn('absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full border-2 border-[#1a1d21]', statusDotClass())} />
         </DropdownMenuTrigger>
         <DropdownMenuContent side="top" sideOffset={8} className="w-56 bg-[#1a1d21] border-white/10 text-white">
           <DropdownMenuGroup>
             <DropdownMenuLabel className="text-white">
               <div className="font-semibold">{user?.displayName ?? 'You'}</div>
+              {(user?.statusEmoji || user?.statusMessage) && (
+                <div className="flex items-center gap-1 text-xs text-slate-300 mt-0.5">
+                  {user.statusEmoji && <span>{user.statusEmoji}</span>}
+                  {user.statusMessage && <span className="truncate">{user.statusMessage}</span>}
+                </div>
+              )}
               <div className="text-xs text-slate-400 truncate">
                 {user?.ainAddress ? `${user.ainAddress.slice(0, 6)}…${user.ainAddress.slice(-4)}` : ''}
               </div>
@@ -224,19 +338,34 @@ export default function Sidebar() {
           <DropdownMenuSeparator className="bg-white/10" />
           <DropdownMenuItem
             className="text-slate-200 focus:bg-white/10 focus:text-white cursor-pointer"
-            onClick={async () => {
-              const text = prompt('Set your status message:');
-              if (text !== null) {
-                await fetch('/api/presence', {
-                  method: 'PATCH',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ statusMessage: text }),
-                });
-              }
-            }}
+            onClick={() => setProfileModalOpen(true)}
+          >
+            <User className="w-4 h-4" />
+            Edit profile
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            className="text-slate-200 focus:bg-white/10 focus:text-white cursor-pointer"
+            onClick={() => setStatusModalOpen(true)}
           >
             <Smile className="w-4 h-4" />
             Set status
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            className={cn(
+              'focus:bg-white/10 cursor-pointer',
+              dndActive ? 'text-red-400 focus:text-red-400' : 'text-slate-200 focus:text-white'
+            )}
+            onClick={handleToggleDnd}
+          >
+            <BellOff className="w-4 h-4" />
+            {dndActive ? 'Turn off Do Not Disturb' : 'Do Not Disturb'}
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            className="text-slate-200 focus:bg-white/10 focus:text-white cursor-pointer"
+            onClick={handleToggleSound}
+          >
+            {soundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+            {soundEnabled ? 'Mute notification sounds' : 'Unmute notification sounds'}
           </DropdownMenuItem>
           <DropdownMenuSeparator className="bg-white/10" />
           <DropdownMenuItem
@@ -249,5 +378,6 @@ export default function Sidebar() {
         </DropdownMenuContent>
       </DropdownMenu>
     </div>
+    </>
   );
 }

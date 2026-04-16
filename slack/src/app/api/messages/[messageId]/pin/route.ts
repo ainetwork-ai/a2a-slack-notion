@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { messages, channelMembers } from "@/lib/db/schema";
+import { messages, channelMembers, users } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
 import { requireAuth } from "@/lib/auth/middleware";
 import { NextRequest, NextResponse } from "next/server";
@@ -44,11 +44,31 @@ export async function POST(
 
   // Toggle: set pinnedAt to now if null, null if already set
   const newPinnedAt = message.pinnedAt ? null : new Date();
+  const isPinning = newPinnedAt !== null;
 
   await db
     .update(messages)
     .set({ pinnedAt: newPinnedAt })
     .where(eq(messages.id, messageId));
 
-  return NextResponse.json({ pinned: newPinnedAt !== null });
+  // Post a system message when pinning (not unpinning) in a channel
+  if (isPinning && message.channelId) {
+    const [actor] = await db
+      .select({ displayName: users.displayName })
+      .from(users)
+      .where(eq(users.id, user.id))
+      .limit(1);
+
+    const actorName = actor?.displayName ?? "Someone";
+    const preview = message.content.slice(0, 60) + (message.content.length > 60 ? "…" : "");
+
+    await db.insert(messages).values({
+      channelId: message.channelId,
+      userId: user.id,
+      content: `${actorName} pinned a message: "${preview}"`,
+      contentType: "system",
+    });
+  }
+
+  return NextResponse.json({ pinned: isPinning });
 }

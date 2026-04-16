@@ -6,8 +6,10 @@ export interface Workspace {
   name: string;
   slug: string;
   iconText: string;
+  iconUrl?: string | null;
   description?: string;
   role?: string;
+  createdAt?: string;
 }
 
 interface WorkspaceStore {

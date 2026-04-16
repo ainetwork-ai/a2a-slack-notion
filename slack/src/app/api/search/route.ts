@@ -1,8 +1,65 @@
 import { db } from "@/lib/db";
-import { users, channels, channelMembers, messages, reactions, mentions, files, notifications, dmConversations, dmMembers } from "@/lib/db/schema";
-import { eq, and, desc, lt, sql, inArray, or, ilike } from "drizzle-orm";
+import { users, channels, channelMembers, messages, dmMembers, canvases } from "@/lib/db/schema";
+import { eq, and, desc, isNotNull, lt, gt, inArray, or, ilike, SQL } from "drizzle-orm";
 import { requireAuth } from "@/lib/auth/middleware";
 import { NextRequest, NextResponse } from "next/server";
+
+interface ParsedQuery {
+  text: string;
+  from?: string;
+  in?: string;
+  hasLink?: boolean;
+  hasPin?: boolean;
+  before?: Date;
+  after?: Date;
+}
+
+function parseSearchQuery(raw: string): ParsedQuery {
+  const result: ParsedQuery = { text: '' };
+  // Extract known operators, leave remaining text
+  let remaining = raw;
+
+  // from:username
+  remaining = remaining.replace(/\bfrom:(\S+)/gi, (_, val) => {
+    result.from = val;
+    return '';
+  });
+
+  // in:channelname
+  remaining = remaining.replace(/\bin:(\S+)/gi, (_, val) => {
+    result.in = val;
+    return '';
+  });
+
+  // has:link
+  remaining = remaining.replace(/\bhas:link\b/gi, () => {
+    result.hasLink = true;
+    return '';
+  });
+
+  // has:pin
+  remaining = remaining.replace(/\bhas:pin\b/gi, () => {
+    result.hasPin = true;
+    return '';
+  });
+
+  // before:YYYY-MM-DD
+  remaining = remaining.replace(/\bbefore:(\d{4}-\d{2}-\d{2})\b/gi, (_, val) => {
+    const d = new Date(val);
+    if (!isNaN(d.getTime())) result.before = d;
+    return '';
+  });
+
+  // after:YYYY-MM-DD
+  remaining = remaining.replace(/\bafter:(\d{4}-\d{2}-\d{2})\b/gi, (_, val) => {
+    const d = new Date(val);
+    if (!isNaN(d.getTime())) result.after = d;
+    return '';
+  });
+
+  result.text = remaining.trim();
+  return result;
+}
 
 export async function GET(request: NextRequest) {
   const auth = await requireAuth();
@@ -12,14 +69,17 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const q = searchParams.get("q");
   const channelIdFilter = searchParams.get("channelId");
+  const offset = parseInt(searchParams.get("offset") ?? "0", 10);
+  const limit = parseInt(searchParams.get("limit") ?? "50", 10);
 
   if (!q || q.trim().length === 0) {
     return NextResponse.json({ results: [] });
   }
 
-  const pattern = `%${q.trim()}%`;
+  const parsed = parseSearchQuery(q.trim());
+  const textPattern = parsed.text ? `%${parsed.text}%` : null;
 
-  // Search messages in channels the user is a member of
+  // Get channels the user is a member of
   const userChannelIds = await db
     .select({ channelId: channelMembers.channelId })
     .from(channelMembers)
@@ -32,10 +92,14 @@ export async function GET(request: NextRequest) {
     if (!channelIds.includes(channelIdFilter)) {
       return NextResponse.json({ results: [] });
     }
-    const conditions = [
-      ilike(messages.content, pattern),
-      eq(messages.channelId, channelIdFilter),
-    ];
+
+    const conditions: SQL[] = [eq(messages.channelId, channelIdFilter)];
+    if (textPattern) conditions.push(ilike(messages.content, textPattern));
+    if (parsed.hasPin) conditions.push(isNotNull(messages.pinnedAt));
+    if (parsed.hasLink) conditions.push(ilike(messages.content, '%http%'));
+    if (parsed.before) conditions.push(lt(messages.createdAt, parsed.before));
+    if (parsed.after) conditions.push(gt(messages.createdAt, parsed.after));
+
     const results = await db
       .select({
         id: messages.id,
@@ -57,17 +121,22 @@ export async function GET(request: NextRequest) {
       .innerJoin(users, eq(messages.userId, users.id))
       .where(and(...conditions))
       .orderBy(desc(messages.createdAt))
-      .limit(50);
-    const enriched = results.map(msg => ({
+      .limit(limit + 1)
+      .offset(offset);
+
+    const hasMore = results.length > limit;
+    const pageResults = hasMore ? results.slice(0, limit) : results;
+
+    const enriched = pageResults.map(msg => ({
       ...msg,
       senderName: msg.user?.displayName ?? null,
       channel: { id: channelIdFilter, name: '' },
       conversation: null,
     }));
-    return NextResponse.json({ results: enriched });
+    return NextResponse.json({ results: enriched, textQuery: parsed.text, hasMore, offset, limit });
   }
 
-  // Search messages in channels user belongs to + DMs user belongs to
+  // Get DM conversations the user is a member of
   const userConvIds = await db
     .select({ conversationId: dmMembers.conversationId })
     .from(dmMembers)
@@ -75,8 +144,19 @@ export async function GET(request: NextRequest) {
 
   const conversationIds = userConvIds.map((c) => c.conversationId);
 
-  const conditions = [ilike(messages.content, pattern)];
-  const locationConditions = [];
+  // Build message conditions
+  const conditions: SQL[] = [];
+  if (textPattern) conditions.push(ilike(messages.content, textPattern));
+  if (parsed.hasPin) conditions.push(isNotNull(messages.pinnedAt));
+  if (parsed.hasLink) conditions.push(ilike(messages.content, '%http%'));
+  if (parsed.before) conditions.push(lt(messages.createdAt, parsed.before));
+  if (parsed.after) conditions.push(gt(messages.createdAt, parsed.after));
+
+  // If no text and no message-level conditions, only do channel/user searches unless operator forces messages
+  const hasMessageOperators = parsed.hasPin || parsed.hasLink || parsed.before || parsed.after || parsed.from || parsed.in;
+
+  // Location constraints
+  const locationConditions: SQL[] = [];
   if (channelIds.length > 0) {
     locationConditions.push(inArray(messages.channelId, channelIds));
   }
@@ -84,79 +164,184 @@ export async function GET(request: NextRequest) {
     locationConditions.push(inArray(messages.conversationId, conversationIds));
   }
 
-  if (locationConditions.length === 0) {
-    return NextResponse.json({ results: [] });
-  }
+  if (locationConditions.length === 0 && !parsed.in) {
+    // No accessible channels or DMs
+    if (!parsed.in) {
+      // Only return channel/user results based on text
+      const allResults: Array<{
+        id: string;
+        type: 'channel' | 'message' | 'user';
+        content: string;
+        channelName?: string | null;
+        senderName?: string | null;
+        channelId?: string | null;
+        createdAt?: Date | null;
+      }> = [];
 
-  conditions.push(or(...locationConditions)!);
-
-  const results = await db
-    .select({
-      id: messages.id,
-      content: messages.content,
-      contentType: messages.contentType,
-      createdAt: messages.createdAt,
-      updatedAt: messages.updatedAt,
-      channelId: messages.channelId,
-      conversationId: messages.conversationId,
-      parentId: messages.parentId,
-      userId: messages.userId,
-      user: {
-        id: users.id,
-        displayName: users.displayName,
-        avatarUrl: users.avatarUrl,
-      },
-    })
-    .from(messages)
-    .innerJoin(users, eq(messages.userId, users.id))
-    .where(and(...conditions))
-    .orderBy(desc(messages.createdAt))
-    .limit(50);
-
-  // Enrich with channel/conversation info
-  const enriched = await Promise.all(
-    results.map(async (msg) => {
-      let channelInfo = null;
-      let conversationInfo = null;
-
-      if (msg.channelId) {
-        const [ch] = await db
+      if (textPattern) {
+        const channelResults = await db
           .select({ id: channels.id, name: channels.name })
           .from(channels)
-          .where(eq(channels.id, msg.channelId))
-          .limit(1);
-        channelInfo = ch || null;
+          .where(ilike(channels.name, textPattern))
+          .limit(10);
+
+        const userResults = await db
+          .select({ id: users.id, displayName: users.displayName })
+          .from(users)
+          .where(ilike(users.displayName, textPattern))
+          .limit(10);
+
+        allResults.push(
+          ...channelResults.map(ch => ({
+            id: ch.id,
+            type: 'channel' as const,
+            content: ch.name,
+            channelName: ch.name,
+            senderName: null,
+            channelId: ch.id,
+          })),
+          ...userResults.map(u => ({
+            id: u.id,
+            type: 'user' as const,
+            content: u.displayName,
+            senderName: u.displayName,
+          }))
+        );
       }
+      return NextResponse.json({ results: allResults, textQuery: parsed.text, hasMore: false, offset: 0, limit });
+    }
+  }
 
-      if (msg.conversationId) {
-        const members = await db
-          .select({
-            userId: dmMembers.userId,
-            displayName: users.displayName,
-          })
-          .from(dmMembers)
-          .innerJoin(users, eq(dmMembers.userId, users.id))
-          .where(eq(dmMembers.conversationId, msg.conversationId));
-        conversationInfo = { id: msg.conversationId, members };
-      }
+  // If in: operator provided, resolve channel ID by name
+  let resolvedChannelIds = channelIds;
+  if (parsed.in) {
+    const matchedChannels = await db
+      .select({ id: channels.id, name: channels.name })
+      .from(channels)
+      .where(and(
+        ilike(channels.name, `%${parsed.in}%`),
+        channelIds.length > 0 ? inArray(channels.id, channelIds) : undefined
+      ));
+    resolvedChannelIds = matchedChannels.map(c => c.id);
+    if (resolvedChannelIds.length === 0) {
+      return NextResponse.json({ results: [], textQuery: parsed.text });
+    }
+    // Override location to only those channels
+    conditions.push(inArray(messages.channelId, resolvedChannelIds));
+  } else if (locationConditions.length > 0) {
+    conditions.push(or(...locationConditions)!);
+  }
 
-      return { ...msg, channel: channelInfo, conversation: conversationInfo };
-    })
-  );
+  // If from: operator provided, filter by sender displayName
+  if (parsed.from) {
+    conditions.push(ilike(users.displayName, `%${parsed.from}%`));
+  }
 
-  // Also search channels by name
-  const channelResults = await db
-    .select({ id: channels.id, name: channels.name, description: channels.description })
-    .from(channels)
-    .where(and(ilike(channels.name, pattern), inArray(channels.id, channelIds)))
-    .limit(10);
+  // Only run message search if we have at least one filter condition or text
+  let enriched: Array<{
+    id: string;
+    type: 'message';
+    content: string;
+    channelId: string | null;
+    channelName: string | null;
+    senderName: string | null;
+    createdAt: Date;
+  }> = [];
 
-  // Also search users by name
-  const userResults = await db
-    .select({ id: users.id, displayName: users.displayName, avatarUrl: users.avatarUrl })
-    .from(users)
-    .where(ilike(users.displayName, pattern))
-    .limit(10);
+  let hasMore = false;
+
+  if (conditions.length > 0 || hasMessageOperators) {
+    const msgResults = await db
+      .select({
+        id: messages.id,
+        content: messages.content,
+        contentType: messages.contentType,
+        createdAt: messages.createdAt,
+        updatedAt: messages.updatedAt,
+        channelId: messages.channelId,
+        conversationId: messages.conversationId,
+        parentId: messages.parentId,
+        userId: messages.userId,
+        user: {
+          id: users.id,
+          displayName: users.displayName,
+          avatarUrl: users.avatarUrl,
+        },
+      })
+      .from(messages)
+      .innerJoin(users, eq(messages.userId, users.id))
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .orderBy(desc(messages.createdAt))
+      .limit(limit + 1)
+      .offset(offset);
+
+    const hasMoreMessages = msgResults.length > limit;
+    const pageMsgResults = hasMoreMessages ? msgResults.slice(0, limit) : msgResults;
+
+    // Enrich with channel/conversation info
+    const enrichedRaw = await Promise.all(
+      pageMsgResults.map(async (msg) => {
+        let channelInfo = null;
+        if (msg.channelId) {
+          const [ch] = await db
+            .select({ id: channels.id, name: channels.name })
+            .from(channels)
+            .where(eq(channels.id, msg.channelId))
+            .limit(1);
+          channelInfo = ch || null;
+        }
+        return { ...msg, channel: channelInfo };
+      })
+    );
+
+    enriched = enrichedRaw.map(msg => ({
+      id: msg.id,
+      type: 'message' as const,
+      content: msg.content,
+      channelId: msg.channelId ?? msg.channel?.id ?? null,
+      channelName: msg.channel?.name ?? null,
+      senderName: msg.user?.displayName ?? null,
+      createdAt: msg.createdAt,
+    }));
+
+    hasMore = hasMoreMessages;
+  }
+
+  // Channel search (only when no in: operator forcing channel scope)
+  const channelResults = textPattern && !parsed.in
+    ? await db
+        .select({ id: channels.id, name: channels.name })
+        .from(channels)
+        .where(
+          channelIds.length > 0
+            ? and(ilike(channels.name, textPattern), inArray(channels.id, channelIds))
+            : ilike(channels.name, textPattern)
+        )
+        .limit(10)
+    : [];
+
+  // User search (only when no from: operator)
+  const userResults = textPattern && !parsed.from
+    ? await db
+        .select({ id: users.id, displayName: users.displayName })
+        .from(users)
+        .where(ilike(users.displayName, textPattern))
+        .limit(10)
+    : [];
+
+  // Canvas search
+  const canvasResults = textPattern && !parsed.in && !parsed.from
+    ? await db
+        .select({ id: canvases.id, title: canvases.title, content: canvases.content, channelId: canvases.channelId })
+        .from(canvases)
+        .where(
+          and(
+            or(ilike(canvases.title, textPattern), ilike(canvases.content, textPattern))!,
+            channelIds.length > 0 ? inArray(canvases.channelId, channelIds) : undefined
+          )
+        )
+        .limit(10)
+    : [];
 
   const allResults = [
     ...channelResults.map(ch => ({
@@ -167,15 +352,15 @@ export async function GET(request: NextRequest) {
       senderName: null,
       channelId: ch.id,
     })),
-    ...enriched.map(msg => ({
-      id: msg.id,
-      type: 'message' as const,
-      content: msg.content,
-      channelId: msg.channelId ?? msg.channel?.id,
-      channelName: msg.channel?.name ?? null,
-      senderName: msg.user?.displayName ?? null,
-      createdAt: msg.createdAt,
+    ...canvasResults.map(c => ({
+      id: c.id,
+      type: 'canvas' as const,
+      content: c.title,
+      channelId: c.channelId ?? null,
+      channelName: null,
+      senderName: null,
     })),
+    ...enriched,
     ...userResults.map(u => ({
       id: u.id,
       type: 'user' as const,
@@ -184,5 +369,5 @@ export async function GET(request: NextRequest) {
     })),
   ];
 
-  return NextResponse.json({ results: allResults });
+  return NextResponse.json({ results: allResults, textQuery: parsed.text, hasMore, offset, limit });
 }

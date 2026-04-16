@@ -131,6 +131,43 @@
 
 /* ── Slack-A2A custom styles ─────────────────────────────── */
 
+/* Slack app color tokens */
+:root {
+  --slack-bg-primary: #ffffff;
+  --slack-bg-secondary: #f8f8f8;
+  --slack-bg-tertiary: #f0f0f0;
+  --slack-text-primary: #1d1c1d;
+  --slack-text-secondary: #616061;
+  --slack-text-muted: #868686;
+  --slack-border: #dddddd;
+  --slack-hover: rgba(0,0,0,0.04);
+  --slack-sidebar-bg: #3F0E40;
+  --slack-sidebar-text: #FFFFFF;
+  --slack-channel-bg: #3F0E40;
+  --slack-input-bg: #ffffff;
+  --slack-input-border: #868686;
+  --slack-link: #1264a3;
+  --slack-mention: #1264a3;
+}
+
+.dark {
+  --slack-bg-primary: #1a1d21;
+  --slack-bg-secondary: #222529;
+  --slack-bg-tertiary: #2c2d30;
+  --slack-text-primary: #d1d2d3;
+  --slack-text-secondary: #ababad;
+  --slack-text-muted: #ababad;
+  --slack-border: rgba(255,255,255,0.08);
+  --slack-hover: rgba(255,255,255,0.04);
+  --slack-sidebar-bg: #19171d;
+  --slack-sidebar-text: #FFFFFF;
+  --slack-channel-bg: #19171d;
+  --slack-input-bg: #222529;
+  --slack-input-border: rgba(255, 255, 255, 0.08);
+  --slack-link: #1d9bd1;
+  --slack-mention: #1d9bd1;
+}
+
 /* Dark sidebar — always dark regardless of theme */
 .sidebar-dark {
   background-color: #1a1d21;
@@ -139,16 +176,25 @@
 
 /* Main content area — theme-aware */
 .main-content {
-  background-color: #1a1d21;
-  color: #d1d2d3;
+  background-color: var(--slack-bg-primary);
+  color: var(--slack-text-primary);
 }
 
-.light .main-content {
-  background-color: #ffffff;
-  color: #1d1c1d;
+/* Channel list sidebar — theme-aware */
+.channel-sidebar {
+  background-color: var(--slack-channel-bg);
+}
+
+.light .channel-sidebar {
+  background-color: #f0eff0;
 }
 
 /* Channel header — theme-aware */
+.channel-header {
+  background-color: var(--slack-bg-primary);
+  border-color: var(--slack-border);
+}
+
 .light .channel-header {
   background-color: #ffffff !important;
   border-color: rgba(0, 0, 0, 0.1) !important;
@@ -163,8 +209,8 @@
 }
 
 /* Messages area — light mode overrides */
-.light .message-area {
-  background-color: #ffffff;
+.message-area {
+  background-color: var(--slack-bg-primary);
 }
 
 .light .message-area .text-white,
@@ -181,39 +227,65 @@
   background-color: rgba(0, 0, 0, 0.03) !important;
 }
 
-/* Message input — light mode */
-.light .message-input-area {
-  background-color: #ffffff;
-  border-color: rgba(0, 0, 0, 0.15);
+/* Message input — theme-aware */
+.message-input-area {
+  background-color: var(--slack-bg-primary);
+  border-color: var(--slack-input-border);
 }
 
-.light .message-input-area textarea {
-  color: #1d1c1d;
-  background-color: #f8f8f8;
+.message-input-area textarea {
+  color: var(--slack-text-primary);
+  background-color: var(--slack-input-bg);
 }
 
-.light .message-input-container {
-  background: #fff;
-  border-color: #e0e0e0;
+.message-input-container {
+  background: var(--slack-input-bg);
+  border-color: var(--slack-input-border);
 }
 
-.light .message-input-container textarea {
-  color: #1d1c1d;
+.message-input-container textarea {
+  color: var(--slack-text-primary);
 }
 
-.light .message-input-container textarea::placeholder {
-  color: #999;
+.message-input-container textarea::placeholder {
+  color: var(--slack-text-muted);
 }
 
-/* Thread panel — light mode */
-.light .thread-panel {
-  background-color: #f8f8f8;
-  border-color: rgba(0, 0, 0, 0.1);
+/* Thread panel — theme-aware */
+.thread-panel {
+  background-color: var(--slack-bg-secondary);
+  border-color: var(--slack-border);
 }
 
-/* Workspace nav (channel list panel) — light mode */
-.light .workspace-nav {
+/* Workspace nav (channel list panel) — always dark purple */
+.workspace-nav {
   background-color: #3f0e40;
+}
+
+/* Light mode: main layout containers */
+.light .bg-\[\#1a1d21\] {
+  background-color: #ffffff !important;
+}
+
+.light .bg-\[\#19171d\] {
+  background-color: #f0eff0 !important;
+}
+
+.light .bg-\[\#222529\] {
+  background-color: #f8f8f8 !important;
+}
+
+.light .text-white {
+  color: #1d1c1d;
+}
+
+.light .border-white\/5,
+.light .border-white\/\[0\.08\] {
+  border-color: rgba(0, 0, 0, 0.08) !important;
+}
+
+.light .border-white\/10 {
+  border-color: rgba(0, 0, 0, 0.12) !important;
 }
 
 /* Pinned message indicator — always visible */
@@ -245,6 +317,18 @@
   background-color: rgba(255, 255, 255, 0.2);
 }
 
+/* Reaction pop animation */
+@keyframes reaction-pop {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.4); }
+  70% { transform: scale(0.9); }
+  100% { transform: scale(1); }
+}
+
+.reaction-pop {
+  animation: reaction-pop 0.3s ease-out;
+}
+
 /* Typing indicator dots */
 .typing-dot {
   display: inline-block;
@@ -273,8 +357,8 @@
 
 /* Slack-like message timestamp */
 .message-timestamp {
-  font-size: 0.7rem;
-  color: #717274;
+  font-size: 12px;
+  color: #ababad;
   white-space: nowrap;
 }
 

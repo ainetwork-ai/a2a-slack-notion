@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { X, Hash, Pin } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { X, Hash, Pin, Archive, ArchiveRestore, Puzzle, Check, Plus, Bot } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
@@ -14,6 +14,8 @@ interface ChannelMember {
   displayName: string;
   avatarUrl?: string;
   role?: string;
+  isAgent?: boolean;
+  engagementLevel?: number;
 }
 
 interface ChannelDetailPanelProps {
@@ -25,11 +27,32 @@ interface ChannelDetailPanelProps {
   messages?: Message[];
   currentUserId?: string;
   isAdmin?: boolean;
+  isArchived?: boolean;
   onClose: () => void;
   onRemoveMember?: (userId: string) => void;
+  onArchiveToggle?: (archived: boolean) => void;
+  onInvite?: () => void;
 }
 
-type Tab = 'about' | 'members' | 'pinned' | 'files';
+interface McpIntegration {
+  id: string;
+  channelId: string;
+  serverId: string;
+  enabled: boolean;
+  config: unknown;
+  addedBy: string;
+  createdAt: string;
+}
+
+interface McpServer {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  tools: { name: string; description: string }[];
+}
+
+type Tab = 'about' | 'members' | 'pinned' | 'files' | 'integrations';
 
 export default function ChannelDetailPanel({
   channelId,
@@ -40,10 +63,80 @@ export default function ChannelDetailPanel({
   messages = [],
   currentUserId,
   isAdmin,
+  isArchived = false,
   onClose,
   onRemoveMember,
+  onArchiveToggle,
+  onInvite,
 }: ChannelDetailPanelProps) {
   const [activeTab, setActiveTab] = useState<Tab>('about');
+  const [mcpServers, setMcpServers] = useState<McpServer[]>([]);
+  const [mcpIntegrations, setMcpIntegrations] = useState<McpIntegration[]>([]);
+  const [mcpLoading, setMcpLoading] = useState(false);
+  const [engagementLevels, setEngagementLevels] = useState<Record<string, number>>(() => {
+    const initial: Record<string, number> = {};
+    for (const m of members) {
+      if (m.isAgent) initial[m.id] = m.engagementLevel ?? 0;
+    }
+    return initial;
+  });
+
+  const fetchMcpData = useCallback(async () => {
+    setMcpLoading(true);
+    try {
+      const [serversRes, integrationsRes] = await Promise.all([
+        fetch('/api/mcp/servers'),
+        fetch(`/api/channels/${channelId}/mcp`),
+      ]);
+      if (serversRes.ok) setMcpServers(await serversRes.json());
+      if (integrationsRes.ok) setMcpIntegrations(await integrationsRes.json());
+    } catch {
+      // ignore
+    } finally {
+      setMcpLoading(false);
+    }
+  }, [channelId]);
+
+  useEffect(() => {
+    if (activeTab === 'integrations') {
+      fetchMcpData();
+    }
+  }, [activeTab, fetchMcpData]);
+
+  async function toggleMcp(serverId: string, currentlyEnabled: boolean) {
+    const existing = mcpIntegrations.find(i => i.serverId === serverId);
+    if (existing) {
+      const res = await fetch(`/api/channels/${channelId}/mcp`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ serverId, enabled: !currentlyEnabled }),
+      });
+      if (res.ok) fetchMcpData();
+    } else {
+      const res = await fetch(`/api/channels/${channelId}/mcp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ serverId }),
+      });
+      if (res.ok) fetchMcpData();
+    }
+  }
+
+  async function updateEngagementLevel(targetUserId: string, level: number) {
+    setEngagementLevels(prev => ({ ...prev, [targetUserId]: level }));
+    await fetch(`/api/channels/${channelId}/members`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'setEngagementLevel', targetUserId, engagementLevel: level }),
+    });
+  }
+
+  const ENGAGEMENT_LABELS: Record<number, { label: string; icon: string }> = {
+    0: { label: 'Silent', icon: '—' },
+    1: { label: 'Reactive', icon: '👁' },
+    2: { label: 'Engaged', icon: '💬' },
+    3: { label: 'Proactive', icon: '⚡' },
+  };
 
   const pinnedMessages = messages.filter(m => m.pinnedAt);
   const fileMessages = messages.filter(
@@ -55,6 +148,7 @@ export default function ChannelDetailPanel({
     { id: 'members', label: 'Members', count: members.length },
     { id: 'pinned', label: 'Pinned', count: pinnedMessages.length },
     { id: 'files', label: 'Files', count: fileMessages.length },
+    { id: 'integrations', label: 'MCP' },
   ];
 
   return (
@@ -119,11 +213,49 @@ export default function ChannelDetailPanel({
               <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Channel ID</p>
               <p className="text-xs text-slate-500 font-mono break-all">{channelId}</p>
             </div>
+            {isAdmin && onArchiveToggle && (
+              <div className="pt-2 border-t border-white/5">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => onArchiveToggle(!isArchived)}
+                  className={cn(
+                    'w-full justify-start gap-2 text-sm',
+                    isArchived
+                      ? 'text-green-400 hover:text-green-300 hover:bg-green-500/10'
+                      : 'text-amber-400 hover:text-amber-300 hover:bg-amber-500/10'
+                  )}
+                >
+                  {isArchived ? (
+                    <>
+                      <ArchiveRestore className="w-4 h-4" />
+                      Unarchive channel
+                    </>
+                  ) : (
+                    <>
+                      <Archive className="w-4 h-4" />
+                      Archive channel
+                    </>
+                  )}
+                </Button>
+              </div>
+            )}
           </div>
         )}
 
         {activeTab === 'members' && (
           <div className="py-2">
+            {onInvite && (
+              <div className="px-3 pb-2">
+                <button
+                  onClick={onInvite}
+                  className="w-full flex items-center gap-2 px-3 py-2 rounded-lg border border-white/10 bg-white/[0.02] text-slate-300 hover:bg-white/5 hover:text-white transition-colors text-sm"
+                >
+                  <Plus className="w-4 h-4 text-slate-400" />
+                  Invite people
+                </button>
+              </div>
+            )}
             {members.length === 0 ? (
               <p className="text-center text-slate-500 text-sm py-8">No members</p>
             ) : (
@@ -144,14 +276,35 @@ export default function ChannelDetailPanel({
                       <AvatarFallback className="text-xs bg-[#4a154b] text-white">{initials}</AvatarFallback>
                     </Avatar>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm text-white truncate">{member.displayName}</p>
+                      <div className="flex items-center gap-1">
+                        <p className="text-sm text-white truncate">{member.displayName}</p>
+                        {member.isAgent && (
+                          <Badge className="text-[10px] px-1 py-0 h-4 bg-[#36c5f0]/20 text-[#36c5f0] border-[#36c5f0]/30 shrink-0">
+                            Bot
+                          </Badge>
+                        )}
+                      </div>
                       {member.role && (
                         <Badge className="text-[10px] px-1 py-0 h-3.5 mt-0.5 bg-white/10 text-slate-400 border-white/10">
                           {member.role}
                         </Badge>
                       )}
                     </div>
-                    {isAdmin && member.id !== currentUserId && (
+                    {member.isAgent && isAdmin && (
+                      <select
+                        value={engagementLevels[member.id] ?? 0}
+                        onChange={e => updateEngagementLevel(member.id, Number(e.target.value))}
+                        className="text-xs bg-white/5 border border-white/10 rounded px-1 py-0.5 text-slate-300 shrink-0 cursor-pointer hover:bg-white/10 transition-colors"
+                        title="Agent engagement level"
+                      >
+                        {Object.entries(ENGAGEMENT_LABELS).map(([val, { label, icon }]) => (
+                          <option key={val} value={val}>
+                            {icon} {label}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                    {!member.isAgent && isAdmin && member.id !== currentUserId && (
                       <button
                         onClick={() => onRemoveMember?.(member.id)}
                         className="text-xs text-red-400 hover:text-red-300 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
@@ -230,6 +383,80 @@ export default function ChannelDetailPanel({
                   </div>
                 );
               })
+            )}
+          </div>
+        )}
+
+        {activeTab === 'integrations' && (
+          <div className="py-2">
+            {mcpLoading ? (
+              <p className="text-center text-slate-500 text-sm py-8">Loading...</p>
+            ) : mcpServers.length === 0 ? (
+              <p className="text-center text-slate-500 text-sm py-8">No MCP servers available</p>
+            ) : (
+              <div className="space-y-1">
+                <div className="px-4 py-2">
+                  <p className="text-xs text-slate-500 mb-3">
+                    Enable MCP integrations to use <code className="bg-white/5 px-1 rounded">/polymarket</code> and <code className="bg-white/5 px-1 rounded">/news</code> commands in this channel.
+                  </p>
+                </div>
+                {mcpServers.map(server => {
+                  const integration = mcpIntegrations.find(i => i.serverId === server.id);
+                  const isEnabled = integration?.enabled ?? false;
+                  return (
+                    <div
+                      key={server.id}
+                      className="mx-3 rounded-lg border border-white/5 bg-white/[0.02] overflow-hidden"
+                    >
+                      <div className="flex items-center gap-3 px-3 py-3">
+                        <span className="text-lg shrink-0">{server.icon}</span>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-white">{server.name}</p>
+                          <p className="text-xs text-slate-400 truncate">{server.description}</p>
+                        </div>
+                        {isAdmin ? (
+                          <button
+                            onClick={() => toggleMcp(server.id, isEnabled)}
+                            className={cn(
+                              'shrink-0 w-8 h-5 rounded-full transition-colors relative',
+                              isEnabled ? 'bg-[#007a5a]' : 'bg-white/10'
+                            )}
+                          >
+                            <span
+                              className={cn(
+                                'absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform',
+                                isEnabled ? 'left-3.5' : 'left-0.5'
+                              )}
+                            />
+                          </button>
+                        ) : (
+                          <Badge className={cn(
+                            'text-[10px] px-1.5 py-0 h-4 border',
+                            isEnabled
+                              ? 'bg-[#007a5a]/20 text-green-400 border-green-500/20'
+                              : 'bg-white/5 text-slate-500 border-white/10'
+                          )}>
+                            {isEnabled ? 'Active' : 'Off'}
+                          </Badge>
+                        )}
+                      </div>
+                      {isEnabled && (
+                        <div className="px-3 pb-3 pt-0">
+                          <div className="border-t border-white/5 pt-2 space-y-1">
+                            <p className="text-[10px] text-slate-500 uppercase font-semibold tracking-wider">Commands</p>
+                            {server.tools.map(tool => (
+                              <div key={tool.name} className="flex items-start gap-1.5">
+                                <code className="text-[11px] text-[#36c5f0] shrink-0">/mcp {server.id} {tool.name}</code>
+                                <span className="text-[11px] text-slate-500">— {tool.description}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             )}
           </div>
         )}

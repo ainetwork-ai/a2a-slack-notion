@@ -1,9 +1,11 @@
 import { db } from "@/lib/db";
-import { users, channels, channelMembers, messages, reactions, mentions, files, notifications } from "@/lib/db/schema";
-import { eq, and, desc, lt, sql, inArray, or, ilike } from "drizzle-orm";
+import { users, channels, channelMembers, messages, reactions, mentions, files, notifications, outgoingWebhooks, workflows } from "@/lib/db/schema";
+import { eq, and, desc, lt, sql, inArray, or, ilike, isNull } from "drizzle-orm";
 import { requireAuth } from "@/lib/auth/middleware";
 import { NextRequest, NextResponse } from "next/server";
 import { sendToAgent } from "@/lib/a2a/message-bridge";
+import { checkAutoEngagement } from "@/lib/a2a/auto-engage";
+import { runWorkflow } from "@/lib/workflow/executor";
 
 export async function GET(
   request: NextRequest,
@@ -69,8 +71,9 @@ export async function GET(
 
   const [msgReactions, msgFiles] = await Promise.all([
     db
-      .select()
+      .select({ messageId: reactions.messageId, emoji: reactions.emoji, userId: reactions.userId, displayName: users.displayName })
       .from(reactions)
+      .innerJoin(users, eq(reactions.userId, users.id))
       .where(inArray(reactions.messageId, messageIds)),
     db
       .select()
@@ -78,10 +81,11 @@ export async function GET(
       .where(inArray(files.messageId, messageIds)),
   ]);
 
-  const reactionsByMessage = msgReactions.reduce<Record<string, Record<string, number>>>(
+  const reactionsByMessage = msgReactions.reduce<Record<string, Record<string, { userId: string; displayName: string }[]>>>(
     (acc, r) => {
       if (!acc[r.messageId]) acc[r.messageId] = {};
-      acc[r.messageId][r.emoji] = (acc[r.messageId][r.emoji] || 0) + 1;
+      if (!acc[r.messageId][r.emoji]) acc[r.messageId][r.emoji] = [];
+      acc[r.messageId][r.emoji].push({ userId: r.userId, displayName: r.displayName });
       return acc;
     },
     {}
@@ -146,52 +150,167 @@ export async function POST(
     })
     .returning();
 
-  // Parse @mentions from content — collect full token and first-word variant
-  const mentionPattern = /@(\S+)/g;
-  const mentionedNames: string[] = [];
-  let match;
-  while ((match = mentionPattern.exec(content)) !== null) {
-    const token = match[1];
-    mentionedNames.push(token);
-    // Also try first word in case display name has spaces (e.g. "Techa" from "@Techa (Bill Gates)")
-    const firstWord = token.split(/[(,]/)[0];
-    if (firstWord && firstWord !== token) mentionedNames.push(firstWord);
+  // Fire outgoing webhooks that match this message
+  {
+    const [channel] = await db
+      .select({ name: channels.name, workspaceId: channels.workspaceId })
+      .from(channels)
+      .where(eq(channels.id, channelId))
+      .limit(1);
+
+    if (channel) {
+      const hooks = await db
+        .select()
+        .from(outgoingWebhooks)
+        .where(
+          and(
+            eq(outgoingWebhooks.workspaceId, channel.workspaceId!),
+            or(
+              isNull(outgoingWebhooks.channelId),
+              eq(outgoingWebhooks.channelId, channelId)
+            )
+          )
+        );
+
+      for (const hook of hooks) {
+        const words = hook.triggerWords.split(",").map((w) => w.trim().toLowerCase()).filter(Boolean);
+        const lowerContent = content.trimStart().toLowerCase();
+        const matched = words.find((w) => lowerContent.startsWith(w));
+        if (matched) {
+          fetch(hook.url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              text: content,
+              user_name: user.displayName,
+              channel_name: channel.name,
+              trigger_word: matched,
+              timestamp: message.createdAt.toISOString(),
+            }),
+          }).catch(() => {
+            // Fire-and-forget, don't block response
+          });
+        }
+      }
+    }
   }
 
-  if (mentionedNames.length > 0) {
-    const mentionedUsers = await db
-      .select()
-      .from(users)
-      .where(
-        or(
-          inArray(users.displayName, mentionedNames),
-          ...mentionedNames.map(n => ilike(users.displayName, `${n}%`))
-        )
-      );
+  // Fire auto-engagement check asynchronously (don't block response)
+  checkAutoEngagement({
+    channelId,
+    messageContent: content,
+    senderId: user.id,
+  }).catch(() => {
+    // Fire-and-forget, ignore errors
+  });
 
-    if (mentionedUsers.length > 0) {
-      await db.insert(mentions).values(
-        mentionedUsers.map((u) => ({ messageId: message.id, userId: u.id }))
-      );
+  // Trigger channel_message workflows
+  {
+    const [channelRow] = await db
+      .select({ workspaceId: channels.workspaceId })
+      .from(channels)
+      .where(eq(channels.id, channelId))
+      .limit(1);
 
+    if (channelRow?.workspaceId) {
+      const matchingWorkflows = await db
+        .select()
+        .from(workflows)
+        .where(
+          and(
+            eq(workflows.workspaceId, channelRow.workspaceId),
+            eq(workflows.triggerType, "channel_message"),
+            eq(workflows.enabled, true)
+          )
+        );
+
+      for (const wf of matchingWorkflows) {
+        const config = wf.triggerConfig as { channelId?: string; pattern?: string } | null;
+        if (config?.channelId && config.channelId !== channelId) continue;
+        if (config?.pattern) {
+          try {
+            if (!new RegExp(config.pattern).test(content)) continue;
+          } catch {
+            continue;
+          }
+        }
+        runWorkflow(wf.id, {
+          trigger: { message: content, userId: user.id, channelId },
+        }).catch(() => {
+          // Fire-and-forget
+        });
+      }
+    }
+  }
+
+  // Parse @mentions from content
+  const broadcastMentionPattern = /@(channel|here|everyone)\b/i;
+  const isBroadcast = broadcastMentionPattern.test(content);
+
+  if (isBroadcast) {
+    // @channel/@here/@everyone — notify all channel members except sender
+    const allMembers = await db
+      .select({ userId: channelMembers.userId })
+      .from(channelMembers)
+      .where(and(eq(channelMembers.channelId, channelId), sql`${channelMembers.userId} != ${user.id}`));
+
+    if (allMembers.length > 0) {
       await db.insert(notifications).values(
-        mentionedUsers.map((u) => ({
-          userId: u.id,
+        allMembers.map((m) => ({
+          userId: m.userId,
           messageId: message.id,
           type: "mention",
         }))
       );
+    }
+  } else {
+    // Parse named @mentions — collect full token and first-word variant
+    const mentionPattern = /@(\S+)/g;
+    const mentionedNames: string[] = [];
+    let match;
+    while ((match = mentionPattern.exec(content)) !== null) {
+      const token = match[1];
+      mentionedNames.push(token);
+      // Also try first word in case display name has spaces (e.g. "Techa" from "@Techa (Bill Gates)")
+      const firstWord = token.split(/[(,]/)[0];
+      if (firstWord && firstWord !== token) mentionedNames.push(firstWord);
+    }
 
-      // Send to agent users asynchronously
-      const agentUsers = mentionedUsers.filter((u) => u.isAgent && u.a2aUrl);
-      for (const agent of agentUsers) {
-        sendToAgent({
-          agentId: agent.id,
-          text: content,
-          channelId,
-        }).catch(() => {
-          // Async fire-and-forget, don't block response
-        });
+    if (mentionedNames.length > 0) {
+      const mentionedUsers = await db
+        .select()
+        .from(users)
+        .where(
+          or(
+            inArray(users.displayName, mentionedNames),
+            ...mentionedNames.map(n => ilike(users.displayName, `${n}%`))
+          )
+        );
+
+      if (mentionedUsers.length > 0) {
+        await db.insert(mentions).values(
+          mentionedUsers.map((u) => ({ messageId: message.id, userId: u.id }))
+        );
+
+        await db.insert(notifications).values(
+          mentionedUsers.map((u) => ({
+            userId: u.id,
+            messageId: message.id,
+            type: "mention",
+          }))
+        );
+
+        // Send to agent users asynchronously
+        const agentUsers = mentionedUsers.filter((u) => u.isAgent);
+        for (const agent of agentUsers) {
+          sendToAgent({
+            agentId: agent.id,
+            text: content,
+            channelId,
+          }).catch(() => {
+            // Async fire-and-forget, don't block response
+          });
+        }
       }
     }
   }

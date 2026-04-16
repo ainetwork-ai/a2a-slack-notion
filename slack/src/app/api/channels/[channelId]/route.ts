@@ -3,6 +3,7 @@ import { users, channels, channelMembers, messages } from "@/lib/db/schema";
 import { eq, and, desc, lt, sql, inArray, or, ilike } from "drizzle-orm";
 import { requireAuth } from "@/lib/auth/middleware";
 import { NextRequest, NextResponse } from "next/server";
+import { logAudit } from "@/lib/audit";
 
 export async function GET(
   _request: NextRequest,
@@ -75,12 +76,18 @@ export async function PATCH(
   const updates: Record<string, unknown> = { updatedAt: new Date() };
   if (body.name !== undefined) updates.name = body.name.trim();
   if (body.description !== undefined) updates.description = body.description;
+  if (body.isArchived !== undefined) updates.isArchived = Boolean(body.isArchived);
 
   const [updated] = await db
     .update(channels)
     .set(updates)
     .where(eq(channels.id, channelId))
     .returning();
+
+  if (updated.workspaceId) {
+    const action = body.isArchived ? "channel.archive" : "channel.update";
+    await logAudit(updated.workspaceId, user.id, action, "channel", channelId, { name: updated.name });
+  }
 
   return NextResponse.json(updated);
 }
@@ -105,7 +112,13 @@ export async function DELETE(
     return NextResponse.json({ error: "Only owner can delete channel" }, { status: 403 });
   }
 
+  const [channelRow] = await db.select({ workspaceId: channels.workspaceId, name: channels.name }).from(channels).where(eq(channels.id, channelId)).limit(1);
+
   await db.delete(channels).where(eq(channels.id, channelId));
+
+  if (channelRow?.workspaceId) {
+    await logAudit(channelRow.workspaceId, user.id, "channel.delete", "channel", channelId, { name: channelRow.name });
+  }
 
   return NextResponse.json({ success: true });
 }

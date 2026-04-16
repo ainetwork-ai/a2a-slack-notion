@@ -57,16 +57,34 @@ export async function PATCH(
   }
 
   const body = await request.json();
-  const { name, description, iconText } = body as {
+  const { name, description, iconText, iconUrl, defaultNotificationPref, defaultChannels } = body as {
     name?: string;
     description?: string;
     iconText?: string;
+    iconUrl?: string;
+    defaultNotificationPref?: string;
+    defaultChannels?: string[];
   };
 
-  const updates: Partial<{ name: string; description: string; iconText: string }> = {};
+  const updates: Partial<{
+    name: string;
+    description: string;
+    iconText: string;
+    iconUrl: string | null;
+    defaultNotificationPref: string;
+    defaultChannels: string[];
+  }> = {};
   if (name) updates.name = name.trim();
   if (description !== undefined) updates.description = description;
   if (iconText) updates.iconText = iconText.trim().slice(0, 3);
+  if (iconUrl !== undefined) updates.iconUrl = iconUrl ? iconUrl.trim() : null;
+  if (defaultNotificationPref !== undefined) {
+    if (!["all", "mentions", "none"].includes(defaultNotificationPref)) {
+      return NextResponse.json({ error: "Invalid defaultNotificationPref" }, { status: 400 });
+    }
+    updates.defaultNotificationPref = defaultNotificationPref;
+  }
+  if (defaultChannels !== undefined) updates.defaultChannels = defaultChannels;
 
   const [updated] = await db
     .update(workspaces)

@@ -39,6 +39,9 @@ yarn-error.log*
 # dev artifacts
 .omc/
 .playwright-mcp/
+/*.png
+/*-test*.md
+AGENT-*.md
 
 # local uploads
 **/public/uploads/

@@ -1,16 +1,74 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { Hash, MessageSquare, User, Loader2, Search, X } from 'lucide-react';
+import { Hash, MessageSquare, User, Loader2, Search, X, ChevronDown, Clock, Trash2 } from 'lucide-react';
 import { useAppStore } from '@/lib/stores/app-store';
 import { useSearch } from '@/lib/hooks/use-search';
+
+const HISTORY_KEY = 'slack-a2a-search-history';
+const MAX_HISTORY = 10;
+
+function loadHistory(): string[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    return JSON.parse(localStorage.getItem(HISTORY_KEY) ?? '[]');
+  } catch {
+    return [];
+  }
+}
+
+function saveToHistory(query: string) {
+  if (!query.trim()) return;
+  const existing = loadHistory().filter((h) => h !== query);
+  const updated = [query, ...existing].slice(0, MAX_HISTORY);
+  localStorage.setItem(HISTORY_KEY, JSON.stringify(updated));
+}
+
+function clearHistory() {
+  localStorage.removeItem(HISTORY_KEY);
+}
+
+type FilterType = 'all' | 'messages' | 'channels' | 'people' | 'canvases';
+
+function highlightText(text: string, query: string): React.ReactNode {
+  if (!query.trim()) return text;
+  const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const regex = new RegExp(`(${escaped})`, 'gi');
+  const parts = text.split(regex);
+  return parts.map((part, i) =>
+    regex.test(part) ? (
+      <mark key={i} className="bg-yellow-400/40 text-yellow-200 rounded-sm px-0.5">
+        {part}
+      </mark>
+    ) : (
+      part
+    )
+  );
+}
+
+const FILTER_LABELS: { key: FilterType; label: string }[] = [
+  { key: 'all', label: 'All' },
+  { key: 'messages', label: 'Messages' },
+  { key: 'channels', label: 'Channels' },
+  { key: 'canvases', label: 'Canvases' },
+  { key: 'people', label: 'People' },
+];
 
 export default function SearchModal() {
   const router = useRouter();
   const { searchOpen, setSearchOpen } = useAppStore();
-  const { results, isSearching, query, search, clearSearch } = useSearch();
+  const { results, isSearching, isLoadingMore, query, textQuery, search, clearSearch, hasMore, loadMore } = useSearch();
   const inputRef = useRef<HTMLInputElement>(null);
+  const [activeFilter, setActiveFilter] = useState<FilterType>('all');
+  const [history, setHistory] = useState<string[]>([]);
+
+  const refreshHistory = useCallback(() => setHistory(loadHistory()), []);
+
+  // Load history when modal opens
+  useEffect(() => {
+    if (searchOpen) refreshHistory();
+  }, [searchOpen, refreshHistory]);
 
   // Cmd+K shortcut
   useEffect(() => {
@@ -34,18 +92,36 @@ export default function SearchModal() {
     }
   }, [searchOpen]);
 
+  // Reset filter when modal closes
+  useEffect(() => {
+    if (!searchOpen) setActiveFilter('all');
+  }, [searchOpen]);
+
   function handleClose() {
     setSearchOpen(false);
     clearSearch();
   }
 
-  function handleSelect(result: { type: string; channelId?: string; id: string }) {
+  function handleSelect(result: { type: string; channelId?: string | null; id: string }) {
+    if (textQuery.trim()) saveToHistory(textQuery.trim());
     if (result.type === 'channel') {
       router.push(`/workspace/channel/${result.id}`);
     } else if (result.type === 'message' && result.channelId) {
       router.push(`/workspace/channel/${result.channelId}#msg-${result.id}`);
+    } else if (result.type === 'canvas' && result.channelId) {
+      router.push(`/workspace/channel/${result.channelId}?canvas=1`);
     }
     handleClose();
+  }
+
+  function handleHistorySelect(term: string) {
+    search(term);
+    setTimeout(() => inputRef.current?.focus(), 0);
+  }
+
+  function handleClearHistory() {
+    clearHistory();
+    refreshHistory();
   }
 
   if (!searchOpen) return null;
@@ -53,6 +129,14 @@ export default function SearchModal() {
   const channelResults = results.filter(r => r.type === 'channel');
   const messageResults = results.filter(r => r.type === 'message');
   const userResults = results.filter(r => r.type === 'user');
+  const canvasResults = results.filter(r => r.type === 'canvas');
+
+  const visibleChannels = activeFilter === 'all' || activeFilter === 'channels' ? channelResults : [];
+  const visibleMessages = activeFilter === 'all' || activeFilter === 'messages' ? messageResults : [];
+  const visibleUsers = activeFilter === 'all' || activeFilter === 'people' ? userResults : [];
+  const visibleCanvases = activeFilter === 'all' || activeFilter === 'canvases' ? canvasResults : [];
+
+  const hasResults = visibleChannels.length > 0 || visibleMessages.length > 0 || visibleUsers.length > 0 || visibleCanvases.length > 0;
 
   return (
     <>
@@ -86,6 +170,38 @@ export default function SearchModal() {
             </kbd>
           </div>
 
+          {/* Filter chips */}
+          {query && (
+            <div className="flex items-center gap-1.5 px-4 py-2 border-b border-white/10">
+              {FILTER_LABELS.map(({ key, label }) => (
+                <button
+                  key={key}
+                  onClick={() => setActiveFilter(key)}
+                  className={`px-2.5 py-0.5 rounded-full text-xs font-medium transition-colors ${
+                    activeFilter === key
+                      ? 'bg-[#4a154b] text-white'
+                      : 'bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white'
+                  }`}
+                >
+                  {label}
+                  {key !== 'all' && (
+                    <span className="ml-1 opacity-60">
+                      {key === 'messages' && `(${messageResults.length})`}
+                      {key === 'channels' && `(${channelResults.length})`}
+                      {key === 'canvases' && `(${canvasResults.length})`}
+                      {key === 'people' && `(${userResults.length})`}
+                    </span>
+                  )}
+                </button>
+              ))}
+              {query && !isSearching && (
+                <span className="ml-auto text-[11px] text-slate-500">
+                  {results.length} result{results.length !== 1 ? 's' : ''}
+                </span>
+              )}
+            </div>
+          )}
+
           {/* Results */}
           <div className="max-h-80 overflow-y-auto scrollbar-slack">
             {isSearching && (
@@ -94,43 +210,92 @@ export default function SearchModal() {
               </div>
             )}
 
-            {!isSearching && query && results.length === 0 && (
+            {!isSearching && query && !hasResults && (
               <div className="py-8 text-center text-slate-400 text-sm">
                 No results found for &quot;{query}&quot;
               </div>
             )}
 
             {!query && !isSearching && (
-              <div className="py-8 text-center text-slate-500 text-sm">
-                Type to search messages, channels, and people
+              <div>
+                {history.length > 0 ? (
+                  <div>
+                    <div className="flex items-center justify-between px-4 py-2 border-b border-white/5">
+                      <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Recent Searches</span>
+                      <button
+                        onClick={handleClearHistory}
+                        className="flex items-center gap-1 text-[11px] text-slate-500 hover:text-slate-300 transition-colors"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                        Clear
+                      </button>
+                    </div>
+                    {history.map((term) => (
+                      <button
+                        key={term}
+                        onClick={() => handleHistorySelect(term)}
+                        className="w-full flex items-center gap-2.5 px-4 py-2 text-sm text-slate-300 hover:bg-white/10 transition-colors text-left"
+                      >
+                        <Clock className="w-4 h-4 text-slate-500 shrink-0" />
+                        <span className="truncate">{term}</span>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="py-6 text-center text-slate-500 text-sm space-y-1">
+                    <p>Type to search messages, channels, and people</p>
+                    <p className="text-xs text-slate-600">
+                      Tip: use <span className="font-mono text-slate-500">from:</span>, <span className="font-mono text-slate-500">in:</span>, <span className="font-mono text-slate-500">has:link</span>, <span className="font-mono text-slate-500">has:pin</span>, <span className="font-mono text-slate-500">before:</span>, <span className="font-mono text-slate-500">after:</span>
+                    </p>
+                  </div>
+                )}
               </div>
             )}
 
-            {channelResults.length > 0 && (
+            {visibleChannels.length > 0 && (
               <div>
                 <div className="px-4 py-1.5 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
                   Channels
                 </div>
-                {channelResults.map(result => (
+                {visibleChannels.map(result => (
                   <button
                     key={result.id}
                     onClick={() => handleSelect(result)}
                     className="w-full flex items-center gap-2 px-4 py-2 text-sm text-white hover:bg-white/10 transition-colors text-left"
                   >
                     <Hash className="w-4 h-4 text-slate-400 shrink-0" />
-                    <span>{result.content}</span>
+                    <span>{highlightText(result.content, textQuery)}</span>
                   </button>
                 ))}
               </div>
             )}
 
-            {messageResults.length > 0 && (
+            {visibleCanvases.length > 0 && (
               <div>
-                {channelResults.length > 0 && <div className="h-px bg-white/10 mx-4" />}
+                {visibleChannels.length > 0 && <div className="h-px bg-white/10 mx-4" />}
+                <div className="px-4 py-1.5 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+                  Canvases
+                </div>
+                {visibleCanvases.map(result => (
+                  <button
+                    key={result.id}
+                    onClick={() => handleSelect(result)}
+                    className="w-full flex items-center gap-2 px-4 py-2 text-sm text-white hover:bg-white/10 transition-colors text-left"
+                  >
+                    <span className="text-base shrink-0">📝</span>
+                    <span>{highlightText(result.content, textQuery)}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {visibleMessages.length > 0 && (
+              <div>
+                {(visibleChannels.length > 0 || visibleCanvases.length > 0) && <div className="h-px bg-white/10 mx-4" />}
                 <div className="px-4 py-1.5 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
                   Messages
                 </div>
-                {messageResults.map(result => (
+                {visibleMessages.map(result => (
                   <button
                     key={result.id}
                     onClick={() => handleSelect(result)}
@@ -138,35 +303,56 @@ export default function SearchModal() {
                   >
                     <div className="flex items-center gap-2 w-full">
                       <MessageSquare className="w-4 h-4 text-slate-400 shrink-0" />
-                      <span className="font-medium text-white truncate">{result.senderName}</span>
+                      <span className="font-medium text-white truncate">
+                        {highlightText(result.senderName ?? '', textQuery)}
+                      </span>
                       {result.channelName && (
                         <span className="text-slate-500 text-xs ml-auto shrink-0">#{result.channelName}</span>
                       )}
                     </div>
-                    <p className="text-slate-400 text-xs pl-6 line-clamp-1">{result.content}</p>
+                    <p className="text-slate-400 text-xs pl-6 line-clamp-1">
+                      {highlightText(result.content, textQuery)}
+                    </p>
                   </button>
                 ))}
               </div>
             )}
 
-            {userResults.length > 0 && (
+            {visibleUsers.length > 0 && (
               <div>
-                {(channelResults.length > 0 || messageResults.length > 0) && (
+                {(visibleChannels.length > 0 || visibleCanvases.length > 0 || visibleMessages.length > 0) && (
                   <div className="h-px bg-white/10 mx-4" />
                 )}
                 <div className="px-4 py-1.5 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
                   People
                 </div>
-                {userResults.map(result => (
+                {visibleUsers.map(result => (
                   <button
                     key={result.id}
                     onClick={() => handleSelect(result)}
                     className="w-full flex items-center gap-2 px-4 py-2 text-sm text-white hover:bg-white/10 transition-colors text-left"
                   >
                     <User className="w-4 h-4 text-slate-400 shrink-0" />
-                    <span>{result.content}</span>
+                    <span>{highlightText(result.content, textQuery)}</span>
                   </button>
                 ))}
+              </div>
+            )}
+
+            {hasMore && (activeFilter === 'all' || activeFilter === 'messages') && (
+              <div className="px-4 py-2 border-t border-white/10">
+                <button
+                  onClick={loadMore}
+                  disabled={isLoadingMore}
+                  className="w-full flex items-center justify-center gap-1.5 py-1.5 text-xs text-slate-400 hover:text-white transition-colors disabled:opacity-50"
+                >
+                  {isLoadingMore ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <ChevronDown className="w-3.5 h-3.5" />
+                  )}
+                  {isLoadingMore ? 'Loading...' : 'Load more results'}
+                </button>
               </div>
             )}
           </div>

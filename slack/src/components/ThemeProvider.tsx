@@ -12,8 +12,8 @@ export default function ThemeProvider({ children }: { children: React.ReactNode 
       html.classList.add('dark');
       html.classList.remove('light');
     } else {
-      html.classList.add('light');
       html.classList.remove('dark');
+      html.classList.add('light');
     }
   }, [theme]);
 

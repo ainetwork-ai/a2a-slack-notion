@@ -3,9 +3,11 @@ import { getSession } from "@/lib/auth/session";
 import { verifyEthSignature } from "@/lib/auth/eth-verify";
 import { db } from "@/lib/db";
 import { users, channels, channelMembers, workspaces, workspaceMembers, inviteTokens } from "@/lib/db/schema";
+import { inArray } from "drizzle-orm";
 import { eq, and, gt } from "drizzle-orm";
 
 export async function POST(req: NextRequest) {
+  try {
   const body = await req.json();
   const { signature, address, displayName, provider, inviteToken } = body;
   console.log("[Auth:Verify] Request:", { address, displayName, provider, hasSig: !!signature, hasInvite: !!inviteToken });
@@ -123,10 +125,75 @@ export async function POST(req: NextRequest) {
   }
 
   if (targetWorkspaceId) {
+    // Load workspace to get defaults
+    const [targetWorkspace] = await db
+      .select({
+        id: workspaces.id,
+        defaultNotificationPref: workspaces.defaultNotificationPref,
+        defaultChannels: workspaces.defaultChannels,
+      })
+      .from(workspaces)
+      .where(eq(workspaces.id, targetWorkspaceId))
+      .limit(1);
+
     await db
       .insert(workspaceMembers)
       .values({ workspaceId: targetWorkspaceId, userId: user.id, role: "member" })
       .onConflictDoNothing();
+
+    const defaultNotifPref = targetWorkspace?.defaultNotificationPref ?? "all";
+    const defaultChannelIds: string[] = (targetWorkspace?.defaultChannels as string[] | null) ?? [];
+
+    // Auto-join the #general channel of the workspace
+    const [generalChannel] = await db
+      .select({ id: channels.id })
+      .from(channels)
+      .where(
+        and(
+          eq(channels.workspaceId, targetWorkspaceId),
+          eq(channels.name, "general"),
+          eq(channels.isPrivate, false)
+        )
+      )
+      .limit(1);
+
+    if (generalChannel) {
+      await db
+        .insert(channelMembers)
+        .values({
+          channelId: generalChannel.id,
+          userId: user.id,
+          role: "member",
+          notificationPref: defaultNotifPref,
+        })
+        .onConflictDoNothing();
+    }
+
+    // Join default channels configured on the workspace
+    if (defaultChannelIds.length > 0) {
+      const defaultChans = await db
+        .select({ id: channels.id })
+        .from(channels)
+        .where(
+          and(
+            eq(channels.workspaceId, targetWorkspaceId),
+            inArray(channels.id, defaultChannelIds)
+          )
+        );
+
+      for (const ch of defaultChans) {
+        if (ch.id === generalChannel?.id) continue;
+        await db
+          .insert(channelMembers)
+          .values({
+            channelId: ch.id,
+            userId: user.id,
+            role: "member",
+            notificationPref: defaultNotifPref,
+          })
+          .onConflictDoNothing();
+      }
+    }
   }
 
   session.userId = user.id;
@@ -136,4 +203,8 @@ export async function POST(req: NextRequest) {
 
   console.log("[Auth:Verify] Login success! User:", user.id, user.displayName);
   return NextResponse.json({ user });
+  } catch (err) {
+    console.error("[Auth:Verify] Unhandled error:", err);
+    return NextResponse.json({ error: "Internal server error", details: String(err) }, { status: 500 });
+  }
 }

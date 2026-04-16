@@ -2,25 +2,40 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { Plus, ChevronDown, ChevronRight, Bot } from 'lucide-react';
+import { Plus, ChevronDown, ChevronRight, Bot, Users } from 'lucide-react';
 import NewDMModal from '@/components/modals/NewDMModal';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { usePresence } from '@/lib/realtime/use-presence';
+import { usePresence, UserStatus } from '@/lib/realtime/use-presence';
 import { cn } from '@/lib/utils';
 import useSWR from 'swr';
 
 const fetcher = (url: string) => fetch(url).then(r => r.json());
 
+interface DMMember {
+  userId: string;
+  displayName: string;
+  avatarUrl?: string;
+  isAgent?: boolean;
+  status?: string;
+}
+
 interface DMConversation {
   id: string;
+  isGroup: boolean;
   otherUser: {
     id: string;
     displayName: string;
     avatarUrl?: string;
     isAgent?: boolean;
-  };
+    status?: string;
+  } | null;
+  members: DMMember[];
   lastMessage?: string;
+  latestMessage?: { id: string; content: string; createdAt: string; userId: string } | null;
   unread?: boolean;
+  unreadCount?: number;
+  isMuted?: boolean;
+  updatedAt?: string;
 }
 
 export default function DMList() {
@@ -28,7 +43,17 @@ export default function DMList() {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
   const [newDMOpen, setNewDMOpen] = useState(false);
-  const { isOnline, fetchPresence } = usePresence();
+  const { isOnline, getStatus, fetchPresence } = usePresence();
+
+  function statusDotClass(status: UserStatus): string {
+    switch (status) {
+      case 'online': return 'bg-green-400';
+      case 'dnd': return 'bg-red-500';
+      case 'away':
+      case 'idle': return 'bg-yellow-400';
+      default: return 'bg-slate-500';
+    }
+  }
 
   const { data } = useSWR<DMConversation[]>(
     '/api/dm',
@@ -36,14 +61,22 @@ export default function DMList() {
     { refreshInterval: 3000, revalidateOnFocus: true }
   );
 
-  const conversations = Array.isArray(data) ? data : [];
+  const conversations = Array.isArray(data)
+    ? [...data].sort((a, b) => {
+        const aTime = a.latestMessage?.createdAt ?? a.updatedAt ?? '';
+        const bTime = b.latestMessage?.createdAt ?? b.updatedAt ?? '';
+        return bTime > aTime ? 1 : bTime < aTime ? -1 : 0;
+      })
+    : [];
 
   useEffect(() => {
-    const userIds = conversations
-      .filter(c => c.otherUser && !c.otherUser.isAgent)
-      .map(c => c.otherUser.id);
+    const userIds = conversations.flatMap(c =>
+      c.isGroup
+        ? (c.members ?? []).filter(m => !m.isAgent).map(m => m.userId)
+        : c.otherUser && !c.otherUser.isAgent ? [c.otherUser.id] : []
+    );
     if (userIds.length > 0) fetchPresence(userIds);
-  }, [conversations.filter(c => c.otherUser).map(c => c.otherUser.id).join(',')]);
+  }, [conversations.map(c => c.id).join(',')]);
 
   function isActive(conversationId: string) {
     return pathname === `/workspace/dm/${conversationId}`;
@@ -74,9 +107,53 @@ export default function DMList() {
       </div>
 
       {!collapsed && (
-        <div className="mt-0.5 space-y-px">
-          {conversations.filter(convo => convo.otherUser).map(convo => {
+        <div className="mt-0.5 space-y-px" role="listbox" aria-label="Direct Messages">
+          {conversations.map(convo => {
+            if (convo.isGroup) {
+              // Group DM rendering — members array includes all participants
+              const memberCount = convo.members?.length ?? 0;
+              const names = (convo.members ?? [])
+                .map(m => m.displayName)
+                .join(', ');
+
+              return (
+                <button
+                  key={convo.id}
+                  role="option"
+                  aria-selected={isActive(convo.id)}
+                  onClick={() => router.push(`/workspace/dm/${convo.id}`)}
+                  className={cn(
+                    'w-full flex items-center gap-2 px-2 py-1.5 rounded text-[15px] transition-colors text-left',
+                    isActive(convo.id)
+                      ? 'bg-[#4a154b]/60 text-white'
+                      : 'text-[#bcabbc] hover:bg-white/5 hover:text-white',
+                    convo.isMuted && !isActive(convo.id) && 'opacity-50'
+                  )}
+                >
+                  <div className="relative shrink-0">
+                    <div className="w-6 h-6 rounded bg-[#4a154b]/60 flex items-center justify-center">
+                      <Users className="w-3.5 h-3.5 text-[#bcabbc]" />
+                    </div>
+                  </div>
+                  <span className={cn('truncate flex-1', convo.unread && !isActive(convo.id) && !convo.isMuted && 'font-semibold text-white')}>
+                    {names}
+                  </span>
+                  <span className="shrink-0 text-[10px] bg-white/10 text-[#bcabbc] rounded-full px-1.5 py-0.5 font-medium">
+                    {memberCount}
+                  </span>
+                  {(convo.unreadCount ?? 0) > 0 && !isActive(convo.id) && !convo.isMuted && (
+                    <span className="flex items-center justify-center min-w-[18px] h-[18px] rounded-full bg-red-500 text-white text-[10px] font-bold px-1 shrink-0">
+                      {(convo.unreadCount ?? 0) > 99 ? '99+' : convo.unreadCount}
+                    </span>
+                  )}
+                </button>
+              );
+            }
+
+            // 1-on-1 DM rendering
+            if (!convo.otherUser) return null;
             const online = isOnline(convo.otherUser.id);
+            const otherStatus = getStatus(convo.otherUser.id);
             const initials = convo.otherUser.displayName
               .split(' ')
               .map(w => w[0])
@@ -87,12 +164,15 @@ export default function DMList() {
             return (
               <button
                 key={convo.id}
+                role="option"
+                aria-selected={isActive(convo.id)}
                 onClick={() => router.push(`/workspace/dm/${convo.id}`)}
                 className={cn(
-                  'w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm transition-colors text-left',
+                  'w-full flex items-center gap-2 px-2 py-1.5 rounded text-[15px] transition-colors text-left',
                   isActive(convo.id)
                     ? 'bg-[#4a154b]/60 text-white'
-                    : 'text-[#bcabbc] hover:bg-white/5 hover:text-white'
+                    : 'text-[#bcabbc] hover:bg-white/5 hover:text-white',
+                  convo.isMuted && !isActive(convo.id) && 'opacity-50'
                 )}
               >
                 <div className="relative shrink-0">
@@ -107,7 +187,7 @@ export default function DMList() {
                   <span
                     className={cn(
                       'absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border border-[#1a1d21]',
-                      online ? 'bg-green-400' : 'bg-slate-500'
+                      statusDotClass(otherStatus)
                     )}
                   />
                   {convo.otherUser.isAgent && (
@@ -116,11 +196,13 @@ export default function DMList() {
                     </span>
                   )}
                 </div>
-                <span className={cn('truncate flex-1', convo.unread && !isActive(convo.id) && 'font-semibold text-white')}>
+                <span className={cn('truncate flex-1', convo.unread && !isActive(convo.id) && !convo.isMuted && 'font-semibold text-white')}>
                   {convo.otherUser.displayName}
                 </span>
-                {convo.unread && !isActive(convo.id) && (
-                  <span className="ml-auto w-2 h-2 rounded-full bg-white shrink-0" />
+                {(convo.unreadCount ?? 0) > 0 && !isActive(convo.id) && !convo.isMuted && (
+                  <span className="ml-auto flex items-center justify-center min-w-[18px] h-[18px] rounded-full bg-red-500 text-white text-[10px] font-bold px-1 shrink-0">
+                    {(convo.unreadCount ?? 0) > 99 ? '99+' : convo.unreadCount}
+                  </span>
                 )}
               </button>
             );
