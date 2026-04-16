@@ -20,6 +20,65 @@ const DAILY_LIMITS: Record<number, number> = {
 
 const COOLDOWN_MS = 3 * 60 * 1000; // 3 minutes
 
+const VLLM_BASE_URL = process.env.VLLM_URL || "http://localhost:8100";
+const VLLM_MODEL = process.env.VLLM_MODEL || "gemma-4-31B-it";
+
+/**
+ * Use LLM to decide if a built agent should respond to a message.
+ * Returns a confidence score 0-1.
+ */
+async function analyzeIntentWithLLM(params: {
+  agentName: string;
+  skills: string[];
+  systemPrompt?: string;
+  messageContent: string;
+  senderIsAgent: boolean;
+}): Promise<{ confidence: number; reason: string }> {
+  try {
+    const prompt = `You are evaluating whether an agent should respond to a message in a chat channel.
+
+Agent: ${params.agentName}
+Agent skills/role:
+${params.skills.slice(0, 5).join("\n")}
+${params.systemPrompt ? `\nAgent system prompt:\n${params.systemPrompt.slice(0, 300)}` : ""}
+
+Message from ${params.senderIsAgent ? "another agent" : "user"}:
+"${params.messageContent.slice(0, 500)}"
+
+Should ${params.agentName} respond? Consider:
+- Does the message directly address this agent's role/skills?
+- Is there work in the message that this agent is specialized to do?
+- Is it a natural handoff point in a multi-agent workflow?
+
+Respond with a JSON object only: {"confidence": 0.0-1.0, "reason": "brief explanation"}
+Use 0.0 if definitely should not respond, 1.0 if definitely should.`;
+
+    const res = await fetch(`${VLLM_BASE_URL}/v1/chat/completions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: VLLM_MODEL,
+        messages: [{ role: "user", content: prompt }],
+        max_tokens: 100,
+        temperature: 0.1,
+      }),
+    });
+
+    if (!res.ok) return { confidence: 0, reason: "llm error" };
+    const data = await res.json();
+    const content = data.choices?.[0]?.message?.content || "";
+    const match = content.match(/\{[^}]*"confidence"\s*:\s*([\d.]+)[^}]*"reason"\s*:\s*"([^"]*)"[^}]*\}/);
+    if (match) {
+      return { confidence: Math.min(Math.max(parseFloat(match[1]), 0), 1), reason: match[2] };
+    }
+    // Fallback: look for any number 0-1
+    const numMatch = content.match(/\b(0\.\d+|1\.0|0|1)\b/);
+    return { confidence: numMatch ? parseFloat(numMatch[1]) : 0, reason: "parsed" };
+  } catch {
+    return { confidence: 0, reason: "exception" };
+  }
+}
+
 export async function checkAutoEngagement(params: {
   channelId: string;
   messageContent: string;
@@ -100,18 +159,17 @@ export async function checkAutoEngagement(params: {
       shouldRespond = result.confidence >= threshold;
       suggestedSkillId = result.suggestedSkillId;
     } else if (agentSkills.length > 0) {
-      // No URL available — do pure keyword match locally
-      const messageTokens = messageContent
-        .toLowerCase()
-        .split(/\s+/)
-        .filter((t) => t.length > 2);
-      const skillTokenSet = new Set(
-        agentSkills.join(" ").toLowerCase().split(/\s+/).filter((t) => t.length > 2)
-      );
-      const matches = messageTokens.filter((t) => skillTokenSet.has(t));
-      const confidence = messageTokens.length > 0 ? matches.length / messageTokens.length : 0;
+      // No RPC — use LLM for multi-lingual semantic intent analysis
+      const result = await analyzeIntentWithLLM({
+        agentName: member.displayName,
+        skills: agentSkills,
+        systemPrompt: (card as { systemPrompt?: string } | null)?.systemPrompt,
+        messageContent,
+        senderIsAgent: !!(await db.select({ isAgent: users.isAgent }).from(users).where(eq(users.id, senderId)).limit(1).then(r => r[0]?.isAgent)),
+      });
+
       const threshold = CONFIDENCE_THRESHOLDS[level] ?? 0.4;
-      shouldRespond = confidence >= threshold;
+      shouldRespond = result.confidence >= threshold;
     }
 
     if (!shouldRespond) continue;
