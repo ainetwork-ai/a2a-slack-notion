@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { streamSSE } from 'hono/streaming';
 import { inviteAgent, removeAgent, listAgents, healthCheck, getAgentSkills } from '../lib/a2a/agent-manager.js';
-import { invokeAgent, invokeAgentStream } from '../lib/a2a/agent-invoker.js';
+import { invokeAgent, invokeAgentStream, invokeRevisionStream } from '../lib/a2a/agent-invoker.js';
 import { fetchAgentCard } from '../lib/a2a/client.js';
 import { prisma } from '../lib/prisma.js';
 import type { AppVariables } from '../types/app.js';
@@ -95,6 +95,42 @@ agents.post('/invoke', async (c) => {
   const result = await invokeAgent({ agentId, prompt, pageId, blockId, workspaceId });
   return c.json(result);
 });
+
+// POST /api/v1/agents/revise - 텍스트 첨삭 (SSE 스트리밍)
+agents.post('/revise', async (c) => {
+  const user = c.get('user')
+  if (!user) return c.json({ error: 'Unauthorized' }, 401)
+
+  const body = await c.req.json()
+  const { agentId, originalText, instruction, pageId, workspaceId, commentId } = body
+
+  if (!agentId || !originalText || !instruction || !pageId || !workspaceId || !commentId) {
+    return c.json({ error: 'Missing required fields' }, 400)
+  }
+
+  if (!(await requireWorkspaceMember(user.id, workspaceId))) {
+    return c.json({ error: 'Forbidden' }, 403)
+  }
+
+  return streamSSE(c, async (stream) => {
+    try {
+      for await (const chunk of invokeRevisionStream(agentId, {
+        originalText,
+        instruction,
+        pageId,
+        workspaceId,
+        commentId,
+      })) {
+        await stream.writeSSE({ data: JSON.stringify(chunk) })
+      }
+      await stream.writeSSE({ data: '[DONE]' })
+    } catch (error) {
+      await stream.writeSSE({
+        data: JSON.stringify({ type: 'error', content: (error as Error).message }),
+      })
+    }
+  })
+})
 
 // Invite (register) a new agent
 agents.post('/', async (c) => {

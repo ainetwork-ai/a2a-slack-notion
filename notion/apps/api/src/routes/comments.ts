@@ -9,7 +9,11 @@ const comments = new Hono<{ Variables: AppVariables }>();
 
 const CreateCommentSchema = z.object({
   blockId: z.string(),
-  content: z.object({ text: z.string() }),
+  content: z.object({
+    text: z.string(),
+    selectedText: z.string().optional(),
+    commentMarkId: z.string().optional(),
+  }),
   threadId: z.string().optional(),
 });
 

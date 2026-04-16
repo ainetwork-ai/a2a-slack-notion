@@ -27,6 +27,7 @@ import { MentionList } from './mention-list';
 import type { MentionItem, MentionListRef } from './mention-list';
 import { AgentMentionTrigger } from './agent-mention-handler';
 import { SlashCommandExtension } from './slash-command-extension';
+import { CommentHighlight } from './extensions/comment-highlight';
 
 const lowlight = createLowlight(common);
 
@@ -82,7 +83,7 @@ export interface EditorExtensionOptions {
   /** Getter for workspaceId — use this when workspaceId may be empty at editor mount time */
   getWorkspaceId?: () => string;
   pageId?: string;
-  onAgentInvoke?: (params: { agentId: string; prompt: string; pageId: string; workspaceId: string }) => void;
+  onAgentInvoke?: (params: { agentId: string; agentName: string; prompt: string; pageId: string; workspaceId: string }) => void;
   /** Set true when using with Collaboration extension — disables built-in History (Yjs handles it) */
   collaboration?: boolean;
 }
@@ -236,5 +237,6 @@ export function getEditorExtensions(options: EditorExtensionOptions = {}) {
     ColumnCellExtension,
     BlockHandleExtension,
     SlashCommandExtension,
+    CommentHighlight,
   ];
 }

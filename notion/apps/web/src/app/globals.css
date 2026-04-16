@@ -311,3 +311,26 @@ button, input, select, textarea {
   animation: block-fade-out 150ms ease-in forwards;
   pointer-events: none;
 }
+
+/* Comment highlight mark styles */
+.comment-highlight[data-status='active'] {
+  background-color: rgb(253 224 71 / 0.4);
+  border-bottom: 2px solid rgb(234 179 8);
+  cursor: pointer;
+}
+
+.comment-highlight[data-status='revision-in-progress'] {
+  background-color: rgb(147 197 253 / 0.4);
+  border-bottom: 2px dashed rgb(59 130 246);
+  animation: pulse-highlight 1.5s ease-in-out infinite;
+}
+
+.comment-highlight[data-status='resolved'] {
+  background-color: transparent;
+  border-bottom: none;
+}
+
+@keyframes pulse-highlight {
+  0%, 100% { background-color: rgb(147 197 253 / 0.4); }
+  50% { background-color: rgb(147 197 253 / 0.7); }
+}

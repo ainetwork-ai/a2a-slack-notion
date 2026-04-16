@@ -13,12 +13,41 @@ mentions.get('/suggest', async (c) => {
     return c.json({ object: 'error', status: 401, code: 'unauthorized', message: 'Not authenticated' }, 401);
   }
 
-  const type = c.req.query('type') ?? 'user';
+  const type = c.req.query('type');
   const q = c.req.query('q') ?? '';
   const workspaceId = c.req.query('workspace_id');
 
   if (!workspaceId) {
     return c.json({ object: 'error', status: 400, code: 'validation_error', message: 'workspace_id required' }, 400);
+  }
+
+  if (!type || type === 'all') {
+    // No type specified — return all workspace members (users + agents)
+    const members = await prisma.workspaceMember.findMany({
+      where: {
+        workspaceId,
+        user: { name: { contains: q, mode: 'insensitive' } },
+      },
+      include: {
+        user: {
+          select: { id: true, name: true, image: true, isAgent: true, a2aUrl: true, agentStatus: true },
+        },
+      },
+      take: 10,
+    });
+
+    return c.json(
+      members.map((m) => ({
+        id: m.user.id,
+        name: m.user.name,
+        avatar: m.user.image ?? undefined,
+        ...(m.user.isAgent && {
+          isAgent: true,
+          a2aUrl: m.user.a2aUrl,
+          agentStatus: m.user.agentStatus,
+        }),
+      })),
+    );
   }
 
   if (type === 'agent') {

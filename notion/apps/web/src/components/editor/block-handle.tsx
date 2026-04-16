@@ -169,6 +169,8 @@ export const BlockHandleExtension = Extension.create({
             },
             mouseleave(view, event) {
               const related = (event as MouseEvent).relatedTarget as HTMLElement | null;
+              // Moving to the fixed-position handle overlay — keep handle visible
+              if (related?.closest('.block-handle-container')) return false;
               if (!related || !view.dom.contains(related)) {
                 setHoveredBlock(null, null);
               }
