@@ -515,6 +515,26 @@ async function executeStep(
       return undefined;
     }
 
+    case "write_canvas": {
+      const channel = await resolveChannel(step.channel);
+      if (!channel) throw new Error(`Channel not found: "${step.channel}"`);
+
+      const content = substituteVariables(step.content, vars);
+      const title = step.title ? substituteVariables(step.title, vars) : undefined;
+
+      const { executeTool } = await import("@/lib/mcp/executor");
+      const toolName = step.append ? "canvas_append" : "canvas_write";
+      const params: Record<string, unknown> = { channelId: channel.id, content };
+      if (title) params.title = title;
+
+      const result = await executeTool("slack", toolName, params);
+      if (!result.success) {
+        throw new Error(`write_canvas failed: ${result.content}`);
+      }
+
+      return content;
+    }
+
     case "form":
     case "approval":
       // These are handled in executeSteps via executePausableStep

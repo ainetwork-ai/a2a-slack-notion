@@ -38,7 +38,17 @@ export type WorkflowStep =
   | { type: "form"; title: string; fields: FormField[]; submitToChannelId?: string; saveAs?: string }
   | { type: "approval"; approverUserId: string; message: string; saveAs?: string; onApprove?: WorkflowStep[]; onReject?: WorkflowStep[] }
   | { type: "dm_user"; userId: string; message: string }
-  | { type: "add_to_channel"; channelId: string; userId: string };
+  | { type: "add_to_channel"; channelId: string; userId: string }
+  | {
+      // Write markdown content to a channel's canvas. Replaces existing
+      // canvas content unless `append` is true.
+      type: "write_canvas";
+      channel: string; // channel name or UUID
+      content: string; // markdown, supports {{variables}}
+      title?: string;
+      append?: boolean;
+      saveAs?: string;
+    };
 
 export type WorkflowTrigger =
   | { type: "manual" }

@@ -20,6 +20,7 @@ function stepIcon(type: WorkflowStep['type']): string {
     approval: '✅',
     dm_user: '👤',
     add_to_channel: '➕',
+    write_canvas: '📄',
   };
   return map[type] ?? '⚙️';
 }
@@ -37,6 +38,7 @@ function stepLabel(type: WorkflowStep['type']): string {
     approval: 'Request approval',
     dm_user: 'Send a DM',
     add_to_channel: 'Add user to channel',
+    write_canvas: 'Write to canvas',
   };
   return map[type] ?? type;
 }
@@ -54,6 +56,11 @@ function stepPreview(step: WorkflowStep): string {
       const agent = (s.agent as string) || '?';
       const skill = (s.skillId as string) || '?';
       return `${agent}.${skill}`;
+    }
+    case 'write_canvas': {
+      const ch = (s.channel as string) || '?';
+      const title = (s.title as string) || '';
+      return `#${ch}${title ? ` — "${title}"` : ''}${s.append ? ' (append)' : ''}`;
     }
     case 'ask_agent': {
       const agent = (s.agentId as string) || '?';
@@ -84,6 +91,7 @@ function stepPreview(step: WorkflowStep): string {
 function defaultStep(type: WorkflowStep['type']): WorkflowStep {
   switch (type) {
     case 'invoke_skill': return { type, agent: '', skillId: '', inputs: {}, saveAs: '' };
+    case 'write_canvas': return { type, channel: '', content: '', append: false, saveAs: '' };
     case 'ask_agent': return { type, agentId: '', prompt: '', saveAs: '' };
     case 'send_message': return { type, channelId: '', message: '' };
     case 'post_to_channel': return { type, channelId: '', message: '' };
