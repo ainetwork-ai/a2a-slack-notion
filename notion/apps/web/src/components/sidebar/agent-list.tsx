@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Bot, Plus, Circle } from 'lucide-react';
 import { AgentInviteModal } from '@/components/agent/agent-invite-modal';
+import { ListSkeleton } from './list-skeleton';
 
 interface AgentItem {
   id: string;
@@ -17,6 +18,7 @@ interface AgentListProps {
 
 export function AgentList({ workspaceId }: AgentListProps) {
   const [agents, setAgents] = useState<AgentItem[]>([]);
+  const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
 
   const apiUrl =
@@ -32,10 +34,13 @@ export function AgentList({ workspaceId }: AgentListProps) {
       if (res.ok) setAgents((await res.json()) as AgentItem[]);
     } catch {
       /* ignore */
+    } finally {
+      setLoading(false);
     }
   }, [apiUrl, workspaceId]);
 
   useEffect(() => {
+    setLoading(true);
     loadAgents().catch(() => {});
   }, [loadAgents]);
 
@@ -53,7 +58,9 @@ export function AgentList({ workspaceId }: AgentListProps) {
           </button>
         </div>
 
-        {agents.length === 0 ? (
+        {loading ? (
+          <ListSkeleton count={2} />
+        ) : agents.length === 0 ? (
           <p className="text-xs text-[var(--text-tertiary)] px-2 py-1">No agents added yet</p>
         ) : (
           <div className="space-y-0.5">

@@ -40,6 +40,7 @@ export function Sidebar({ workspaceId, activePageId }: SidebarProps) {
     setSearchOpen,
   } = useWorkspaceStore();
 
+  const [loading, setLoading] = useState(true);
   const [trashOpen, setTrashOpen] = useState(false);
   const [trashedPages, setTrashedPages] = useState<TrashedPage[]>([]);
   const [trashLoading, setTrashLoading] = useState(false);
@@ -49,6 +50,7 @@ export function Sidebar({ workspaceId, activePageId }: SidebarProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   useEffect(() => {
+    setLoading(true);
     async function load() {
       const [pagesData, favsData, recentData] = await Promise.all([
         apiFetch<PageNode[]>(`/api/v1/pages?workspace_id=${workspaceId}`),
@@ -60,8 +62,9 @@ export function Sidebar({ workspaceId, activePageId }: SidebarProps) {
       setPages(pagesData);
       setFavorites(favsData);
       setRecentPages(recentData);
+      setLoading(false);
     }
-    load().catch(console.error);
+    load().catch((err) => { console.error(err); setLoading(false); });
   }, [workspaceId, setPages, setFavorites, setRecentPages]);
 
   function handleNewPage() {
@@ -261,7 +264,9 @@ export function Sidebar({ workspaceId, activePageId }: SidebarProps) {
               </button>
             }
           >
-            {pages.length === 0 ? (
+            {loading ? (
+              <SidebarSkeleton />
+            ) : pages.length === 0 ? (
               <p className="px-3 py-2 text-xs text-[var(--text-tertiary)]">No pages yet</p>
             ) : (
               pages.map((page) => (
@@ -507,7 +512,9 @@ export function Sidebar({ workspaceId, activePageId }: SidebarProps) {
                   </button>
                 }
               >
-                {pages.length === 0 ? (
+                {loading ? (
+                  <SidebarSkeleton />
+                ) : pages.length === 0 ? (
                   <p className="px-3 py-2 text-xs text-[var(--text-tertiary)]">No pages yet</p>
                 ) : (
                   pages.map((page) => (
@@ -569,6 +576,26 @@ export function Sidebar({ workspaceId, activePageId }: SidebarProps) {
         />
       )}
     </>
+  );
+}
+
+function SidebarSkeleton() {
+  const widths = ['60%', '75%', '50%', '65%'];
+  return (
+    <div aria-hidden="true">
+      {widths.map((w, i) => (
+        <div key={i} className="flex items-center h-[28px] px-3 gap-2">
+          <div
+            className="shrink-0 rounded"
+            style={{ width: 14, height: 14, background: 'var(--bg-hover)', animation: 'pulse 1.5s ease-in-out infinite' }}
+          />
+          <div
+            className="rounded"
+            style={{ width: w, height: 12, background: 'var(--bg-hover)', animation: 'pulse 1.5s ease-in-out infinite', animationDelay: `${i * 100}ms` }}
+          />
+        </div>
+      ))}
+    </div>
   );
 }
 

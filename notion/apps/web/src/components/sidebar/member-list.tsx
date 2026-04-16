@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Users, Plus, X } from 'lucide-react';
 import { InviteModal } from '@/components/workspace/invite-modal';
+import { ListSkeleton } from './list-skeleton';
 
 interface MemberUser {
   id: string;
@@ -25,6 +26,7 @@ interface MemberListProps {
 
 export function MemberList({ workspaceId }: MemberListProps) {
   const [members, setMembers] = useState<MemberItem[]>([]);
+  const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [currentUserRole, setCurrentUserRole] = useState<string | null>(null);
@@ -45,6 +47,8 @@ export function MemberList({ workspaceId }: MemberListProps) {
       }
     } catch {
       /* ignore */
+    } finally {
+      setLoading(false);
     }
   }, [apiUrl, workspaceId]);
 
@@ -61,6 +65,7 @@ export function MemberList({ workspaceId }: MemberListProps) {
   }, [apiUrl]);
 
   useEffect(() => {
+    setLoading(true);
     loadMembers().catch(() => {});
     loadCurrentUser().catch(() => {});
   }, [loadMembers, loadCurrentUser]);
@@ -105,7 +110,9 @@ export function MemberList({ workspaceId }: MemberListProps) {
           )}
         </div>
 
-        {members.length === 0 ? (
+        {loading ? (
+          <ListSkeleton count={2} />
+        ) : members.length === 0 ? (
           <p className="text-xs text-[var(--text-tertiary)] px-2 py-1">No members yet</p>
         ) : (
           <div className="space-y-0.5">

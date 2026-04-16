@@ -240,6 +240,22 @@ export default function PageView() {
         </header>
 
         {/* Page content area */}
+        {!page ? (
+          <div className="flex-1 flex items-center justify-center h-full">
+            <div
+              style={{
+                width: 24,
+                height: 24,
+                borderRadius: '50%',
+                border: '2px solid var(--bg-hover)',
+                borderTopColor: 'var(--text-tertiary)',
+                animation: 'spin 0.7s linear infinite',
+              }}
+              aria-label="Loading page"
+              role="status"
+            />
+          </div>
+        ) : (
         <div className="mx-auto max-w-full md:max-w-[900px] px-4 md:px-24 py-12">
           {/* Cover image */}
           {page?.coverUrl && (
@@ -306,6 +322,7 @@ export default function PageView() {
               </div>
             ))}
         </div>
+        )}
       </main>
 
       {/* History panel — slide in from the right */}
