@@ -3,7 +3,10 @@
 import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 
-import { Home, Search, MessageSquare, Smile, LogOut, Sun, Moon, Inbox, MessagesSquare, Plus, Bookmark, BellOff, Volume2, VolumeX, User, Settings, Zap } from 'lucide-react';
+import {
+  Home, MessageSquare, Bell, Clock, Folder, Zap, MoreHorizontal,
+  LogOut, Sun, Moon, Smile, BellOff, Volume2, VolumeX, User, Settings, Plus,
+} from 'lucide-react';
 import Image from 'next/image';
 import NotificationPanel from '@/components/modals/NotificationPanel';
 import ProfileEditModal from '@/components/modals/ProfileEditModal';
@@ -38,29 +41,24 @@ interface NavButtonProps {
 
 function NavButton({ icon, label, onClick, active, badge }: NavButtonProps) {
   return (
-    <TooltipProvider delay={300}>
-      <Tooltip>
-        <TooltipTrigger
-          onClick={onClick}
-          className={cn(
-            'relative flex items-center justify-center w-10 h-10 rounded-lg transition-all duration-150',
-            active
-              ? 'bg-white text-[#1a1d21]'
-              : 'text-[#bcabbc] hover:bg-white/10 hover:text-white'
-          )}
-        >
-          {icon}
-          {badge && badge > 0 ? (
-            <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-[18px] h-[18px] rounded-full bg-red-500 text-white text-[10px] font-bold px-1">
-              {badge > 99 ? '99+' : badge}
-            </span>
-          ) : null}
-        </TooltipTrigger>
-        <TooltipContent side="right" className="bg-[#1a1d21] text-white border-white/10">
-          {label}
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+    <button
+      onClick={onClick}
+      aria-label={label}
+      className={cn(
+        'relative flex flex-col items-center justify-center gap-0.5 w-14 py-1.5 rounded-lg transition-all duration-150',
+        active
+          ? 'bg-white text-[#1a1d21]'
+          : 'text-[#bcabbc] hover:bg-white/10 hover:text-white'
+      )}
+    >
+      {icon}
+      <span className="text-[10px] leading-tight font-medium">{label}</span>
+      {badge && badge > 0 ? (
+        <span className="absolute top-0.5 right-1 flex items-center justify-center min-w-[16px] h-[16px] rounded-full bg-red-500 text-white text-[9px] font-bold px-0.5">
+          {badge > 99 ? '99+' : badge}
+        </span>
+      ) : null}
+    </button>
   );
 }
 
@@ -69,7 +67,7 @@ export default function Sidebar() {
   const pathname = usePathname();
   const { user, logout } = useAuth();
   const { unreadCount } = useNotifications();
-  const { setSearchOpen, searchOpen } = useAppStore();
+  const { toggleNotificationPanel, notificationPanelOpen } = useAppStore();
   const { theme, toggleTheme } = useThemeStore();
   const { workspaces, activeWorkspaceId, setActive, fetchWorkspaces } = useWorkspaceStore();
   const { myStatus, setDnd, isDndEnabled } = usePresence();
@@ -82,7 +80,6 @@ export default function Sidebar() {
     fetchWorkspaces();
   }, [fetchWorkspaces]);
 
-  // Sync DND and sound state from localStorage on mount
   useEffect(() => {
     setDndActive(isDndEnabled());
     setSoundEnabled(isNotificationSoundEnabled());
@@ -121,7 +118,8 @@ export default function Sidebar() {
     <>
     <ProfileEditModal open={profileModalOpen} onClose={() => setProfileModalOpen(false)} />
     <SetStatusModal open={statusModalOpen} onClose={() => setStatusModalOpen(false)} />
-    <div className="sidebar-dark flex flex-col items-center w-16 h-full py-3 gap-1 border-r border-white/5 shrink-0" role="navigation" aria-label="Main navigation">
+    <div className="sidebar-dark flex flex-col items-center w-[68px] h-full py-3 gap-1 border-r border-white/5 shrink-0" role="navigation" aria-label="Main navigation">
+
       {/* Active Workspace Icon */}
       <TooltipProvider delay={300}>
         <Tooltip>
@@ -207,66 +205,90 @@ export default function Sidebar() {
 
       <div className="w-8 border-t border-white/10 mb-2 mt-2" />
 
-      {/* Nav Buttons */}
-      <nav aria-label="App navigation">
-      <NavButton
-        icon={<Home className="w-5 h-5" />}
-        label="Home"
-        onClick={() => router.push('/workspace')}
-        active={pathname === '/workspace'}
-      />
-      <NavButton
-        icon={<Search className="w-5 h-5" />}
-        label="Search (Cmd+K)"
-        onClick={() => setSearchOpen(true)}
-        active={searchOpen}
-      />
-      {/* Notifications — uses NotificationPanel dropdown */}
-      <div className="flex items-center justify-center">
-        <NotificationPanel />
-      </div>
-      <NavButton
-        icon={<MessageSquare className="w-5 h-5" />}
-        label="Direct Messages"
-        onClick={() => {
-          const dmSection = document.querySelector('[data-section="dm"]');
-          if (dmSection) dmSection.scrollIntoView({ behavior: 'smooth' });
-          router.push('/workspace');
-        }}
-      />
-      <NavButton
-        icon={<MessagesSquare className="w-5 h-5" />}
-        label="Threads"
-        onClick={() => router.push('/workspace/threads')}
-        active={pathname === '/workspace/threads'}
-      />
-      <NavButton
-        icon={<Bookmark className="w-5 h-5" />}
-        label="Saved Items"
-        onClick={() => router.push('/workspace/saved')}
-        active={pathname === '/workspace/saved'}
-      />
-      <NavButton
-        icon={<Inbox className="w-5 h-5" />}
-        label="All unreads"
-        onClick={() => router.push('/workspace/unreads')}
-        active={pathname === '/workspace/unreads'}
-      />
-      <NavButton
-        icon={<Zap className="w-5 h-5" />}
-        label="Workflow Builder"
-        onClick={() => router.push('/workspace/workflows')}
-        active={pathname === '/workspace/workflows'}
-      />
-      {(activeWorkspace?.role === 'owner' || activeWorkspace?.role === 'admin') && (
+      {/* Nav Buttons — Slack-style icon + label */}
+      <nav aria-label="App navigation" className="flex flex-col items-center gap-0.5 w-full px-1">
         <NavButton
-          icon={<Settings className="w-5 h-5" />}
-          label="Workspace Settings"
-          onClick={() => router.push('/workspace/settings')}
-          active={pathname === '/workspace/settings'}
+          icon={<Home className="w-5 h-5" />}
+          label="Home"
+          onClick={() => router.push('/workspace')}
+          active={pathname === '/workspace'}
         />
-      )}
-
+        <NavButton
+          icon={<MessageSquare className="w-5 h-5" />}
+          label="DMs"
+          onClick={() => router.push('/workspace/dms')}
+          active={pathname === '/workspace/dms' || pathname.startsWith('/workspace/dm/')}
+        />
+        {/* Activity — toggles NotificationPanel, no navigation */}
+        <button
+          aria-label="Activity"
+          onClick={toggleNotificationPanel}
+          className={cn(
+            'relative flex flex-col items-center justify-center gap-0.5 w-14 py-1.5 rounded-lg transition-all duration-150',
+            notificationPanelOpen
+              ? 'bg-white text-[#1a1d21]'
+              : 'text-[#bcabbc] hover:bg-white/10 hover:text-white'
+          )}
+        >
+          <Bell className="w-5 h-5" />
+          <span className="text-[10px] leading-tight font-medium">Activity</span>
+          {unreadCount > 0 && (
+            <span className="absolute top-0.5 right-1 flex items-center justify-center min-w-[16px] h-[16px] rounded-full bg-red-500 text-white text-[9px] font-bold px-0.5">
+              {unreadCount > 99 ? '99+' : unreadCount}
+            </span>
+          )}
+        </button>
+        <NavButton
+          icon={<Clock className="w-5 h-5" />}
+          label="Later"
+          onClick={() => router.push('/workspace/later')}
+          active={pathname === '/workspace/later' || pathname === '/workspace/saved'}
+        />
+        <NavButton
+          icon={<Folder className="w-5 h-5" />}
+          label="Files"
+          onClick={() => router.push('/workspace/files')}
+          active={pathname === '/workspace/files'}
+        />
+        <NavButton
+          icon={<Zap className="w-5 h-5" />}
+          label="Tools"
+          onClick={() => router.push('/workspace/workflows')}
+          active={pathname === '/workspace/workflows'}
+        />
+        {/* More — dropdown with additional items */}
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            aria-label="More"
+            className="flex flex-col items-center justify-center gap-0.5 w-14 py-1.5 rounded-lg transition-all duration-150 text-[#bcabbc] hover:bg-white/10 hover:text-white focus:outline-none"
+          >
+            <MoreHorizontal className="w-5 h-5" />
+            <span className="text-[10px] leading-tight font-medium">More</span>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent side="right" sideOffset={8} className="w-52 bg-[#1a1d21] border-white/10 text-white">
+            <DropdownMenuItem
+              className="text-slate-200 focus:bg-white/10 focus:text-white cursor-pointer"
+              onClick={() => router.push('/workspace/threads')}
+            >
+              Threads
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              className="text-slate-200 focus:bg-white/10 focus:text-white cursor-pointer"
+              onClick={() => router.push('/workspace/unreads')}
+            >
+              All unreads
+            </DropdownMenuItem>
+            {(activeWorkspace?.role === 'owner' || activeWorkspace?.role === 'admin') && (
+              <DropdownMenuItem
+                className="text-slate-200 focus:bg-white/10 focus:text-white cursor-pointer"
+                onClick={() => router.push('/workspace/settings')}
+              >
+                <Settings className="w-4 h-4" />
+                Workspace Settings
+              </DropdownMenuItem>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </nav>
 
       {/* Spacer */}
