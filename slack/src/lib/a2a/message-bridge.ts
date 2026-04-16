@@ -5,11 +5,11 @@ import { sendA2AMessage } from "./client";
 import { executeTool } from "@/lib/mcp/executor";
 import { MCP_SERVERS } from "@/lib/mcp/registry";
 
-const VLLM_BASE_URL = process.env.VLLM_URL || "http://localhost:8100";
-const VLLM_MODEL = process.env.VLLM_MODEL || "gemma-4-31B-it";
+const VLLM_BASE_URL = process.env.VLLM_URL || "http://localhost:8000";
+const VLLM_MODEL = process.env.VLLM_MODEL || "gemma-3-27b-it";
 const MAX_TOOL_ROUNDS = 5;
-const VLLM_CONTEXT_LIMIT = 4096;
-const VLLM_SAFETY_MARGIN = 200; // reserve for prompt overhead, safety
+const VLLM_CONTEXT_LIMIT = Number(process.env.VLLM_CONTEXT_LIMIT || 8192);
+const VLLM_SAFETY_MARGIN = 400; // reserve for prompt overhead, safety
 
 /**
  * Estimate token count (rough: 1 token ~= 3 chars for mixed English/Korean/code).
@@ -271,13 +271,12 @@ async function runAgent(
   }
 
   // 5. Skill hint — if user invoked a specific skill
-  // Truncate long messages to avoid exceeding LLM context window (Gemma4 = 4096 tokens)
-  // Agent can use slack:read_thread to fetch full content if needed
-  const MAX_MSG_CHARS = 2000;
+  // Truncate very long messages — 8192-token context allows ~6000 chars safely
+  const MAX_MSG_CHARS = 6000;
   let userContent = userMessage;
   if (userMessage.length > MAX_MSG_CHARS) {
     userContent = userMessage.slice(0, MAX_MSG_CHARS) +
-      `\n\n[TRUNCATED — ${userMessage.length - MAX_MSG_CHARS} more chars. Use slack:read_thread with conversationId=${pointer.conversationId || "..."} or channelId=${pointer.channelId || "..."} to fetch recent messages in full.]`;
+      `\n\n[TRUNCATED — ${userMessage.length - MAX_MSG_CHARS} more chars. Use slack:read_thread to fetch full messages.]`;
   }
   if (skillHint) {
     const skill = card.skills?.find((s) => s.id === skillHint);
@@ -314,8 +313,8 @@ async function runAgent(
       const [serverId, toolName] = tc.tool.split(":");
       if (serverId && toolName) {
         const result = await executeTool(serverId, toolName, tc.params);
-        // Cap tool result size to prevent context overflow
-        const MAX_RESULT = 1500;
+        // 8192-token context allows richer tool results
+        const MAX_RESULT = 3500;
         const truncated = result.content.length > MAX_RESULT
           ? result.content.slice(0, MAX_RESULT) + `\n[... ${result.content.length - MAX_RESULT} more chars truncated]`
           : result.content;
@@ -323,9 +322,8 @@ async function runAgent(
       }
     }
 
-    // Feed results back — shorten the previous assistant response too to save context
-    const priorShort = response.length > 500 ? response.slice(0, 500) + "..." : response;
-    llmMessages.push({ role: "assistant", content: priorShort });
+    // Keep assistant tool-call verbatim (model needs it for context)
+    llmMessages.push({ role: "assistant", content: response });
     llmMessages.push({
       role: "user",
       content: results.join("\n\n") + "\n\nUse the tool results above to answer. Do not output [TOOL_CALL] again unless you need more data.",
@@ -494,7 +492,7 @@ export async function* streamAgentResponse(params: {
   // Build system prompt (same as runAgent)
   const systemContent = buildSystemPrompt(card, agentName, pointer, params.skillId);
 
-  const MAX_STREAM_MSG = 2000;
+  const MAX_STREAM_MSG = 6000;
   const streamUserContent = params.text.length > MAX_STREAM_MSG
     ? params.text.slice(0, MAX_STREAM_MSG) + `\n\n[TRUNCATED — use slack:read_thread to fetch full context]`
     : params.text;

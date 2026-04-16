@@ -20,8 +20,8 @@ const DAILY_LIMITS: Record<number, number> = {
 
 const COOLDOWN_MS = 3 * 60 * 1000; // 3 minutes
 
-const VLLM_BASE_URL = process.env.VLLM_URL || "http://localhost:8100";
-const VLLM_MODEL = process.env.VLLM_MODEL || "gemma-4-31B-it";
+const VLLM_BASE_URL = process.env.VLLM_URL || "http://localhost:8000";
+const VLLM_MODEL = process.env.VLLM_MODEL || "gemma-3-27b-it";
 
 /**
  * Use LLM to decide if a built agent should respond to a message.
