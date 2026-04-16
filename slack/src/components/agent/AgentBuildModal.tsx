@@ -212,22 +212,67 @@ function AgentForm({ draft, mcpServers, onChange }: AgentFormProps) {
 }
 
 export default function AgentBuildModal() {
-  const { agentBuildOpen, setAgentBuildOpen } = useAppStore();
+  const { agentBuildOpen, setAgentBuildOpen, agentEditId, setAgentEditId } = useAppStore();
+  const isEdit = !!agentEditId;
+  const isOpen = agentBuildOpen || isEdit;
+
   const [drafts, setDrafts] = useState<AgentDraft[]>([newDraft()]);
   const [activeTab, setActiveTab] = useState(0);
   const [mcpServers, setMcpServers] = useState<McpServer[]>([]);
   const [isBuilding, setIsBuilding] = useState(false);
   const [buildResults, setBuildResults] = useState<AgentBuildResult[]>([]);
   const [globalError, setGlobalError] = useState<string | null>(null);
+  const [loadingEdit, setLoadingEdit] = useState(false);
 
   useEffect(() => {
-    if (agentBuildOpen) {
+    if (isOpen) {
       fetch('/api/mcp/servers')
         .then(r => r.json())
         .then((servers: McpServer[]) => setMcpServers(servers.filter(s => s.id !== 'slack')))
         .catch(() => {});
     }
-  }, [agentBuildOpen]);
+  }, [isOpen]);
+
+  // Prefill drafts when entering edit mode
+  useEffect(() => {
+    if (!agentEditId) return;
+    setLoadingEdit(true);
+    setGlobalError(null);
+    fetch(`/api/agents/${agentEditId}`)
+      .then((r) => r.json())
+      .then((agent) => {
+        if (!agent || agent.error) {
+          setGlobalError(agent?.error || 'Failed to load agent');
+          return;
+        }
+        const card = (agent.agentCardJson || {}) as Record<string, unknown>;
+        const cardSkills = (card.skills as Array<{ id?: string; name?: string; description?: string; instruction?: string }> | undefined) ?? [];
+        const mcpAccess = (card.mcpAccess as string[] | undefined) ?? [];
+        const cap = (card.capabilities as { streaming?: boolean; pushNotifications?: boolean; extensions?: { uri: string }[] } | undefined) ?? {};
+        const enabledExtUris = new Set((cap.extensions ?? []).map((e) => e.uri));
+
+        setDrafts([{
+          name: (card.name as string) || agent.displayName || '',
+          description: (card.description as string) || '',
+          systemPrompt: (card.systemPrompt as string) || '',
+          selectedMcp: new Set(mcpAccess.filter((m) => m !== 'slack')),
+          skills: cardSkills.map((s) => ({
+            name: s.name || '',
+            description: s.description || '',
+            instruction: s.instruction || '',
+          })),
+          coreCaps: {
+            streaming: !!cap.streaming,
+            pushNotifications: !!cap.pushNotifications,
+          },
+          extensions: DEFAULT_EXTENSIONS.map((e) => ({ ...e, enabled: enabledExtUris.has(e.uri) })),
+        }]);
+        setActiveTab(0);
+        setBuildResults([]);
+      })
+      .catch((err) => setGlobalError(err.message))
+      .finally(() => setLoadingEdit(false));
+  }, [agentEditId]);
 
   function addAgent() {
     setDrafts(prev => [...prev, newDraft()]);
@@ -261,8 +306,10 @@ export default function AgentBuildModal() {
           required: true,
         }));
 
-        const res = await fetch('/api/agents/build', {
-          method: 'POST',
+        const url = isEdit ? `/api/agents/${agentEditId}/build` : '/api/agents/build';
+        const method = isEdit ? 'PATCH' : 'POST';
+        const res = await fetch(url, {
+          method,
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             name: draft.name.trim(),
@@ -300,24 +347,31 @@ export default function AgentBuildModal() {
 
   function handleClose() {
     setAgentBuildOpen(false);
+    setAgentEditId(null);
     setDrafts([newDraft()]);
     setActiveTab(0);
     setBuildResults([]);
     setGlobalError(null);
   }
 
-  const isBatchMode = drafts.length > 1;
+  const isBatchMode = drafts.length > 1 && !isEdit;
   const allNamed = drafts.every(d => d.name.trim());
   const buildDone = buildResults.length > 0 && buildResults.every(r => r.status === 'done' || r.status === 'error');
 
   return (
-    <Dialog open={agentBuildOpen} onOpenChange={(open) => !open && handleClose()}>
+    <Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
       <DialogContent className="bg-[#1a1d21] border-white/10 text-white sm:max-w-lg max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-white text-xl flex items-center gap-2">
-            <Wrench className="w-5 h-5" /> Build {isBatchMode ? 'Agents' : 'an Agent'}
+            <Wrench className="w-5 h-5" />
+            {isEdit ? `Edit Agent` : `Build ${isBatchMode ? 'Agents' : 'an Agent'}`}
           </DialogTitle>
         </DialogHeader>
+        {loadingEdit && (
+          <div className="flex items-center gap-2 text-sm text-slate-400 py-3">
+            <Loader2 className="w-4 h-4 animate-spin" /> Loading agent…
+          </div>
+        )}
 
         <div className="mt-2">
           {/* Tabs for multiple agents */}
@@ -397,12 +451,12 @@ export default function AgentBuildModal() {
           )}
 
           <div className="flex items-center justify-between gap-2 pt-5 mt-2">
-            {!isBuilding && !buildDone && (
+            {!isBuilding && !buildDone && !isEdit && (
               <button onClick={addAgent} className="flex items-center gap-1.5 text-xs text-[#36c5f0] hover:text-white transition-colors">
                 <Plus className="w-3.5 h-3.5" /> Add another agent
               </button>
             )}
-            {(isBuilding || buildDone) && <div />}
+            {(isBuilding || buildDone || isEdit) && <div />}
             <div className="flex gap-2 ml-auto">
               <Button variant="ghost" onClick={handleClose} className="text-slate-400 hover:text-white hover:bg-white/10">
                 {buildDone ? 'Close' : 'Cancel'}
@@ -411,10 +465,12 @@ export default function AgentBuildModal() {
                 <Button onClick={handleBuildAll} disabled={!allNamed || isBuilding}
                   className="bg-[#4a154b] hover:bg-[#611f6a] text-white">
                   {isBuilding
-                    ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Building...</>
-                    : isBatchMode
-                      ? <><Bot className="w-4 h-4 mr-2" />Build all ({drafts.length})</>
-                      : <><Bot className="w-4 h-4 mr-2" />Create Agent</>
+                    ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />{isEdit ? 'Saving...' : 'Building...'}</>
+                    : isEdit
+                      ? <><Bot className="w-4 h-4 mr-2" />Save changes</>
+                      : isBatchMode
+                        ? <><Bot className="w-4 h-4 mr-2" />Build all ({drafts.length})</>
+                        : <><Bot className="w-4 h-4 mr-2" />Create Agent</>
                   }
                 </Button>
               )}

@@ -5,6 +5,7 @@ interface AppStore {
   searchOpen: boolean;
   agentInviteOpen: boolean;
   agentBuildOpen: boolean;
+  agentEditId: string | null;
   testAgent: { id: string; name: string } | null;
   createChannelOpen: boolean;
   browseChannelsOpen: boolean;
@@ -16,6 +17,7 @@ interface AppStore {
   setSearchOpen: (open: boolean) => void;
   setAgentInviteOpen: (open: boolean) => void;
   setAgentBuildOpen: (open: boolean) => void;
+  setAgentEditId: (agentId: string | null) => void;
   setTestAgent: (agent: { id: string; name: string } | null) => void;
   setCreateChannelOpen: (open: boolean) => void;
   setBrowseChannelsOpen: (open: boolean) => void;
@@ -31,6 +33,7 @@ export const useAppStore = create<AppStore>((set) => ({
   searchOpen: false,
   agentInviteOpen: false,
   agentBuildOpen: false,
+  agentEditId: null,
   testAgent: null,
   createChannelOpen: false,
   browseChannelsOpen: false,
@@ -42,6 +45,7 @@ export const useAppStore = create<AppStore>((set) => ({
   setSearchOpen: (open) => set({ searchOpen: open }),
   setAgentInviteOpen: (open) => set({ agentInviteOpen: open }),
   setAgentBuildOpen: (open) => set({ agentBuildOpen: open }),
+  setAgentEditId: (agentId) => set({ agentEditId: agentId }),
   setTestAgent: (agent) => set({ testAgent: agent }),
   setCreateChannelOpen: (open) => set({ createChannelOpen: open }),
   setBrowseChannelsOpen: (open) => set({ browseChannelsOpen: open }),
