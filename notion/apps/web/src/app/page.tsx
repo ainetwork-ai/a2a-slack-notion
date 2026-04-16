@@ -2,7 +2,13 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { apiFetch } from '@/lib/api';
+
+function getApiUrl() {
+  if (typeof window === 'undefined') {
+    return process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:3011';
+  }
+  return process.env['NEXT_PUBLIC_API_URL'] ?? `${window.location.protocol}//${window.location.hostname}:3011`;
+}
 
 export default function Home() {
   const router = useRouter();
@@ -10,14 +16,26 @@ export default function Home() {
   useEffect(() => {
     (async () => {
       try {
-        const data = await apiFetch<{ results?: { id: string }[] }>('/api/v1/workspaces');
-        const workspaces = data?.results ?? [];
-        if (workspaces.length > 0) {
-          router.replace(`/workspace/${workspaces[0].id}`);
+        const apiUrl = getApiUrl();
+        const res = await fetch(`${apiUrl}/api/v1/workspaces`, { credentials: 'include' });
+        if (res.status === 401) {
+          router.replace('/login');
           return;
         }
-      } catch {}
-      router.replace('/onboarding');
+        if (!res.ok) {
+          router.replace('/onboarding');
+          return;
+        }
+        const workspaces = (await res.json()) as { id: string }[];
+        const first = workspaces[0];
+        if (first) {
+          router.replace(`/workspace/${first.id}`);
+          return;
+        }
+        router.replace('/onboarding');
+      } catch {
+        router.replace('/onboarding');
+      }
     })();
   }, []);
 

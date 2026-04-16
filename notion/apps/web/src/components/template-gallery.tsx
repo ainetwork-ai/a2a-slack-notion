@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { X, FileText, Loader2 } from 'lucide-react';
+import { X, FileText, Loader2, Table2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { apiFetch } from '@/lib/api';
 
@@ -19,6 +19,7 @@ interface TemplateGalleryProps {
   workspaceId: string;
   parentId?: string;
   onClose: () => void;
+  onPageCreated?: () => void;
 }
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -29,7 +30,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   custom: 'Custom',
 };
 
-export function TemplateGallery({ workspaceId, parentId, onClose }: TemplateGalleryProps) {
+export function TemplateGallery({ workspaceId, parentId, onClose, onPageCreated }: TemplateGalleryProps) {
   const router = useRouter();
   const [templates, setTemplates] = useState<PageTemplate[]>([]);
   const [loading, setLoading] = useState(true);
@@ -49,6 +50,32 @@ export function TemplateGallery({ workspaceId, parentId, onClose }: TemplateGall
   const filtered =
     activeCategory === 'all' ? templates : templates.filter((t) => t.category === activeCategory);
 
+  function afterPageCreated(pageId: string) {
+    onPageCreated?.();
+    onClose();
+    router.push(`/workspace/${workspaceId}/${pageId}`);
+  }
+
+  async function handleNewDatabase() {
+    try {
+      setApplying('database');
+      const params = new URLSearchParams({ workspace_id: workspaceId });
+      if (parentId) params.set('parent_id', parentId);
+      const newPage = await apiFetch<{ id: string }>(
+        `/api/v1/pages?${params.toString()}`,
+        { method: 'POST', body: JSON.stringify({ title: 'Untitled Database' }) },
+      );
+      await apiFetch(`/api/v1/databases`, {
+        method: 'POST',
+        body: JSON.stringify({ parentId: newPage.id, workspaceId }),
+      });
+      afterPageCreated(newPage.id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create database');
+      setApplying(null);
+    }
+  }
+
   async function handleBlankPage() {
     try {
       setApplying('blank');
@@ -58,8 +85,7 @@ export function TemplateGallery({ workspaceId, parentId, onClose }: TemplateGall
         `/api/v1/pages?${params.toString()}`,
         { method: 'POST', body: JSON.stringify({ title: 'Untitled' }) },
       );
-      onClose();
-      router.push(`/workspace/${workspaceId}/${newPage.id}`);
+      afterPageCreated(newPage.id);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create page');
       setApplying(null);
@@ -75,8 +101,7 @@ export function TemplateGallery({ workspaceId, parentId, onClose }: TemplateGall
         `/api/v1/templates/${template.id}/apply?${params.toString()}`,
         { method: 'POST' },
       );
-      onClose();
-      router.push(`/workspace/${workspaceId}/${newPage.id}`);
+      afterPageCreated(newPage.id);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to apply template');
       setApplying(null);
@@ -145,6 +170,28 @@ export function TemplateGallery({ workspaceId, parentId, onClose }: TemplateGall
                 onClick={handleBlankPage}
               />
 
+              {/* New Database card */}
+              <button
+                onClick={handleNewDatabase}
+                disabled={applying === 'database'}
+                className={cn(
+                  'group flex flex-col items-start text-left p-4 rounded-[var(--radius-md)] border border-transparent',
+                  'hover:bg-[var(--bg-hover)] hover:border-[var(--divider)]',
+                  'transition-all duration-[var(--duration-micro)] disabled:opacity-60 disabled:cursor-not-allowed',
+                  'focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--accent-blue)]',
+                )}
+              >
+                <div className="flex items-center gap-2 mb-2 w-full">
+                  {applying === 'database' ? (
+                    <Loader2 size={24} className="animate-spin text-[var(--text-tertiary)] shrink-0" />
+                  ) : (
+                    <Table2 size={24} className="text-[var(--accent-blue)] shrink-0" />
+                  )}
+                </div>
+                <p className="text-sm font-medium text-[var(--text-primary)] leading-snug">New Database</p>
+                <p className="text-xs text-[var(--text-tertiary)] mt-0.5 leading-snug">Create a table, board, or list</p>
+              </button>
+
               {/* Template cards */}
               {filtered.map((tmpl) => (
                 <TemplateCard
@@ -189,7 +236,7 @@ function TemplateCard({ icon, name, description, category, loading, onClick }: T
         'group flex flex-col items-start text-left p-4 rounded-[var(--radius-md)] border border-transparent',
         'hover:bg-[var(--bg-hover)] hover:border-[var(--divider)]',
         'transition-all duration-[var(--duration-micro)] disabled:opacity-60 disabled:cursor-not-allowed',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-blue)]',
+        'focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--accent-blue)]',
       )}
     >
       <div className="flex items-center gap-2 mb-2 w-full">

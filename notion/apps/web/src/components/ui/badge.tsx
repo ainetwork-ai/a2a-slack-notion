@@ -27,7 +27,7 @@ export function Badge({ label, color = 'default', className, onRemove }: BadgePr
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1 rounded-[3px] px-1.5 py-0.5 text-xs font-medium leading-[1.4] max-w-[160px]',
+        'inline-flex items-center gap-1 rounded-[3px] px-1.5 py-0.5 text-xs font-medium leading-[1.4] max-w-full',
         className,
       )}
       style={{ backgroundColor: bg, color: text }}

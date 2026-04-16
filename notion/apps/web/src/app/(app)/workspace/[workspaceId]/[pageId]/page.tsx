@@ -2,12 +2,14 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'next/navigation';
-import { Star, FileQuestion, Clock, MoreHorizontal, BookTemplate, Download } from 'lucide-react';
+import { useAccount } from 'wagmi';
+import { Star, FileQuestion, Clock, MoreHorizontal, BookTemplate, Download, Share2 } from 'lucide-react';
 import Link from 'next/link';
 import type { JSONContent } from '@tiptap/react';
 import { Sidebar } from '@/components/sidebar/sidebar';
+import { SharePanel } from '@/components/share-panel';
 import { Breadcrumb } from '@/components/breadcrumb';
-import { BlockEditor } from '@/components/editor/block-editor';
+import { CollaborativeEditor } from '@/components/editor/collaborative-editor';
 import { DatabaseView } from '@/components/database/database-view';
 import { HistoryPanel } from '@/components/history-panel';
 import { SaveAsTemplateDialog } from '@/components/save-as-template-dialog';
@@ -30,6 +32,7 @@ interface PageData {
 
 export default function PageView() {
   const { workspaceId, pageId } = useParams<{ workspaceId: string; pageId: string }>();
+  const { address } = useAccount();
   const { setCurrentWorkspace, setWorkspaces, updatePageTitle, setFavorites } = useWorkspaceStore();
   const [page, setPage] = useState<PageData | null>(null);
   const [notFound, setNotFound] = useState(false);
@@ -38,6 +41,7 @@ export default function PageView() {
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const [saveTemplateOpen, setSaveTemplateOpen] = useState(false);
   const [breadcrumbKey, setBreadcrumbKey] = useState(0);
+  const [shareOpen, setShareOpen] = useState(false);
 
   const handleContentUpdate = useCallback(
     async (content: JSONContent) => {
@@ -138,7 +142,7 @@ export default function PageView() {
               title="Page history"
               aria-label="Page history"
               aria-pressed={historyOpen}
-              className={`p-1.5 rounded-[var(--radius-sm)] hover:bg-[var(--bg-hover)] transition-colors duration-[var(--duration-micro)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-blue)] ${historyOpen ? 'bg-[var(--bg-active)]' : ''}`}
+              className={`p-1.5 rounded-[var(--radius-sm)] hover:bg-[var(--bg-hover)] transition-colors duration-[var(--duration-micro)] focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--accent-blue)] ${historyOpen ? 'bg-[var(--bg-active)]' : ''}`}
             >
               <Clock
                 size={16}
@@ -150,13 +154,24 @@ export default function PageView() {
               onClick={toggleFavorite}
               aria-label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
               aria-pressed={isFavorite}
-              className="p-1.5 rounded-[var(--radius-sm)] hover:bg-[var(--bg-hover)] transition-colors duration-[var(--duration-micro)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-blue)]"
+              className="p-1.5 rounded-[var(--radius-sm)] hover:bg-[var(--bg-hover)] transition-colors duration-[var(--duration-micro)] focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--accent-blue)]"
             >
               <Star
                 size={16}
                 aria-hidden="true"
                 className={isFavorite ? 'fill-[var(--color-yellow)] text-[var(--color-yellow)]' : 'text-[var(--text-tertiary)]'}
               />
+            </button>
+
+            <button
+              onClick={() => setShareOpen((prev) => !prev)}
+              title="Share"
+              aria-label="Share"
+              aria-expanded={shareOpen}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-[var(--radius-sm)] text-sm font-medium transition-colors duration-[var(--duration-micro)] focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--accent-blue)] ${shareOpen ? 'bg-[var(--bg-active)] text-[var(--text-primary)]' : 'hover:bg-[var(--bg-hover)] text-[var(--text-secondary)]'}`}
+            >
+              <Share2 size={14} aria-hidden="true" />
+              Share
             </button>
 
             {/* More actions menu */}
@@ -167,7 +182,7 @@ export default function PageView() {
                 aria-label="More actions"
                 aria-expanded={moreMenuOpen}
                 aria-haspopup="menu"
-                className={`p-1.5 rounded-[var(--radius-sm)] hover:bg-[var(--bg-hover)] transition-colors duration-[var(--duration-micro)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-blue)] ${moreMenuOpen ? 'bg-[var(--bg-active)]' : ''}`}
+                className={`p-1.5 rounded-[var(--radius-sm)] hover:bg-[var(--bg-hover)] transition-colors duration-[var(--duration-micro)] focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--accent-blue)] ${moreMenuOpen ? 'bg-[var(--bg-active)]' : ''}`}
               >
                 <MoreHorizontal
                   size={16}
@@ -247,6 +262,16 @@ export default function PageView() {
             className="text-[40px] font-bold leading-[1.2] text-[var(--text-primary)] outline-none"
             contentEditable
             suppressContentEditableWarning
+            onFocus={(e) => {
+              const text = e.currentTarget.textContent?.trim() ?? '';
+              if (text === 'Untitled' || text === '') {
+                const range = document.createRange();
+                range.selectNodeContents(e.currentTarget);
+                const sel = window.getSelection();
+                sel?.removeAllRanges();
+                sel?.addRange(range);
+              }
+            }}
             onBlur={async (e) => {
               const title = e.currentTarget.textContent ?? '';
               await apiFetch(`/api/v1/pages/${pageId}`, {
@@ -260,12 +285,16 @@ export default function PageView() {
             {page?.title || 'Untitled'}
           </h1>
 
-          {/* Block editor */}
+          {/* Collaborative editor — real-time via Hocuspocus, includes block handle/context menu/DnD */}
           <div className="mt-4">
-            <BlockEditor
-              content={page?.content}
-              onUpdate={handleContentUpdate}
-            />
+            {pageId && (
+              <CollaborativeEditor
+                key={pageId}
+                pageId={pageId}
+                userName={address ?? 'Anonymous'}
+                workspaceId={workspaceId}
+              />
+            )}
           </div>
 
           {/* Inline database blocks */}
@@ -273,7 +302,7 @@ export default function PageView() {
             ?.filter((block) => block.type === 'database')
             .map((block) => (
               <div key={block.id} className="mt-4">
-                <DatabaseView databaseId={block.id} inline />
+                <DatabaseView databaseId={block.id} inline workspaceId={workspaceId} />
               </div>
             ))}
         </div>
@@ -303,6 +332,9 @@ export default function PageView() {
           onClose={() => setSaveTemplateOpen(false)}
         />
       )}
+
+      {/* Share panel */}
+      <SharePanel open={shareOpen} onClose={() => setShareOpen(false)} pageId={pageId} />
     </div>
   );
 }

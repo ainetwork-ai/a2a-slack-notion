@@ -179,7 +179,7 @@ export function PopoverContent({
       ref={contentRef}
       style={{ top: position.top, left: position.left, position: 'absolute' }}
       className={cn(
-        'z-[20] min-w-[180px] rounded-[6px] bg-[var(--bg-default)]',
+        'z-[60] min-w-[180px] rounded-[6px] bg-[var(--bg-default)]',
         'shadow-[0_0_0_1px_rgba(15,15,15,0.05),0_3px_6px_rgba(15,15,15,0.1),0_9px_24px_rgba(15,15,15,0.2)]',
         'animate-in fade-in-0 zoom-in-95 duration-150',
         className,

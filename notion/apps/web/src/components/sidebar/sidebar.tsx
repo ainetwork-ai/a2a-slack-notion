@@ -8,6 +8,8 @@ import { apiFetch } from '@/lib/api';
 import { useWorkspaceStore, type PageNode } from '@/stores/workspace';
 import { PageTreeItem } from './page-tree-item';
 import { TemplateGallery } from '@/components/template-gallery';
+import { AgentList } from './agent-list';
+import { MemberList } from './member-list';
 
 interface TrashedPage {
   id: string;
@@ -126,7 +128,7 @@ export function Sidebar({ workspaceId, activePageId }: SidebarProps) {
     <button
       onClick={() => setMobileOpen(true)}
       aria-label="Open sidebar"
-      className="md:hidden fixed top-2 left-2 z-[var(--z-sticky)] p-1.5 rounded-[var(--radius-sm)] hover:bg-[var(--bg-hover)] transition-colors duration-[var(--duration-micro)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-blue)]"
+      className="md:hidden fixed top-2 left-2 z-[var(--z-sticky)] p-1.5 rounded-[var(--radius-sm)] hover:bg-[var(--bg-hover)] transition-colors duration-[var(--duration-micro)] focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--accent-blue)]"
     >
       <Menu size={16} className="text-[var(--text-tertiary)]" />
     </button>
@@ -140,266 +142,13 @@ export function Sidebar({ workspaceId, activePageId }: SidebarProps) {
         <button
           onClick={toggleSidebar}
           aria-label="Expand sidebar"
-          className="hidden md:block fixed top-2 left-2 z-[var(--z-sticky)] p-1.5 rounded-[var(--radius-sm)] hover:bg-[var(--bg-hover)] transition-colors duration-[var(--duration-micro)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-blue)]"
+          className="hidden md:block fixed top-2 left-2 z-[var(--z-sticky)] p-1.5 rounded-[var(--radius-sm)] hover:bg-[var(--bg-hover)] transition-colors duration-[var(--duration-micro)] focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--accent-blue)]"
         >
           <ChevronsLeft size={16} className="rotate-180 text-[var(--text-tertiary)]" />
         </button>
       </>
     );
   }
-
-  const sidebarContent = (
-    <aside
-      role="navigation"
-      aria-label="Workspace sidebar"
-      className={cn(
-        'flex flex-col bg-[var(--bg-sidebar)] h-screen overflow-hidden',
-        // Desktop: relative positioning, shrink-0, fixed width, border-r
-        'md:relative md:shrink-0 md:border-r md:border-[var(--divider)] md:translate-x-0',
-        // Mobile: fixed full-height overlay from left, width 280px
-        'fixed inset-y-0 left-0 z-[var(--z-modal)] w-[280px]',
-        // On md+ override mobile fixed with relative
-        'md:static md:z-auto md:w-auto',
-      )}
-      style={{ width: undefined }}
-    >
-      {/* Desktop sidebar gets dynamic width via style; mobile is fixed 280px via class */}
-      <div
-        className="flex flex-col h-full"
-        style={{ width: window !== undefined ? `${sidebarWidth}px` : undefined }}
-      >
-        {/* Workspace header */}
-        <div className="flex items-center justify-between h-[44px] px-3">
-          <button
-            className="flex items-center gap-1.5 text-sm font-semibold text-[var(--text-primary)] hover:bg-[var(--bg-hover)] rounded-[var(--radius-sm)] px-1.5 py-1 truncate focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-blue)]"
-            aria-label={`Workspace: ${currentWorkspace?.name ?? 'Workspace'}`}
-          >
-            {currentWorkspace?.icon && <span aria-hidden="true">{currentWorkspace.icon}</span>}
-            <span className="truncate">{currentWorkspace?.name ?? 'Workspace'}</span>
-          </button>
-          <button
-            onClick={() => {
-              toggleSidebar();
-              handleMobileClose();
-            }}
-            aria-label="Collapse sidebar"
-            className="p-1 rounded-[var(--radius-sm)] hover:bg-[var(--bg-hover)] transition-colors duration-[var(--duration-micro)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-blue)]"
-          >
-            <ChevronsLeft size={16} className="text-[var(--text-tertiary)]" />
-          </button>
-        </div>
-
-        {/* Search */}
-        <div className="px-2 py-1">
-          <button
-            onClick={() => setSearchOpen(true)}
-            aria-label="Search pages (Cmd+K)"
-            className="flex items-center gap-2 w-full h-[28px] px-2 text-sm text-[var(--text-tertiary)] rounded-[var(--radius-sm)] hover:bg-[var(--bg-hover)] transition-colors duration-[var(--duration-micro)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-blue)]"
-          >
-            <Search size={14} aria-hidden="true" />
-            <span>Search</span>
-            <span className="ml-auto text-[10px] text-[var(--text-tertiary)] font-mono opacity-60" aria-hidden="true">⌘K</span>
-          </button>
-        </div>
-
-        {/* Scrollable content */}
-        <div className="flex-1 overflow-y-auto px-1 py-1">
-          {/* Favorites */}
-          {favorites.length > 0 && (
-            <SidebarSection label="Favorites" icon={<Star size={12} aria-hidden="true" />}>
-              {favorites.map((fav) => (
-                <PageTreeItem
-                  key={fav.id}
-                  page={fav}
-                  depth={0}
-                  workspaceId={workspaceId}
-                  activePageId={activePageId}
-                  onNavigate={handlePageNavigate}
-                />
-              ))}
-            </SidebarSection>
-          )}
-
-          {/* Recent */}
-          {recentPages.length > 0 && (
-            <SidebarSection label="Recent" icon={<Clock size={12} aria-hidden="true" />}>
-              {recentPages.slice(0, 5).map((r) => (
-                <div
-                  key={r.pageId}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => handlePageNavigate(`/workspace/${workspaceId}/${r.pageId}`)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      handlePageNavigate(`/workspace/${workspaceId}/${r.pageId}`);
-                    }
-                  }}
-                  aria-current={r.pageId === activePageId ? 'page' : undefined}
-                  className={cn(
-                    'flex items-center h-[28px] px-3 rounded-[var(--radius-sm)] cursor-pointer text-sm',
-                    'hover:bg-[var(--bg-hover)] transition-colors duration-[var(--duration-micro)]',
-                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-blue)]',
-                    r.pageId === activePageId && 'bg-[var(--bg-active)]',
-                  )}
-                >
-                  <span className="mr-1.5 text-sm" aria-hidden="true">{r.icon ?? '📄'}</span>
-                  <span className="truncate text-[var(--text-primary)]">{r.title || 'Untitled'}</span>
-                </div>
-              ))}
-            </SidebarSection>
-          )}
-
-          {/* Private pages */}
-          <SidebarSection
-            label="Private"
-            action={
-              <button
-                onClick={handleNewPage}
-                aria-label="New page"
-                className="p-0.5 rounded-[var(--radius-sm)] hover:bg-[var(--bg-active)] transition-colors duration-[var(--duration-micro)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-blue)]"
-              >
-                <Plus size={14} className="text-[var(--text-tertiary)]" aria-hidden="true" />
-              </button>
-            }
-          >
-            {pages.length === 0 ? (
-              <p className="px-3 py-2 text-xs text-[var(--text-tertiary)]">No pages yet</p>
-            ) : (
-              pages.map((page) => (
-                <PageTreeItem
-                  key={page.id}
-                  page={page}
-                  depth={0}
-                  workspaceId={workspaceId}
-                  activePageId={activePageId}
-                  onNavigate={handlePageNavigate}
-                />
-              ))
-            )}
-          </SidebarSection>
-        </div>
-
-        {/* Trash section */}
-        <div className="px-2 py-1 border-t border-[var(--divider)]">
-          <button
-            onClick={handleOpenTrash}
-            aria-label="Open trash"
-            className="flex items-center gap-2 w-full h-[28px] px-2 text-sm text-[var(--text-tertiary)] rounded-[var(--radius-sm)] hover:bg-[var(--bg-hover)] transition-colors duration-[var(--duration-micro)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-blue)]"
-          >
-            <Trash2 size={14} aria-hidden="true" />
-            <span>Trash</span>
-          </button>
-        </div>
-
-        {/* New page button */}
-        <div className="px-2 py-2 border-t border-[var(--divider)]">
-          <button
-            onClick={handleNewPage}
-            className="flex items-center gap-2 w-full h-[28px] px-2 text-sm text-[var(--text-tertiary)] rounded-[var(--radius-sm)] hover:bg-[var(--bg-hover)] transition-colors duration-[var(--duration-micro)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-blue)]"
-          >
-            <Plus size={14} aria-hidden="true" />
-            <span>New page</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Trash panel overlay */}
-      {trashOpen && (
-        <div
-          className="fixed inset-0 z-[var(--z-modal)] flex"
-          onClick={() => setTrashOpen(false)}
-        >
-          {/* Backdrop */}
-          <div className="absolute inset-0 bg-black/20" />
-
-          {/* Panel */}
-          <div
-            className="absolute left-0 top-0 h-full flex flex-col bg-[var(--bg-default)] shadow-[var(--shadow-panel)]"
-            style={{ width: '320px', marginLeft: `${sidebarWidth}px` }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Panel header */}
-            <div className="flex items-center justify-between px-4 h-[44px] border-b border-[var(--divider)] shrink-0">
-              <div className="flex items-center gap-2 text-sm font-semibold text-[var(--text-primary)]">
-                <Trash2 size={14} className="text-[var(--text-tertiary)]" aria-hidden="true" />
-                Trash
-              </div>
-              <button
-                onClick={() => setTrashOpen(false)}
-                aria-label="Close trash panel"
-                className="p-1 rounded-[var(--radius-sm)] hover:bg-[var(--bg-hover)] transition-colors duration-[var(--duration-micro)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-blue)]"
-              >
-                <X size={14} className="text-[var(--text-tertiary)]" aria-hidden="true" />
-              </button>
-            </div>
-
-            {/* Panel body */}
-            <div className="flex-1 overflow-y-auto py-1" role="status" aria-live="polite">
-              {trashLoading ? (
-                <div className="flex items-center justify-center py-8">
-                  <span className="text-xs text-[var(--text-tertiary)]">Loading…</span>
-                </div>
-              ) : trashError ? (
-                <div className="px-4 py-3 text-xs text-red-600">{trashError}</div>
-              ) : trashedPages.length === 0 ? (
-                <div className="px-4 py-8 text-center">
-                  <Trash2 size={24} className="mx-auto mb-2 text-[var(--text-tertiary)] opacity-40" aria-hidden="true" />
-                  <p className="text-xs text-[var(--text-tertiary)]">Trash is empty</p>
-                </div>
-              ) : (
-                trashedPages.map((page) => (
-                  <div
-                    key={page.id}
-                    className="flex items-center gap-2 px-3 py-2 hover:bg-[var(--bg-hover)] group"
-                  >
-                    <span className="text-base shrink-0" aria-hidden="true">{page.icon ?? '📄'}</span>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm text-[var(--text-primary)] truncate">
-                        {page.title || 'Untitled'}
-                      </p>
-                      <p className="text-[11px] text-[var(--text-tertiary)]">
-                        {new Date(page.archivedAt).toLocaleDateString(undefined, {
-                          month: 'short',
-                          day: 'numeric',
-                        })}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-[var(--duration-micro)] shrink-0">
-                      <button
-                        onClick={() => handleRestorePage(page.id).catch(console.error)}
-                        title="Restore"
-                        aria-label={`Restore ${page.title || 'Untitled'}`}
-                        className="p-1 rounded-[var(--radius-sm)] hover:bg-[var(--bg-active)] text-[var(--text-tertiary)] hover:text-[var(--accent-blue)] transition-colors duration-[var(--duration-micro)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-blue)]"
-                      >
-                        <RotateCcw size={13} aria-hidden="true" />
-                      </button>
-                      <button
-                        onClick={() => handleDeletePermanently(page.id).catch(console.error)}
-                        title="Delete permanently"
-                        aria-label={`Permanently delete ${page.title || 'Untitled'}`}
-                        className="p-1 rounded-[var(--radius-sm)] hover:bg-[var(--bg-active)] text-[var(--text-tertiary)] hover:text-red-500 transition-colors duration-[var(--duration-micro)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-blue)]"
-                      >
-                        <X size={13} aria-hidden="true" />
-                      </button>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Template gallery modal */}
-      {galleryOpen && (
-        <TemplateGallery
-          workspaceId={workspaceId}
-          onClose={() => setGalleryOpen(false)}
-        />
-      )}
-    </aside>
-  );
 
   return (
     <>
@@ -408,7 +157,7 @@ export function Sidebar({ workspaceId, activePageId }: SidebarProps) {
         <button
           onClick={() => setMobileOpen(true)}
           aria-label="Open sidebar"
-          className="md:hidden fixed top-2 left-2 z-[var(--z-sticky)] p-1.5 rounded-[var(--radius-sm)] hover:bg-[var(--bg-hover)] transition-colors duration-[var(--duration-micro)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-blue)]"
+          className="md:hidden fixed top-2 left-2 z-[var(--z-sticky)] p-1.5 rounded-[var(--radius-sm)] hover:bg-[var(--bg-hover)] transition-colors duration-[var(--duration-micro)] focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--accent-blue)]"
         >
           <Menu size={16} className="text-[var(--text-tertiary)]" />
         </button>
@@ -424,7 +173,7 @@ export function Sidebar({ workspaceId, activePageId }: SidebarProps) {
         {/* Workspace header */}
         <div className="flex items-center justify-between h-[44px] px-3">
           <button
-            className="flex items-center gap-1.5 text-sm font-semibold text-[var(--text-primary)] hover:bg-[var(--bg-hover)] rounded-[var(--radius-sm)] px-1.5 py-1 truncate focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-blue)]"
+            className="flex items-center gap-1.5 text-sm font-semibold text-[var(--text-primary)] hover:bg-[var(--bg-hover)] rounded-[var(--radius-sm)] px-1.5 py-1 truncate focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--accent-blue)]"
             aria-label={`Workspace: ${currentWorkspace?.name ?? 'Workspace'}`}
           >
             {currentWorkspace?.icon && <span aria-hidden="true">{currentWorkspace.icon}</span>}
@@ -433,7 +182,7 @@ export function Sidebar({ workspaceId, activePageId }: SidebarProps) {
           <button
             onClick={toggleSidebar}
             aria-label="Collapse sidebar"
-            className="p-1 rounded-[var(--radius-sm)] hover:bg-[var(--bg-hover)] transition-colors duration-[var(--duration-micro)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-blue)]"
+            className="p-1 rounded-[var(--radius-sm)] hover:bg-[var(--bg-hover)] transition-colors duration-[var(--duration-micro)] focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--accent-blue)]"
           >
             <ChevronsLeft size={16} className="text-[var(--text-tertiary)]" />
           </button>
@@ -444,7 +193,7 @@ export function Sidebar({ workspaceId, activePageId }: SidebarProps) {
           <button
             onClick={() => setSearchOpen(true)}
             aria-label="Search pages (Cmd+K)"
-            className="flex items-center gap-2 w-full h-[28px] px-2 text-sm text-[var(--text-tertiary)] rounded-[var(--radius-sm)] hover:bg-[var(--bg-hover)] transition-colors duration-[var(--duration-micro)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-blue)]"
+            className="flex items-center gap-2 w-full h-[28px] px-2 text-sm text-[var(--text-tertiary)] rounded-[var(--radius-sm)] hover:bg-[var(--bg-hover)] transition-colors duration-[var(--duration-micro)] focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--accent-blue)]"
           >
             <Search size={14} aria-hidden="true" />
             <span>Search</span>
@@ -488,7 +237,7 @@ export function Sidebar({ workspaceId, activePageId }: SidebarProps) {
                   className={cn(
                     'flex items-center h-[28px] px-3 rounded-[var(--radius-sm)] cursor-pointer text-sm',
                     'hover:bg-[var(--bg-hover)] transition-colors duration-[var(--duration-micro)]',
-                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-blue)]',
+                    'focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--accent-blue)]',
                     r.pageId === activePageId && 'bg-[var(--bg-active)]',
                   )}
                 >
@@ -506,7 +255,7 @@ export function Sidebar({ workspaceId, activePageId }: SidebarProps) {
               <button
                 onClick={handleNewPage}
                 aria-label="New page"
-                className="p-0.5 rounded-[var(--radius-sm)] hover:bg-[var(--bg-active)] transition-colors duration-[var(--duration-micro)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-blue)]"
+                className="p-0.5 rounded-[var(--radius-sm)] hover:bg-[var(--bg-active)] transition-colors duration-[var(--duration-micro)] focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--accent-blue)]"
               >
                 <Plus size={14} className="text-[var(--text-tertiary)]" aria-hidden="true" />
               </button>
@@ -526,6 +275,12 @@ export function Sidebar({ workspaceId, activePageId }: SidebarProps) {
               ))
             )}
           </SidebarSection>
+
+          {/* Members */}
+          <MemberList workspaceId={workspaceId} />
+
+          {/* Agents */}
+          <AgentList workspaceId={workspaceId} />
         </div>
 
         {/* Trash section */}
@@ -533,7 +288,7 @@ export function Sidebar({ workspaceId, activePageId }: SidebarProps) {
           <button
             onClick={handleOpenTrash}
             aria-label="Open trash"
-            className="flex items-center gap-2 w-full h-[28px] px-2 text-sm text-[var(--text-tertiary)] rounded-[var(--radius-sm)] hover:bg-[var(--bg-hover)] transition-colors duration-[var(--duration-micro)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-blue)]"
+            className="flex items-center gap-2 w-full h-[28px] px-2 text-sm text-[var(--text-tertiary)] rounded-[var(--radius-sm)] hover:bg-[var(--bg-hover)] transition-colors duration-[var(--duration-micro)] focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--accent-blue)]"
           >
             <Trash2 size={14} aria-hidden="true" />
             <span>Trash</span>
@@ -544,7 +299,7 @@ export function Sidebar({ workspaceId, activePageId }: SidebarProps) {
         <div className="px-2 py-2 border-t border-[var(--divider)]">
           <button
             onClick={handleNewPage}
-            className="flex items-center gap-2 w-full h-[28px] px-2 text-sm text-[var(--text-tertiary)] rounded-[var(--radius-sm)] hover:bg-[var(--bg-hover)] transition-colors duration-[var(--duration-micro)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-blue)]"
+            className="flex items-center gap-2 w-full h-[28px] px-2 text-sm text-[var(--text-tertiary)] rounded-[var(--radius-sm)] hover:bg-[var(--bg-hover)] transition-colors duration-[var(--duration-micro)] focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--accent-blue)]"
           >
             <Plus size={14} aria-hidden="true" />
             <span>New page</span>
@@ -575,7 +330,7 @@ export function Sidebar({ workspaceId, activePageId }: SidebarProps) {
                 <button
                   onClick={() => setTrashOpen(false)}
                   aria-label="Close trash panel"
-                  className="p-1 rounded-[var(--radius-sm)] hover:bg-[var(--bg-hover)] transition-colors duration-[var(--duration-micro)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-blue)]"
+                  className="p-1 rounded-[var(--radius-sm)] hover:bg-[var(--bg-hover)] transition-colors duration-[var(--duration-micro)] focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--accent-blue)]"
                 >
                   <X size={14} className="text-[var(--text-tertiary)]" aria-hidden="true" />
                 </button>
@@ -617,7 +372,7 @@ export function Sidebar({ workspaceId, activePageId }: SidebarProps) {
                           onClick={() => handleRestorePage(page.id).catch(console.error)}
                           title="Restore"
                           aria-label={`Restore ${page.title || 'Untitled'}`}
-                          className="p-1 rounded-[var(--radius-sm)] hover:bg-[var(--bg-active)] text-[var(--text-tertiary)] hover:text-[var(--accent-blue)] transition-colors duration-[var(--duration-micro)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-blue)]"
+                          className="p-1 rounded-[var(--radius-sm)] hover:bg-[var(--bg-active)] text-[var(--text-tertiary)] hover:text-[var(--accent-blue)] transition-colors duration-[var(--duration-micro)] focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--accent-blue)]"
                         >
                           <RotateCcw size={13} aria-hidden="true" />
                         </button>
@@ -625,7 +380,7 @@ export function Sidebar({ workspaceId, activePageId }: SidebarProps) {
                           onClick={() => handleDeletePermanently(page.id).catch(console.error)}
                           title="Delete permanently"
                           aria-label={`Permanently delete ${page.title || 'Untitled'}`}
-                          className="p-1 rounded-[var(--radius-sm)] hover:bg-[var(--bg-active)] text-[var(--text-tertiary)] hover:text-red-500 transition-colors duration-[var(--duration-micro)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-blue)]"
+                          className="p-1 rounded-[var(--radius-sm)] hover:bg-[var(--bg-active)] text-[var(--text-tertiary)] hover:text-red-500 transition-colors duration-[var(--duration-micro)] focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--accent-blue)]"
                         >
                           <X size={13} aria-hidden="true" />
                         </button>
@@ -638,13 +393,6 @@ export function Sidebar({ workspaceId, activePageId }: SidebarProps) {
           </div>
         )}
 
-        {/* Template gallery modal */}
-        {galleryOpen && (
-          <TemplateGallery
-            workspaceId={workspaceId}
-            onClose={() => setGalleryOpen(false)}
-          />
-        )}
       </aside>
 
       {/* Mobile overlay drawer */}
@@ -667,7 +415,7 @@ export function Sidebar({ workspaceId, activePageId }: SidebarProps) {
             {/* Workspace header */}
             <div className="flex items-center justify-between h-[44px] px-3">
               <button
-                className="flex items-center gap-1.5 text-sm font-semibold text-[var(--text-primary)] hover:bg-[var(--bg-hover)] rounded-[var(--radius-sm)] px-1.5 py-1 truncate focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-blue)]"
+                className="flex items-center gap-1.5 text-sm font-semibold text-[var(--text-primary)] hover:bg-[var(--bg-hover)] rounded-[var(--radius-sm)] px-1.5 py-1 truncate focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--accent-blue)]"
                 aria-label={`Workspace: ${currentWorkspace?.name ?? 'Workspace'}`}
               >
                 {currentWorkspace?.icon && <span aria-hidden="true">{currentWorkspace.icon}</span>}
@@ -676,7 +424,7 @@ export function Sidebar({ workspaceId, activePageId }: SidebarProps) {
               <button
                 onClick={handleMobileClose}
                 aria-label="Close sidebar"
-                className="p-1 rounded-[var(--radius-sm)] hover:bg-[var(--bg-hover)] transition-colors duration-[var(--duration-micro)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-blue)]"
+                className="p-1 rounded-[var(--radius-sm)] hover:bg-[var(--bg-hover)] transition-colors duration-[var(--duration-micro)] focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--accent-blue)]"
               >
                 <X size={16} className="text-[var(--text-tertiary)]" />
               </button>
@@ -690,7 +438,7 @@ export function Sidebar({ workspaceId, activePageId }: SidebarProps) {
                   handleMobileClose();
                 }}
                 aria-label="Search pages (Cmd+K)"
-                className="flex items-center gap-2 w-full h-[28px] px-2 text-sm text-[var(--text-tertiary)] rounded-[var(--radius-sm)] hover:bg-[var(--bg-hover)] transition-colors duration-[var(--duration-micro)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-blue)]"
+                className="flex items-center gap-2 w-full h-[28px] px-2 text-sm text-[var(--text-tertiary)] rounded-[var(--radius-sm)] hover:bg-[var(--bg-hover)] transition-colors duration-[var(--duration-micro)] focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--accent-blue)]"
               >
                 <Search size={14} aria-hidden="true" />
                 <span>Search</span>
@@ -735,7 +483,7 @@ export function Sidebar({ workspaceId, activePageId }: SidebarProps) {
                       className={cn(
                         'flex items-center h-[28px] px-3 rounded-[var(--radius-sm)] cursor-pointer text-sm',
                         'hover:bg-[var(--bg-hover)] transition-colors duration-[var(--duration-micro)]',
-                        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-blue)]',
+                        'focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--accent-blue)]',
                         r.pageId === activePageId && 'bg-[var(--bg-active)]',
                       )}
                     >
@@ -753,7 +501,7 @@ export function Sidebar({ workspaceId, activePageId }: SidebarProps) {
                   <button
                     onClick={handleNewPage}
                     aria-label="New page"
-                    className="p-0.5 rounded-[var(--radius-sm)] hover:bg-[var(--bg-active)] transition-colors duration-[var(--duration-micro)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-blue)]"
+                    className="p-0.5 rounded-[var(--radius-sm)] hover:bg-[var(--bg-active)] transition-colors duration-[var(--duration-micro)] focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--accent-blue)]"
                   >
                     <Plus size={14} className="text-[var(--text-tertiary)]" aria-hidden="true" />
                   </button>
@@ -774,6 +522,12 @@ export function Sidebar({ workspaceId, activePageId }: SidebarProps) {
                   ))
                 )}
               </SidebarSection>
+
+              {/* Members */}
+              <MemberList workspaceId={workspaceId} />
+
+              {/* Agents */}
+              <AgentList workspaceId={workspaceId} />
             </div>
 
             {/* Trash section */}
@@ -781,7 +535,7 @@ export function Sidebar({ workspaceId, activePageId }: SidebarProps) {
               <button
                 onClick={handleOpenTrash}
                 aria-label="Open trash"
-                className="flex items-center gap-2 w-full h-[28px] px-2 text-sm text-[var(--text-tertiary)] rounded-[var(--radius-sm)] hover:bg-[var(--bg-hover)] transition-colors duration-[var(--duration-micro)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-blue)]"
+                className="flex items-center gap-2 w-full h-[28px] px-2 text-sm text-[var(--text-tertiary)] rounded-[var(--radius-sm)] hover:bg-[var(--bg-hover)] transition-colors duration-[var(--duration-micro)] focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--accent-blue)]"
               >
                 <Trash2 size={14} aria-hidden="true" />
                 <span>Trash</span>
@@ -792,7 +546,7 @@ export function Sidebar({ workspaceId, activePageId }: SidebarProps) {
             <div className="px-2 py-2 border-t border-[var(--divider)]">
               <button
                 onClick={handleNewPage}
-                className="flex items-center gap-2 w-full h-[28px] px-2 text-sm text-[var(--text-tertiary)] rounded-[var(--radius-sm)] hover:bg-[var(--bg-hover)] transition-colors duration-[var(--duration-micro)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-blue)]"
+                className="flex items-center gap-2 w-full h-[28px] px-2 text-sm text-[var(--text-tertiary)] rounded-[var(--radius-sm)] hover:bg-[var(--bg-hover)] transition-colors duration-[var(--duration-micro)] focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--accent-blue)]"
               >
                 <Plus size={14} aria-hidden="true" />
                 <span>New page</span>
@@ -807,6 +561,11 @@ export function Sidebar({ workspaceId, activePageId }: SidebarProps) {
         <TemplateGallery
           workspaceId={workspaceId}
           onClose={() => setGalleryOpen(false)}
+          onPageCreated={() => {
+            apiFetch<PageNode[]>(`/api/v1/pages?workspace_id=${workspaceId}`)
+              .then(setPages)
+              .catch(console.error);
+          }}
         />
       )}
     </>

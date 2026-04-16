@@ -42,6 +42,20 @@
   --duration-micro: 100ms;
   --duration-short: 150ms;
   --duration-medium: 200ms;
+
+  /* Max-widths (explicit to avoid Tailwind v4 spacing-scale collision) */
+  --max-w-xs: 20rem;
+  --max-w-sm: 24rem;
+  --max-w-md: 28rem;
+  --max-w-lg: 32rem;
+  --max-w-xl: 36rem;
+  --max-w-2xl: 42rem;
+  --max-w-3xl: 48rem;
+  --max-w-4xl: 56rem;
+  --max-w-5xl: 64rem;
+  --max-w-6xl: 72rem;
+  --max-w-7xl: 80rem;
+  --max-w-prose: 65ch;
 }
 
 /* =============================================
@@ -138,6 +152,11 @@ body {
   border-color: var(--divider);
 }
 
+/* Reset browser UA button border — Tailwind v4 * reset doesn't override element-level UA styles */
+button, input, select, textarea {
+  border-width: 0;
+}
+
 /* Scrollbar — overlay macOS style */
 ::-webkit-scrollbar {
   width: 8px;
@@ -157,6 +176,15 @@ body {
   background: var(--text-secondary);
 }
 
+@keyframes slash-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.slash-command-menu {
+  animation: slash-fade-in 100ms ease-out;
+}
+
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
@@ -164,4 +192,122 @@ body {
 @keyframes pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.5; }
+}
+
+/* Block handle overlay */
+.block-handle-container {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  user-select: none;
+}
+
+.block-handle-btn {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-tertiary);
+  border-radius: 3px;
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 0;
+  transition: background-color 100ms ease, color 100ms ease;
+}
+
+.block-handle-btn:hover {
+  background-color: var(--bg-hover);
+  color: var(--text-secondary);
+}
+
+.block-handle-btn:active {
+  background-color: var(--bg-active);
+}
+
+.block-handle-btn--drag {
+  cursor: grab;
+}
+
+.block-handle-btn--drag:active {
+  cursor: grabbing;
+}
+
+/* Drag-and-drop block styles */
+.notion-editor.is-dragging .tiptap > * {
+  transition: transform 150ms ease-in-out;
+}
+
+.notion-editor .tiptap [data-dragging="true"] {
+  opacity: 0.25;
+}
+
+@keyframes menu-fade-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Block selection highlight */
+.block-selected {
+  background-color: var(--selection, rgba(35, 131, 226, 0.14));
+  border-left: 2px solid var(--accent-blue);
+  margin-left: -2px;
+  border-radius: var(--radius-sm);
+}
+
+.ProseMirror-selectednode {
+  background-color: var(--selection, rgba(35, 131, 226, 0.14)) !important;
+  border-left: 2px solid var(--accent-blue) !important;
+  margin-left: -2px !important;
+  outline: none !important;
+}
+
+/* Toggle block */
+.toggle-content {
+  overflow: hidden;
+  transition: max-height var(--duration-short) ease-in-out, opacity var(--duration-micro) ease;
+}
+.toggle-content--open {
+  max-height: 2000px;
+  opacity: 1;
+}
+.toggle-content--closed {
+  max-height: 0;
+  opacity: 0;
+  overflow: hidden;
+}
+
+/* Columns block */
+.columns-block {
+  position: relative;
+}
+.notion-editor .tiptap div[data-type="column-cell"] {
+  min-width: 100px;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+}
+.notion-editor .tiptap div[data-type="column-cell"]:focus-within {
+  background: var(--bg-hover);
+}
+
+/* Block creation animation */
+@keyframes block-fade-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.block-just-created {
+  animation: block-fade-in 150ms ease-out;
+}
+
+/* Block deletion animation */
+@keyframes block-fade-out {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+
+.block-deleting {
+  animation: block-fade-out 150ms ease-in forwards;
+  pointer-events: none;
 }

@@ -102,7 +102,7 @@ export function SaveAsTemplateDialog({
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full px-3 py-2 text-sm rounded-[var(--radius-sm)] border border-[var(--divider)] bg-[var(--bg-default)] text-[var(--text-primary)] outline-none focus:ring-2 focus:ring-[var(--accent-blue)] transition"
+              className="w-full px-3 py-2 text-sm rounded-[var(--radius-sm)] border border-[var(--divider)] bg-[var(--bg-default)] text-[var(--text-primary)] outline-none focus:shadow-[0_0_0_2px_var(--accent-blue)] transition"
               placeholder="Template name"
               autoFocus
             />
@@ -114,7 +114,7 @@ export function SaveAsTemplateDialog({
             <select
               value={category}
               onChange={(e) => setCategory(e.target.value)}
-              className="w-full px-3 py-2 text-sm rounded-[var(--radius-sm)] border border-[var(--divider)] bg-[var(--bg-default)] text-[var(--text-primary)] outline-none focus:ring-2 focus:ring-[var(--accent-blue)] transition"
+              className="w-full px-3 py-2 text-sm rounded-[var(--radius-sm)] border border-[var(--divider)] bg-[var(--bg-default)] text-[var(--text-primary)] outline-none focus:shadow-[0_0_0_2px_var(--accent-blue)] transition"
             >
               {CATEGORIES.map((c) => (
                 <option key={c.value} value={c.value}>

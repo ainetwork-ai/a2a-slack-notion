@@ -63,7 +63,7 @@ export function PageTreeItem({ page, depth, workspaceId, activePageId, onNavigat
         className={cn(
           'group flex items-center h-[28px] px-2 rounded-[var(--radius-sm)] cursor-pointer text-sm',
           'hover:bg-[var(--bg-hover)] transition-colors duration-[var(--duration-micro)]',
-          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-blue)]',
+          'focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--accent-blue)]',
           isActive && 'bg-[var(--bg-active)]',
         )}
         style={{ paddingLeft: `${8 + depth * 16}px` }}
@@ -89,7 +89,7 @@ export function PageTreeItem({ page, depth, workspaceId, activePageId, onNavigat
           className={cn(
             'flex items-center justify-center w-5 h-5 rounded-[var(--radius-sm)] shrink-0',
             'hover:bg-[var(--bg-active)] transition-colors duration-[var(--duration-micro)]',
-            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-blue)]',
+            'focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--accent-blue)]',
             !page.hasChildren && 'invisible',
           )}
         >
@@ -117,7 +117,7 @@ export function PageTreeItem({ page, depth, workspaceId, activePageId, onNavigat
         <button
           onClick={handleCreate}
           aria-label={`Add page under ${page.title || 'Untitled'}`}
-          className="opacity-0 group-hover:opacity-100 flex items-center justify-center w-5 h-5 rounded-[var(--radius-sm)] hover:bg-[var(--bg-active)] shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-blue)] focus-visible:opacity-100"
+          className="opacity-0 group-hover:opacity-100 flex items-center justify-center w-5 h-5 rounded-[var(--radius-sm)] hover:bg-[var(--bg-active)] shrink-0 focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--accent-blue)] focus-visible:opacity-100"
         >
           <Plus size={14} className="text-[var(--text-tertiary)]" aria-hidden="true" />
         </button>
