@@ -105,19 +105,17 @@ export default function WalletLogin() {
           ? String((err as { message: unknown }).message)
           : 'Login failed. Please try again.';
 
-      if (typeof err === 'object' && err !== null && 'code' in err) {
-        const code = (err as { code: number }).code;
-        if (code === 4001) {
-          setError('Signature rejected. Please try again.');
-        } else {
-          setError(msg);
-        }
+      const isRejected = typeof err === 'object' && err !== null && 'code' in err
+        && (err as { code: number }).code === 4001;
+
+      if (isRejected) {
+        setError('Signature rejected. Click "Sign Again" to retry.');
+        // Keep wallet connected — don't force full reconnect on rejection
       } else {
         setError(msg);
+        disconnect();
+        setAutoSignTriggered(false);
       }
-
-      disconnect();
-      setAutoSignTriggered(false);
     } finally {
       setIsLoading(false);
       setLoadingStep('');
@@ -170,6 +168,14 @@ export default function WalletLogin() {
         {error && (
           <div className="mt-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
             <p className="text-sm text-red-400">{error}</p>
+            {isConnected && error.includes('Sign Again') && (
+              <button
+                onClick={() => { setError(null); handleSign(address!); }}
+                className="mt-2 w-full text-center text-sm font-medium text-white bg-[#f6851b] hover:bg-[#e2761b] rounded-md py-1.5"
+              >
+                Sign Again
+              </button>
+            )}
           </div>
         )}
 
