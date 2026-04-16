@@ -130,7 +130,7 @@ const server = new Server({
 });
 
 export function startHocuspocus() {
-  const port = Number(process.env['HOCUSPOCUS_PORT'] ?? 3002);
+  const port = Number(process.env['HOCUSPOCUS_PORT'] ?? 3012);
   server.listen(port, () => {
     logger.info(`Hocuspocus WebSocket server running on port ${port}`);
   });

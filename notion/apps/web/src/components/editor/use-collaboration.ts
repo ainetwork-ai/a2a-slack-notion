@@ -35,7 +35,7 @@ export function useCollaboration({ pageId, userName, userColor }: UseCollaborati
 
   const { ydoc, provider } = useMemo(() => {
     const doc = new Y.Doc();
-    const wsUrl = process.env['NEXT_PUBLIC_WS_URL'] ?? 'ws://localhost:3002';
+    const wsUrl = process.env['NEXT_PUBLIC_WS_URL'] ?? 'ws://localhost:3012';
 
     const prov = new HocuspocusProvider({
       url: wsUrl,
