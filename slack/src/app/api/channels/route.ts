@@ -69,10 +69,33 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Channel name is required" }, { status: 400 });
   }
 
+  const trimmed = name.trim();
+
+  if (workspaceId) {
+    const [existing] = await db
+      .select({ id: channels.id })
+      .from(channels)
+      .where(
+        and(
+          eq(channels.workspaceId, workspaceId),
+          eq(channels.name, trimmed),
+          eq(channels.isArchived, false)
+        )
+      )
+      .limit(1);
+
+    if (existing) {
+      return NextResponse.json(
+        { error: `Channel #${trimmed} already exists`, existingId: existing.id },
+        { status: 409 }
+      );
+    }
+  }
+
   const [channel] = await db
     .insert(channels)
     .values({
-      name: name.trim(),
+      name: trimmed,
       description: description || null,
       isPrivate: isPrivate ?? false,
       createdBy: user.id,

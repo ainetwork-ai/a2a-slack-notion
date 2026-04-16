@@ -347,6 +347,8 @@ async function createAgent(
       agentCardJson: agentCard,
       encryptedPrivateKey: encryptedPk,
       ownerId: userId,
+      agentInvitedBy: userId,
+      agentVisibility: "private",
     })
     .returning();
 
@@ -410,6 +412,45 @@ async function createChannel(
     .limit(1);
 
   const workspaceId = membership?.workspaceId ?? null;
+
+  // Reuse existing channel with the same name in this workspace — Builder should
+  // never create duplicates even if the user re-asks for the same channel.
+  if (workspaceId) {
+    const [existing] = await db
+      .select()
+      .from(channels)
+      .where(
+        and(
+          eq(channels.workspaceId, workspaceId),
+          eq(channels.name, def.channelName),
+          eq(channels.isArchived, false)
+        )
+      )
+      .limit(1);
+
+    if (existing) {
+      await db
+        .insert(channelMembers)
+        .values({ channelId: existing.id, userId, role: "member" })
+        .onConflictDoNothing();
+
+      if (def.inviteAgents && def.inviteAgents.length > 0) {
+        const namesToInvite = new Set(def.inviteAgents.map((n) => n.toLowerCase()));
+        const agentsToInvite =
+          def.inviteAgents[0] === "*"
+            ? allCreatedAgents
+            : allCreatedAgents.filter((a) => namesToInvite.has(a.name.toLowerCase()));
+        for (const agent of agentsToInvite) {
+          await db
+            .insert(channelMembers)
+            .values({ channelId: existing.id, userId: agent.id, role: "member" })
+            .onConflictDoNothing();
+        }
+      }
+
+      return { id: existing.id, name: existing.name };
+    }
+  }
 
   const [channel] = await db
     .insert(channels)

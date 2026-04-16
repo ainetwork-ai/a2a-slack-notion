@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   pgTable,
   uuid,
@@ -77,19 +78,29 @@ export const inviteTokens = pgTable("invite_tokens", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-export const channels = pgTable("channels", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  name: text("name").notNull(),
-  description: text("description"),
-  isPrivate: boolean("is_private").default(false).notNull(),
-  isArchived: boolean("is_archived").default(false).notNull(),
-  createdBy: uuid("created_by").references(() => users.id),
-  workspaceId: uuid("workspace_id").references(() => workspaces.id, {
-    onDelete: "cascade",
-  }),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+export const channels = pgTable(
+  "channels",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    name: text("name").notNull(),
+    description: text("description"),
+    isPrivate: boolean("is_private").default(false).notNull(),
+    isArchived: boolean("is_archived").default(false).notNull(),
+    createdBy: uuid("created_by").references(() => users.id),
+    workspaceId: uuid("workspace_id").references(() => workspaces.id, {
+      onDelete: "cascade",
+    }),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (t) => [
+    // Only one active (non-archived) channel per (workspace, name).
+    // Archived channels keep their original name so scroll-back references stay valid.
+    uniqueIndex("channels_workspace_name_active")
+      .on(t.workspaceId, t.name)
+      .where(sql`${t.isArchived} = false`),
+  ]
+);
 
 export const channelFolders = pgTable(
   "channel_folders",
