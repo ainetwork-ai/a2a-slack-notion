@@ -405,49 +405,45 @@ export default function AgentTester() {
         </div>
       </div>
 
-      {/* ────────── Main panel ────────── */}
-      <div className="flex-1 pl-4 flex flex-col min-w-0 overflow-hidden">
-        {!selectedAgent ? (
-          <div className="flex-1 flex items-center justify-center text-zinc-600">
-            <div className="text-center">
-              <Bot className="w-12 h-12 mx-auto mb-3 opacity-30" />
-              <p className="text-sm">좌측에서 에이전트를 선택하세요</p>
-            </div>
+      {/* ────────── Main panel: form + results side by side ────────── */}
+      {!selectedAgent ? (
+        <div className="flex-1 flex items-center justify-center text-zinc-600">
+          <div className="text-center">
+            <Bot className="w-12 h-12 mx-auto mb-3 opacity-30" />
+            <p className="text-sm">좌측에서 에이전트를 선택하세요</p>
           </div>
-        ) : (
-          <>
-            {/* Agent header */}
-            <div className="border border-zinc-800 rounded-lg px-4 py-3 bg-zinc-950 mb-3 shrink-0">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-600 to-purple-600 flex items-center justify-center text-sm font-bold shrink-0">
-                  {selectedAgent.name.charAt(0)}
+        </div>
+      ) : (
+        <div className="flex-1 flex min-w-0">
+          {/* ── Form column ── */}
+          <div className="w-[380px] shrink-0 border-r border-zinc-800 px-4 flex flex-col overflow-hidden">
+            {/* Agent header (compact) */}
+            <div className="flex items-center gap-2.5 py-3 border-b border-zinc-800 mb-3 shrink-0">
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-600 to-purple-600 flex items-center justify-center text-xs font-bold shrink-0">
+                {selectedAgent.name.charAt(0)}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <span className="font-medium text-sm">{selectedAgent.name}</span>
+                  <span className="text-[10px] text-zinc-500">{selectedAgent.nameKor}</span>
+                  <span className={`text-[9px] px-1 py-0.5 rounded ${ROLE_COLORS[selectedAgent.role]} bg-zinc-800`}>
+                    {ROLE_LABELS[selectedAgent.role]}
+                  </span>
+                  <span
+                    className={`w-1.5 h-1.5 rounded-full ml-auto shrink-0 ${
+                      healthMap[selectedAgent.id] === true ? "bg-green-500" : healthMap[selectedAgent.id] === false ? "bg-red-500" : "bg-zinc-600"
+                    }`}
+                  />
                 </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium">{selectedAgent.name}</span>
-                    <span className="text-xs text-zinc-500">{selectedAgent.nameKor}</span>
-                    <span className={`text-[10px] px-1.5 py-0.5 rounded ${ROLE_COLORS[selectedAgent.role]} bg-zinc-800`}>
-                      {ROLE_LABELS[selectedAgent.role]}
-                    </span>
-                  </div>
-                  <div className="text-xs text-zinc-500 mt-0.5">{selectedAgent.specialty}</div>
-                  {selectedCard?.description && (
-                    <div className="text-xs text-zinc-400 mt-1">{selectedCard.description}</div>
-                  )}
-                </div>
-                <span
-                  className={`w-2 h-2 rounded-full shrink-0 ${
-                    healthMap[selectedAgent.id] === true ? "bg-green-500" : healthMap[selectedAgent.id] === false ? "bg-red-500" : "bg-zinc-600"
-                  }`}
-                />
+                <div className="text-[10px] text-zinc-500 truncate">{selectedAgent.specialty}</div>
               </div>
             </div>
 
             {/* Skill selector */}
-            <div className="flex items-center gap-2 mb-2 shrink-0 flex-wrap">
+            <div className="flex items-center gap-1.5 mb-3 shrink-0 flex-wrap">
               <button
                 onClick={() => setSelectedSkill("")}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition-colors ${
                   !selectedSkill
                     ? "bg-zinc-700 text-zinc-100"
                     : "bg-zinc-900 text-zinc-400 hover:bg-zinc-800"
@@ -460,7 +456,7 @@ export default function AgentTester() {
                 <button
                   key={s.id}
                   onClick={() => setSelectedSkill(s.id)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                  className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition-colors ${
                     selectedSkill === s.id
                       ? "bg-blue-600 text-white"
                       : "bg-zinc-900 text-zinc-400 hover:bg-zinc-800"
@@ -472,75 +468,72 @@ export default function AgentTester() {
               ))}
             </div>
 
-            {/* Scrollable form area: news search + variables */}
-            {selectedSkill && (
-              <div className="mb-3 shrink-0 overflow-y-auto max-h-[45vh] space-y-3">
-                {/* News search (report skill — auto-fill BASIC_ARTICLE_SOURCE) */}
-                {selectedSkill === "report" && (
-                  <div className="border border-amber-900/40 rounded-lg p-3 bg-amber-950/20 space-y-2">
-                    <div className="text-[10px] font-medium text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
-                      <Search className="w-3 h-3" />
-                      News Search — 실제 뉴스로 원문 자동 채우기
+            {/* Scrollable form body */}
+            <div className="flex-1 overflow-y-auto space-y-3 pb-3">
+              {/* News search (report skill) */}
+              {selectedSkill === "report" && (
+                <div className="border border-amber-900/40 rounded-lg p-2.5 bg-amber-950/20 space-y-2">
+                  <div className="text-[10px] font-medium text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <Search className="w-3 h-3" />
+                    News Search
+                  </div>
+                  <div className="flex gap-1.5">
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && searchNews()}
+                      placeholder="bitcoin ETF, 이더리움..."
+                      className="flex-1 px-2 py-1.5 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-200 focus:outline-none focus:border-amber-600 placeholder:text-zinc-600"
+                    />
+                    <button
+                      onClick={searchNews}
+                      disabled={searching || !searchQuery.trim()}
+                      className="flex items-center gap-1 px-2.5 py-1.5 bg-amber-600 hover:bg-amber-500 disabled:bg-zinc-800 disabled:text-zinc-600 rounded-lg text-xs font-medium transition-colors shrink-0"
+                    >
+                      {searching ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
+                  {newsItems.length > 0 && (
+                    <div className="space-y-1">
+                      {newsItems.map((item, i) => (
+                        <button
+                          key={i}
+                          onClick={() => selectNewsItem(item)}
+                          className="w-full text-left p-2 rounded bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-amber-700 transition-colors"
+                        >
+                          <div className="text-[11px] font-medium text-zinc-200 line-clamp-1">{item.title}</div>
+                          <div className="text-[10px] text-zinc-500 line-clamp-2 mt-0.5">{item.snippet}</div>
+                        </button>
+                      ))}
                     </div>
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        onKeyDown={(e) => e.key === "Enter" && searchNews()}
-                        placeholder="검색 키워드 (예: bitcoin ETF, 이더리움 업그레이드)"
-                        className="flex-1 px-2 py-1.5 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-200 focus:outline-none focus:border-amber-600 placeholder:text-zinc-600"
+                  )}
+                </div>
+              )}
+
+              {/* Variables */}
+              {selectedSkill && SKILL_VARIABLES[selectedSkill] && SKILL_VARIABLES[selectedSkill].length > 0 && (
+                <div className="border border-zinc-800 rounded-lg p-2.5 bg-zinc-950 space-y-2">
+                  <div className="text-[10px] font-medium text-zinc-500 uppercase tracking-wider">Variables</div>
+                  {SKILL_VARIABLES[selectedSkill].map((v) => (
+                    <div key={v.key}>
+                      <label className="text-[10px] text-zinc-400 block mb-0.5">{v.label}</label>
+                      <textarea
+                        value={variableValues[v.key] ?? ""}
+                        onChange={(e) =>
+                          setVariableValues((prev) => ({ ...prev, [v.key]: e.target.value }))
+                        }
+                        rows={v.autoToday ? 1 : 2}
+                        className="w-full px-2 py-1 rounded bg-zinc-900 border border-zinc-800 text-[11px] font-mono text-zinc-200 resize-y focus:outline-none focus:border-zinc-600"
                       />
-                      <button
-                        onClick={searchNews}
-                        disabled={searching || !searchQuery.trim()}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 hover:bg-amber-500 disabled:bg-zinc-800 disabled:text-zinc-600 rounded-lg text-xs font-medium transition-colors shrink-0"
-                      >
-                        {searching ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
-                        {searching ? "..." : "Search"}
-                      </button>
                     </div>
-                    {newsItems.length > 0 && (
-                      <div className="space-y-1">
-                        {newsItems.map((item, i) => (
-                          <button
-                            key={i}
-                            onClick={() => selectNewsItem(item)}
-                            className="w-full text-left p-2 rounded bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-amber-700 transition-colors"
-                          >
-                            <div className="text-xs font-medium text-zinc-200 line-clamp-1">{item.title}</div>
-                            <div className="text-[10px] text-zinc-500 line-clamp-2 mt-0.5">{item.snippet}</div>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
+                  ))}
+                </div>
+              )}
+            </div>
 
-                {/* Variables */}
-                {SKILL_VARIABLES[selectedSkill] && SKILL_VARIABLES[selectedSkill].length > 0 && (
-                  <div className="border border-zinc-800 rounded-lg p-3 bg-zinc-950 space-y-2">
-                    <div className="text-[10px] font-medium text-zinc-500 uppercase tracking-wider">Variables</div>
-                    {SKILL_VARIABLES[selectedSkill].map((v) => (
-                      <div key={v.key}>
-                        <label className="text-[11px] text-zinc-400 block mb-0.5">{v.label}</label>
-                        <textarea
-                          value={variableValues[v.key] ?? ""}
-                          onChange={(e) =>
-                            setVariableValues((prev) => ({ ...prev, [v.key]: e.target.value }))
-                          }
-                          rows={v.autoToday ? 1 : 3}
-                          className="w-full px-2 py-1.5 rounded bg-zinc-900 border border-zinc-800 text-xs font-mono text-zinc-200 resize-y focus:outline-none focus:border-zinc-600"
-                        />
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Message input */}
-            <div className="flex gap-2 mb-3 shrink-0">
+            {/* Message input + Send (pinned to bottom) */}
+            <div className="flex gap-2 py-3 border-t border-zinc-800 shrink-0">
               <input
                 type="text"
                 value={userMessage}
@@ -548,41 +541,45 @@ export default function AgentTester() {
                 onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && sendTest()}
                 placeholder={
                   selectedSkill
-                    ? `${selectedSkill} 스킬에 보낼 메시지...`
-                    : `${selectedAgent.name}에게 자유 질문...`
+                    ? `${selectedSkill} 메시지...`
+                    : `${selectedAgent.name}에게 질문...`
                 }
                 disabled={sending}
-                className="flex-1 px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-lg text-sm focus:outline-none focus:border-blue-500 placeholder:text-zinc-600 disabled:opacity-50"
+                className="flex-1 px-2.5 py-1.5 bg-zinc-900 border border-zinc-800 rounded-lg text-xs focus:outline-none focus:border-blue-500 placeholder:text-zinc-600 disabled:opacity-50"
               />
               <button
                 onClick={sendTest}
                 disabled={!userMessage.trim() || sending}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-800 disabled:text-zinc-600 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-800 disabled:text-zinc-600 rounded-lg text-xs font-medium transition-colors flex items-center gap-1.5"
               >
-                {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                Send
+                {sending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
               </button>
             </div>
+          </div>
 
-            {/* Results */}
-            <div className="flex-1 overflow-y-auto space-y-3 pr-1">
-              {results
-                .filter((r) => r.agentId === selectedId)
-                .map((r) => (
-                  <ResultCard
-                    key={r.id}
-                    result={r}
-                    agentName={selectedAgent.name}
-                    expanded={expanded[r.id] ?? {}}
-                    onToggle={(section) => toggleSection(r.id, section)}
-                    sending={sending && !r.responseText && !r.error}
-                  />
-                ))}
-              <div ref={resultsEnd} />
-            </div>
-          </>
-        )}
-      </div>
+          {/* ── Results column ── */}
+          <div className="flex-1 pl-4 overflow-y-auto space-y-3 pr-1 py-3">
+            {results.filter((r) => r.agentId === selectedId).length === 0 && (
+              <div className="flex items-center justify-center h-full text-zinc-600">
+                <p className="text-sm">Send 후 결과가 여기에 표시됩니다</p>
+              </div>
+            )}
+            {results
+              .filter((r) => r.agentId === selectedId)
+              .map((r) => (
+                <ResultCard
+                  key={r.id}
+                  result={r}
+                  agentName={selectedAgent.name}
+                  expanded={expanded[r.id] ?? {}}
+                  onToggle={(section) => toggleSection(r.id, section)}
+                  sending={sending && !r.responseText && !r.error}
+                />
+              ))}
+            <div ref={resultsEnd} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
