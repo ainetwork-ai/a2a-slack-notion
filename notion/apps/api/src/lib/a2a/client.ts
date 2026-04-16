@@ -37,23 +37,30 @@ function validateAgentUrl(inputUrl: string): void {
     throw new Error('Only http and https URLs are allowed');
   }
 
-  const hostname = parsed.hostname.toLowerCase();
+  const hostname = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, ''); // strip IPv6 brackets
 
-  // Block private/internal IP ranges and localhost
+  // Block private/internal IP ranges, localhost, and common SSRF bypass forms
+  const privatePatterns = [
+    /^localhost$/,
+    /^127\./,
+    /^0\.0\.0\.0$/,
+    /^::1$/,
+    /^0$/,                              // decimal 0 == 0.0.0.0
+    /^192\.168\./,
+    /^10\./,
+    /^172\.(1[6-9]|2\d|3[01])\./,
+    /^169\.254\./,                      // link-local / AWS metadata
+    /^fc00:/i,                          // IPv6 unique local
+    /^fe80:/i,                          // IPv6 link-local
+    /^::ffff:127\./,                    // IPv4-mapped loopback
+    /^::ffff:10\./,                     // IPv4-mapped private
+    /^::ffff:192\.168\./,               // IPv4-mapped private
+    /^::ffff:169\.254\./,               // IPv4-mapped metadata
+    /^(0x[0-9a-f]+|0[0-7]+|\d+)$/i,    // decimal/hex/octal bare IP
+  ];
+
   if (
-    hostname === 'localhost' ||
-    hostname === '127.0.0.1' ||
-    hostname === '::1' ||
-    hostname.startsWith('192.168.') ||
-    hostname.startsWith('10.') ||
-    hostname.startsWith('172.16.') ||
-    hostname.startsWith('172.17.') ||
-    hostname.startsWith('172.18.') ||
-    hostname.startsWith('172.19.') ||
-    hostname.startsWith('172.2') ||
-    hostname.startsWith('172.30.') ||
-    hostname.startsWith('172.31.') ||
-    hostname === '169.254.169.254' || // AWS metadata
+    privatePatterns.some(p => p.test(hostname)) ||
     hostname.endsWith('.local') ||
     hostname.endsWith('.internal')
   ) {
@@ -70,7 +77,7 @@ export async function fetchAgentCard(inputUrl: string): Promise<AgentCard> {
 
   for (const path of paths) {
     try {
-      const res = await fetch(`${baseUrl}${path}`);
+      const res = await fetch(`${baseUrl}${path}`, { redirect: 'error' });
       if (res.ok) {
         return await res.json() as AgentCard;
       }
@@ -109,10 +116,12 @@ export async function sendA2AMessage(
     id: messageId,
   };
 
+  validateAgentUrl(agentUrl);
   const res = await fetch(agentUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
+    redirect: 'error',
   });
 
   if (!res.ok) {
@@ -175,6 +184,7 @@ export async function* streamA2AMessage(
     id: messageId,
   };
 
+  validateAgentUrl(agentUrl);
   const res = await fetch(agentUrl, {
     method: 'POST',
     headers: {
@@ -182,6 +192,7 @@ export async function* streamA2AMessage(
       Accept: 'text/event-stream',
     },
     body: JSON.stringify(payload),
+    redirect: 'error',
   });
 
   if (!res.ok || !res.body) {
@@ -192,36 +203,40 @@ export async function* streamA2AMessage(
   const decoder = new TextDecoder();
   let buffer = '';
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
 
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split('\n');
-    buffer = lines.pop() || '';
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
 
-    for (const line of lines) {
-      if (!line.startsWith('data: ')) continue;
-      const raw = line.slice(6).trim();
-      if (!raw || raw === '[DONE]') continue;
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const raw = line.slice(6).trim();
+        if (!raw || raw === '[DONE]') continue;
 
-      try {
-        const event = JSON.parse(raw);
-        const result = event.result;
-        if (!result) continue;
+        try {
+          const event = JSON.parse(raw);
+          const result = event.result;
+          if (!result) continue;
 
-        if (result.kind === 'status-update') {
-          const parts = result.status?.message?.parts || [];
-          const text = parts.filter((p: any) => p.kind === 'text').map((p: any) => p.text).join('');
-          if (text) yield { type: 'status', content: text };
-        } else if (result.kind === 'artifact-update') {
-          const parts = result.artifact?.parts || [];
-          const text = parts.filter((p: any) => p.kind === 'text').map((p: any) => p.text).join('');
-          if (text) yield { type: 'artifact', content: text };
+          if (result.kind === 'status-update') {
+            const parts = result.status?.message?.parts || [];
+            const text = parts.filter((p: any) => p.kind === 'text').map((p: any) => p.text).join('');
+            if (text) yield { type: 'status', content: text };
+          } else if (result.kind === 'artifact-update') {
+            const parts = result.artifact?.parts || [];
+            const text = parts.filter((p: any) => p.kind === 'text').map((p: any) => p.text).join('');
+            if (text) yield { type: 'artifact', content: text };
+          }
+        } catch {
+          // Skip malformed SSE events
         }
-      } catch {
-        // Skip malformed SSE events
       }
     }
+  } finally {
+    reader.cancel().catch(() => {});
   }
 }

@@ -3,7 +3,15 @@ import { streamSSE } from 'hono/streaming';
 import { inviteAgent, removeAgent, listAgents, healthCheck, getAgentSkills } from '../lib/a2a/agent-manager.js';
 import { invokeAgent, invokeAgentStream } from '../lib/a2a/agent-invoker.js';
 import { fetchAgentCard } from '../lib/a2a/client.js';
+import { prisma } from '../lib/prisma.js';
 import type { AppVariables } from '../types/app.js';
+
+async function requireWorkspaceMember(userId: string, workspaceId: string): Promise<boolean> {
+  const membership = await prisma.workspaceMember.findUnique({
+    where: { workspaceId_userId: { workspaceId, userId } },
+  });
+  return membership !== null;
+}
 
 export const agents = new Hono<{ Variables: AppVariables }>();
 
@@ -65,6 +73,10 @@ agents.post('/invoke', async (c) => {
     return c.json({ error: 'agentId, prompt, pageId, and workspaceId required' }, 400);
   }
 
+  if (!(await requireWorkspaceMember(user.id, workspaceId))) {
+    return c.json({ error: 'Forbidden' }, 403);
+  }
+
   if (useStream) {
     return streamSSE(c, async (sseStream) => {
       try {
@@ -94,6 +106,10 @@ agents.post('/', async (c) => {
 
   if (!a2aUrl || !workspace_id) {
     return c.json({ error: 'a2aUrl and workspace_id required' }, 400);
+  }
+
+  if (!(await requireWorkspaceMember(user.id, workspace_id))) {
+    return c.json({ error: 'Forbidden' }, 403);
   }
 
   try {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 import type { PropertyDefinition, PropertyValue } from '@notion/shared';
 import type { DatabaseRow } from '@/stores/database';
@@ -20,6 +20,11 @@ export function RowDetailModal({ row, properties, workspaceId, onClose, onUpdate
   const titleProp = properties.find((p) => p.type === 'title');
   const titleValue = titleProp ? (values[titleProp.id] as { type: 'title'; value: string } | undefined) : undefined;
   const [titleDraft, setTitleDraft] = useState(titleValue?.value ?? '');
+
+  // Sync if the row title changes externally (e.g., collaborative edit via Yjs)
+  useEffect(() => {
+    setTitleDraft(titleValue?.value ?? '');
+  }, [titleValue?.value]);
 
   const nonTitleProperties = properties.filter((p) => p.type !== 'title');
 
