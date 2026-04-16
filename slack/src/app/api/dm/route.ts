@@ -3,6 +3,7 @@ import { users, channels, channelMembers, messages, reactions, mentions, files, 
 import { eq, and, desc, lt, sql, inArray, or, ilike } from "drizzle-orm";
 import { requireAuth } from "@/lib/auth/middleware";
 import { NextRequest, NextResponse } from "next/server";
+import { resolveUserParam } from "@/lib/resolve";
 
 export async function GET() {
   const auth = await requireAuth();
@@ -110,15 +111,28 @@ export async function POST(request: NextRequest) {
     userIds?: string[];
     participantId?: string;
   };
-  const userIds =
+  const rawRefs =
     body.userIds ?? (body.participantId ? [body.participantId] : []);
 
-  if (!Array.isArray(userIds) || userIds.length === 0) {
+  if (!Array.isArray(rawRefs) || rawRefs.length === 0) {
     return NextResponse.json({ error: "userIds array is required" }, { status: 400 });
   }
 
-  // Always include the current user
-  const allUserIds = Array.from(new Set([user.id, ...userIds])).sort();
+  // Accept UUIDs, AIN addresses (0x…), or a2aIds. Resolve every ref before
+  // using it as a dm member id.
+  const resolvedIds: string[] = [];
+  for (const ref of rawRefs) {
+    const u = await resolveUserParam(ref);
+    if (!u) {
+      return NextResponse.json(
+        { error: `User not found: ${ref}` },
+        { status: 404 }
+      );
+    }
+    resolvedIds.push(u.id);
+  }
+
+  const allUserIds = Array.from(new Set([user.id, ...resolvedIds])).sort();
 
   // Find existing conversation with exact same members
   // Get all conversations where current user is a member
