@@ -229,7 +229,7 @@ async function runAgent(
 
   if (toolDocs.length > 0) {
     systemParts.push(
-      `## Available Tools\n${toolDocs.join("\n")}\n\nTo call: [TOOL_CALL: tool | key=value, key=value]`
+      `## Available Tools\n${toolDocs.join("\n")}\n\nTo call a tool, write exactly this on its own line:\n[TOOL_CALL: server:tool | key=value, key=value]\n\nExample: [TOOL_CALL: news:search | query=bitcoin]`
     );
   }
 
@@ -345,29 +345,65 @@ function parseToolCalls(
   text: string
 ): Array<{ tool: string; params: Record<string, string> }> {
   const calls: Array<{ tool: string; params: Record<string, string> }> = [];
-  const regex = /\[TOOL_CALL:\s*([^\]|]+?)(?:\s*\|\s*([^\]]*))?\]/g;
-  let match;
+  const seenTools = new Set<string>();
 
-  while ((match = regex.exec(text)) !== null) {
-    const tool = match[1].trim();
-    const paramsStr = match[2]?.trim() || "";
+  function parseParams(paramsStr: string): Record<string, string> {
     const params: Record<string, string> = {};
+    const trimmed = paramsStr.trim();
+    if (!trimmed) return params;
 
-    if (paramsStr) {
-      // Parse "key=value, key=value" or just "value" (as query)
-      if (paramsStr.includes("=")) {
-        for (const pair of paramsStr.split(/,\s*/)) {
-          const eqIdx = pair.indexOf("=");
-          if (eqIdx > 0) {
-            params[pair.slice(0, eqIdx).trim()] = pair.slice(eqIdx + 1).trim();
-          }
-        }
-      } else {
-        params.query = paramsStr;
+    // Try JSON-like {key: "value"} or {key: value}
+    if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+      const inner = trimmed.slice(1, -1);
+      // Match: key: "value" | key: value
+      const jsonPairs = inner.matchAll(/(\w+)\s*[:=]\s*(?:"([^"]*)"|'([^']*)'|([^,}]+))/g);
+      for (const m of jsonPairs) {
+        const key = m[1];
+        const val = (m[2] ?? m[3] ?? m[4] ?? "").trim();
+        params[key] = val;
       }
+      return params;
     }
 
-    calls.push({ tool, params });
+    // key=value, key=value format
+    if (trimmed.includes("=")) {
+      for (const pair of trimmed.split(/,\s*/)) {
+        const eqIdx = pair.indexOf("=");
+        if (eqIdx > 0) {
+          params[pair.slice(0, eqIdx).trim()] = pair.slice(eqIdx + 1).trim();
+        }
+      }
+      return params;
+    }
+
+    // Raw string treated as query
+    params.query = trimmed;
+    return params;
+  }
+
+  // Format 1: [TOOL_CALL: server:tool | key=value]
+  const bracketRegex = /\[TOOL_CALL:\s*([^\]|]+?)(?:\s*\|\s*([^\]]*))?\]/g;
+  let match;
+  while ((match = bracketRegex.exec(text)) !== null) {
+    const tool = match[1].trim();
+    const params = parseParams(match[2] || "");
+    const key = `${tool}:${JSON.stringify(params)}`;
+    if (!seenTools.has(key)) {
+      seenTools.add(key);
+      calls.push({ tool, params });
+    }
+  }
+
+  // Format 2: call:server:tool {params} — LLM sometimes uses this
+  const callRegex = /(?:^|\n)\s*call:([\w-]+:[\w-]+)\s*(\{[^}]*\}|\([^)]*\))?/gi;
+  while ((match = callRegex.exec(text)) !== null) {
+    const tool = match[1].trim();
+    const params = parseParams(match[2] || "");
+    const key = `${tool}:${JSON.stringify(params)}`;
+    if (!seenTools.has(key)) {
+      seenTools.add(key);
+      calls.push({ tool, params });
+    }
   }
 
   return calls;
@@ -620,7 +656,7 @@ function buildSystemPrompt(
 
   if (toolDocs.length > 0) {
     systemParts.push(
-      `## Available Tools\n${toolDocs.join("\n")}\n\nTo call: [TOOL_CALL: tool | key=value, key=value]`
+      `## Available Tools\n${toolDocs.join("\n")}\n\nTo call a tool, write exactly this on its own line:\n[TOOL_CALL: server:tool | key=value, key=value]\n\nExample: [TOOL_CALL: news:search | query=bitcoin]`
     );
   }
 
