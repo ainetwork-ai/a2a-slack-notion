@@ -61,10 +61,10 @@ function pickAgentFromText(text: string, roster: Record<string, { kor: string; e
 }
 
 function parseAssignmentResponse(text: string): Record<string, string> {
-  const reporterId = pickAgentFromText(text, REPORTERS) ?? "unblock-max";
+  const reporterId = pickAgentFromText(text, REPORTERS) ?? "max";
   let managerId = pickAgentFromText(text, MANAGERS);
   if (!managerId) {
-    managerId = REPORTER_TO_MANAGER[reporterId] ?? "unblock-victoria";
+    managerId = REPORTER_TO_MANAGER[reporterId] ?? "victoria";
   }
   return {
     reporter: reporterId,
@@ -458,10 +458,14 @@ async function executeStep(
       const agent = await resolveAgent(step.agent);
       if (!agent) throw new Error(`Agent not found: "${step.agent}"`);
 
+      // Post agent response to the trigger channel so it's visible in the UI
+      const triggerForAsk = vars.trigger as { channelId?: string } | undefined;
+
       const agentMessage = await sendToAgent({
         agentId: agent.id,
         text: prompt,
         skillId: step.skillId,
+        channelId: triggerForAsk?.channelId,
       });
 
       return agentMessage.content;
@@ -520,11 +524,15 @@ async function executeStep(
 
       // Pass inputs as metadata.variables for external A2A agents (e.g. unblock-agents)
       // that expect structured variables rather than text-formatted inputs.
+      // Also pass channelId from trigger so responses appear in the channel.
+      const trigger = vars.trigger as { channelId?: string } | undefined;
+
       const agentMessage = await sendToAgent({
         agentId: agent.id,
         text: skillMessage,
         skillId: step.skillId,
         variables: Object.keys(resolvedInputs).length > 0 ? resolvedInputs : undefined,
+        channelId: trigger?.channelId,
       });
 
       return agentMessage.content;
