@@ -66,10 +66,23 @@ export async function sendToAgent(params: {
   let content: string;
   let metadata: Record<string, unknown>;
 
-  // Built agent → always LLM with tool-use loop
-  if (!agent.a2aUrl && card?.builtBy) {
+  // Local dynamic agent (a2aUrl points to our own /api/a2a/ endpoint) → use runAgent directly
+  const appUrl = (process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3004").replace(/\/$/, "");
+  const isLocalAgent = agent.a2aUrl?.startsWith(appUrl + "/api/a2a/") || agent.a2aUrl?.startsWith("http://localhost");
+
+  // Built agent or local dynamic agent → LLM with tool-use loop
+  if (isLocalAgent || (!agent.a2aUrl && card?.builtBy)) {
     try {
-      content = await runAgent(card, params.text, agentName, pointer, params.skillId);
+      // For local agents, load instruction from agentSkillConfigs if card has no systemPrompt
+      let effectiveCard = card || {};
+      if (isLocalAgent && !effectiveCard.systemPrompt) {
+        const { agentSkillConfigs } = await import("@/lib/db/schema");
+        const [skillConfig] = await db.select().from(agentSkillConfigs).where(eq(agentSkillConfigs.agentId, agent.id)).limit(1);
+        if (skillConfig) {
+          effectiveCard = { ...effectiveCard, systemPrompt: skillConfig.instruction, mcpAccess: (skillConfig.mcpTools as string[]) || [] };
+        }
+      }
+      content = await runAgent(effectiveCard as BuiltAgentCard, params.text, agentName, pointer, params.skillId);
       metadata = { agentName, provider: "vllm" };
     } catch (err) {
       content = `I'm having trouble responding right now. (${err instanceof Error ? err.message : "Unknown error"})`;
