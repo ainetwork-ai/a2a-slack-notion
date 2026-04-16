@@ -28,7 +28,7 @@ export default function ShareMessageModal({
   messageContent,
   sourceChannelName,
 }: ShareMessageModalProps) {
-  const { activeWorkspaceId } = useWorkspaceStore();
+  const { activeWorkspaceName } = useWorkspaceStore();
   const { showToast } = useToast();
   const [search, setSearch] = useState('');
   const [channels, setChannels] = useState<Channel[]>([]);
@@ -38,8 +38,8 @@ export default function ShareMessageModal({
   useEffect(() => {
     if (!open) return;
     setLoading(true);
-    const url = activeWorkspaceId
-      ? `/api/channels?workspaceId=${activeWorkspaceId}`
+    const url = activeWorkspaceName
+      ? `/api/channels?workspaceId=${encodeURIComponent(activeWorkspaceName)}`
       : '/api/channels';
     fetch(url)
       .then(r => r.json())
@@ -53,7 +53,7 @@ export default function ShareMessageModal({
       })
       .catch(() => setChannels([]))
       .finally(() => setLoading(false));
-  }, [open, activeWorkspaceId]);
+  }, [open, activeWorkspaceName]);
 
   const filtered = channels.filter(c =>
     c.name.toLowerCase().includes(search.toLowerCase())

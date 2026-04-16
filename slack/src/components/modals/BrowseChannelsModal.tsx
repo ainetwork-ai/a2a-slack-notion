@@ -25,7 +25,7 @@ interface BrowseChannel {
 export default function BrowseChannelsModal() {
   const router = useRouter();
   const { browseChannelsOpen, setBrowseChannelsOpen } = useAppStore();
-  const { activeWorkspaceId } = useWorkspaceStore();
+  const { activeWorkspaceName } = useWorkspaceStore();
   const [search, setSearch] = useState('');
   const [joining, setJoining] = useState<string | null>(null);
 
@@ -36,8 +36,8 @@ export default function BrowseChannelsModal() {
     return () => clearTimeout(timer);
   }, [search]);
 
-  const url = activeWorkspaceId
-    ? `/api/channels/browse?workspaceId=${activeWorkspaceId}${debouncedSearch ? `&q=${encodeURIComponent(debouncedSearch)}` : ''}`
+  const url = activeWorkspaceName
+    ? `/api/channels/browse?workspaceId=${encodeURIComponent(activeWorkspaceName)}${debouncedSearch ? `&q=${encodeURIComponent(debouncedSearch)}` : ''}`
     : `/api/channels/browse${debouncedSearch ? `?q=${encodeURIComponent(debouncedSearch)}` : ''}`;
 
   const { data, mutate } = useSWR<BrowseChannel[]>(

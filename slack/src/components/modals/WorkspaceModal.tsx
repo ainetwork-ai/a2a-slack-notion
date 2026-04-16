@@ -21,12 +21,15 @@ export default function WorkspaceModal({ open, onOpenChange }: WorkspaceModalPro
   const [inviteLink, setInviteLink] = useState('');
   const [isGeneratingLink, setIsGeneratingLink] = useState(false);
 
-  const { activeWorkspaceId, workspaces } = useWorkspaceStore();
-  const activeWorkspace = workspaces.find((w) => w.id === activeWorkspaceId);
+  const { activeWorkspaceName, workspaces } = useWorkspaceStore();
+  const activeWorkspace = workspaces.find((w) => w.name === activeWorkspaceName);
+  const activeWorkspaceId = activeWorkspace?.id ?? null;
 
-  // Fetch workspace members from /api/workspaces/[id] for member count
+  // Fetch workspace members from /api/workspaces/[name] for member count
   const { data: wsDetail } = useSWR(
-    open && activeWorkspaceId ? `/api/workspaces/${activeWorkspaceId}` : null,
+    open && activeWorkspaceName
+      ? `/api/workspaces/${encodeURIComponent(activeWorkspaceName)}`
+      : null,
     fetcher
   );
 

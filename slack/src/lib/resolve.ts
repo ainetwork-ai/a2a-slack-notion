@@ -157,9 +157,8 @@ export async function resolveDmParam(param: string, viewerUserId: string) {
 }
 
 /**
- * Resolve a workspace param (URL segment) to a workspace row.
- *
- * Accepts a UUID or a slug.
+ * Resolve a workspace param to a workspace row. Accepts a UUID or the
+ * workspace's human-facing name (e.g. "Slack-A2A").
  */
 export async function resolveWorkspaceParam(param: string) {
   const value = decodeURIComponent(param);
@@ -176,7 +175,22 @@ export async function resolveWorkspaceParam(param: string) {
   const [row] = await db
     .select()
     .from(workspaces)
-    .where(eq(workspaces.slug, value))
+    .where(eq(workspaces.name, value))
     .limit(1);
   return row ?? null;
+}
+
+/**
+ * Convenience helper for API routes that read `?workspaceId=<ref>` — accepts
+ * a UUID or workspace name and returns the resolved UUID (or null if the
+ * ref was missing or unresolvable).
+ */
+export async function resolveWorkspaceIdQuery(
+  request: Request
+): Promise<string | null> {
+  const url = new URL(request.url);
+  const ref = url.searchParams.get("workspaceId");
+  if (!ref) return null;
+  const row = await resolveWorkspaceParam(ref);
+  return row?.id ?? null;
 }

@@ -42,7 +42,7 @@ export default function WorkspaceLayout({
   const [workspaceModalOpen, setWorkspaceModalOpen] = useState(false);
   const [mcpTestbedServer, setMcpTestbedServer] = useState<string | null>(null);
   const { testAgent, setTestAgent } = useAppStore();
-  const { activeWorkspaceId, workspaces } = useWorkspaceStore();
+  const { activeWorkspaceName, workspaces } = useWorkspaceStore();
 
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
     if (typeof window === 'undefined') return SIDEBAR_DEFAULT;
@@ -165,7 +165,7 @@ export default function WorkspaceLayout({
         {/* Workspace name */}
         <div className="flex items-center justify-between px-4 h-12 border-b shrink-0 channel-header">
           <button onClick={() => setWorkspaceModalOpen(true)} className="flex items-center gap-1 font-bold text-base truncate hover:bg-white/10 rounded px-1 -mx-1 transition-colors" style={{ color: 'var(--slack-text-primary)' }}>
-            {workspaces.find((w) => w.id === activeWorkspaceId)?.name ?? 'Slack-A2A'}
+            {workspaces.find((w) => w.name === activeWorkspaceName)?.name ?? 'Slack-A2A'}
             <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
           </button>
           {/* Close button — mobile only */}
@@ -186,7 +186,7 @@ export default function WorkspaceLayout({
             }
           }}
         >
-          <ChannelList workspaceId={activeWorkspaceId ?? undefined} />
+          <ChannelList workspaceId={activeWorkspaceName ?? undefined} />
           <Separator className="my-2 bg-white/5" />
           <DMList />
           <Separator className="my-2 bg-white/5" />
@@ -218,7 +218,7 @@ export default function WorkspaceLayout({
             <Menu className="w-5 h-5" />
           </button>
           <span className="ml-2 text-white font-semibold text-sm">
-            {workspaces.find((w) => w.id === activeWorkspaceId)?.name ?? 'Slack-A2A'}
+            {workspaces.find((w) => w.name === activeWorkspaceName)?.name ?? 'Slack-A2A'}
           </span>
         </div>
 

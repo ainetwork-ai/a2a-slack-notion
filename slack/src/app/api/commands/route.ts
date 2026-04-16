@@ -3,12 +3,13 @@ import { customCommands, workspaceMembers } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
 import { requireAuth } from "@/lib/auth/middleware";
 import { NextRequest, NextResponse } from "next/server";
+import { resolveWorkspaceIdQuery, resolveWorkspaceParam } from "@/lib/resolve";
 
 export async function GET(request: NextRequest) {
   const auth = await requireAuth();
   if ("error" in auth) return auth.error;
 
-  const workspaceId = request.nextUrl.searchParams.get("workspaceId");
+  const workspaceId = await resolveWorkspaceIdQuery(request);
   if (!workspaceId) {
     return NextResponse.json({ error: "workspaceId is required" }, { status: 400 });
   }
@@ -28,14 +29,20 @@ export async function POST(request: NextRequest) {
   const { user } = auth;
 
   const body = await request.json();
-  const { workspaceId, name, description, responseText } = body;
+  const { workspaceId: workspaceRef, name, description, responseText } = body;
 
-  if (!workspaceId || !name || !responseText) {
+  if (!workspaceRef || !name || !responseText) {
     return NextResponse.json(
       { error: "workspaceId, name, and responseText are required" },
       { status: 400 }
     );
   }
+
+  const ws = await resolveWorkspaceParam(String(workspaceRef));
+  if (!ws) {
+    return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
+  }
+  const workspaceId = ws.id;
 
   // Ensure caller is admin/owner of the workspace
   const [membership] = await db
@@ -78,11 +85,17 @@ export async function DELETE(request: NextRequest) {
   const { user } = auth;
 
   const body = await request.json();
-  const { id, workspaceId } = body;
+  const { id, workspaceId: workspaceRef } = body;
 
-  if (!id || !workspaceId) {
+  if (!id || !workspaceRef) {
     return NextResponse.json({ error: "id and workspaceId are required" }, { status: 400 });
   }
+
+  const ws = await resolveWorkspaceParam(String(workspaceRef));
+  if (!ws) {
+    return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
+  }
+  const workspaceId = ws.id;
 
   // Ensure caller is admin/owner
   const [membership] = await db

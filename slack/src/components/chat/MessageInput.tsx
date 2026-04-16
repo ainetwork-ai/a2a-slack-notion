@@ -42,7 +42,7 @@ export default function MessageInput({
   conversationId,
   disabled,
 }: MessageInputProps) {
-  const { activeWorkspaceId } = useWorkspaceStore();
+  const { activeWorkspaceName } = useWorkspaceStore();
   const [content, setContent] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -163,10 +163,10 @@ export default function MessageInput({
   }
 
   async function handleShortcutOpen() {
-    if (!activeWorkspaceId) return;
+    if (!activeWorkspaceName) return;
     setShortcutOpen(true);
     try {
-      const res = await fetch(`/api/workflows?workspaceId=${encodeURIComponent(activeWorkspaceId)}`);
+      const res = await fetch(`/api/workflows?workspaceId=${encodeURIComponent(activeWorkspaceName)}`);
       if (!res.ok) return;
       const all: Array<{ id: string; name: string; description: string | null; triggerType: string; enabled: boolean }> = await res.json();
       const shortcuts = all.filter(w => w.enabled && w.triggerType === 'shortcut');
@@ -196,8 +196,8 @@ export default function MessageInput({
     // Slash command interception
     if (trimmed.startsWith('/')) {
       const match = findCommand(trimmed) ||
-        (activeWorkspaceId ? await findCustomCommand(trimmed, activeWorkspaceId) : null) ||
-        (activeWorkspaceId ? await findWorkflowCommand(trimmed, activeWorkspaceId) : null);
+        (activeWorkspaceName ? await findCustomCommand(trimmed, activeWorkspaceName) : null) ||
+        (activeWorkspaceName ? await findWorkflowCommand(trimmed, activeWorkspaceName) : null);
       if (match) {
         setIsSending(true);
         try {

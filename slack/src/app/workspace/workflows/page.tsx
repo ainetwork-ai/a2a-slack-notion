@@ -55,7 +55,7 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 export default function WorkflowsPage() {
-  const { activeWorkspaceId } = useWorkspaceStore();
+  const { activeWorkspaceName } = useWorkspaceStore();
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
   const [runs, setRuns] = useState<Record<string, WorkflowRun[]>>({});
   const [loading, setLoading] = useState(true);
@@ -66,10 +66,10 @@ export default function WorkflowsPage() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const fetchWorkflows = useCallback(async () => {
-    if (!activeWorkspaceId) return;
+    if (!activeWorkspaceName) return;
     setLoading(true);
     try {
-      const res = await fetch(`/api/workflows?workspaceId=${activeWorkspaceId}`);
+      const res = await fetch(`/api/workflows?workspaceId=${encodeURIComponent(activeWorkspaceName)}`);
       if (res.ok) {
         const data = await res.json();
         setWorkflows(data);
@@ -77,7 +77,7 @@ export default function WorkflowsPage() {
     } finally {
       setLoading(false);
     }
-  }, [activeWorkspaceId]);
+  }, [activeWorkspaceName]);
 
   useEffect(() => {
     fetchWorkflows();
@@ -138,7 +138,7 @@ export default function WorkflowsPage() {
     setEditorOpen(true);
   }
 
-  if (!activeWorkspaceId) {
+  if (!activeWorkspaceName) {
     return (
       <div className="flex items-center justify-center h-full text-slate-400">
         Select a workspace to view workflows.
@@ -301,13 +301,13 @@ export default function WorkflowsPage() {
       <WorkflowTemplates
         open={templatesOpen}
         onOpenChange={setTemplatesOpen}
-        workspaceId={activeWorkspaceId}
+        workspaceId={activeWorkspaceName}
         onCreated={fetchWorkflows}
       />
 
       {editorOpen && (
         <WorkflowBuilder
-          workspaceId={activeWorkspaceId}
+          workspaceId={activeWorkspaceName}
           onClose={() => { setEditorOpen(false); setEditingWorkflow(null); }}
           onSaved={fetchWorkflows}
           initial={

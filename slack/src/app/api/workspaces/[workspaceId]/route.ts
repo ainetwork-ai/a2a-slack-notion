@@ -3,6 +3,7 @@ import { requireAuth } from "@/lib/auth/middleware";
 import { db } from "@/lib/db";
 import { workspaces, workspaceMembers } from "@/lib/db/schema";
 import { eq, and, sql } from "drizzle-orm";
+import { resolveWorkspaceParam } from "@/lib/resolve";
 
 export async function GET(
   _req: NextRequest,
@@ -11,13 +12,8 @@ export async function GET(
   const auth = await requireAuth();
   if ("error" in auth) return auth.error;
 
-  const { workspaceId } = await params;
-
-  const [workspace] = await db
-    .select()
-    .from(workspaces)
-    .where(eq(workspaces.id, workspaceId))
-    .limit(1);
+  const { workspaceId: param } = await params;
+  const workspace = await resolveWorkspaceParam(param);
 
   if (!workspace) {
     return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
@@ -26,7 +22,7 @@ export async function GET(
   const [{ count }] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(workspaceMembers)
-    .where(eq(workspaceMembers.workspaceId, workspaceId));
+    .where(eq(workspaceMembers.workspaceId, workspace.id));
 
   return NextResponse.json({ ...workspace, memberCount: count });
 }
@@ -38,7 +34,12 @@ export async function PATCH(
   const auth = await requireAuth();
   if ("error" in auth) return auth.error;
 
-  const { workspaceId } = await params;
+  const { workspaceId: param } = await params;
+  const resolved = await resolveWorkspaceParam(param);
+  if (!resolved) {
+    return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
+  }
+  const workspaceId = resolved.id;
 
   // Check role
   const [membership] = await db

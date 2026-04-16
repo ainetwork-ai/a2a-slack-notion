@@ -41,8 +41,8 @@ function RoleBadge({ role }: { role: string }) {
 export default function WorkspaceSettingsPage() {
   const router = useRouter();
   const { user } = useAuth();
-  const { workspaces, activeWorkspaceId, fetchWorkspaces } = useWorkspaceStore();
-  const activeWorkspace = workspaces.find((w) => w.id === activeWorkspaceId);
+  const { workspaces, activeWorkspaceName, fetchWorkspaces } = useWorkspaceStore();
+  const activeWorkspace = workspaces.find((w) => w.name === activeWorkspaceName);
   const myRole = activeWorkspace?.role ?? 'member';
   const isPrivileged = myRole === 'owner' || myRole === 'admin';
 
@@ -116,10 +116,10 @@ export default function WorkspaceSettingsPage() {
   const [exporting, setExporting] = useState(false);
 
   async function handleExport() {
-    if (!activeWorkspaceId) return;
+    if (!activeWorkspaceName) return;
     setExporting(true);
     try {
-      const res = await fetch(`/api/workspaces/${activeWorkspaceId}/export`);
+      const res = await fetch(`/api/workspaces/${encodeURIComponent(activeWorkspaceName)}/export`);
       if (!res.ok) throw new Error('Export failed');
       const data = await res.json();
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -155,35 +155,35 @@ export default function WorkspaceSettingsPage() {
   const [cmdError, setCmdError] = useState<string | null>(null);
 
   const loadCustomCommands = useCallback(async () => {
-    if (!activeWorkspaceId) return;
+    if (!activeWorkspaceName) return;
     setLoadingCommands(true);
     try {
-      const res = await fetch(`/api/commands?workspaceId=${activeWorkspaceId}`);
+      const res = await fetch(`/api/commands?workspaceId=${encodeURIComponent(activeWorkspaceName)}`);
       if (res.ok) setCustomCommands(await res.json());
     } finally {
       setLoadingCommands(false);
     }
-  }, [activeWorkspaceId]);
+  }, [activeWorkspaceName]);
 
   useEffect(() => {
     if (isPrivileged) loadCustomCommands();
   }, [isPrivileged, loadCustomCommands]);
 
   const loadWebhooks = useCallback(async () => {
-    if (!activeWorkspaceId) return;
+    if (!activeWorkspaceName) return;
     setLoadingWebhooks(true);
     try {
-      const res = await fetch(`/api/webhooks?workspaceId=${activeWorkspaceId}`);
+      const res = await fetch(`/api/webhooks?workspaceId=${encodeURIComponent(activeWorkspaceName)}`);
       if (res.ok) setWebhooks(await res.json());
     } finally {
       setLoadingWebhooks(false);
     }
-  }, [activeWorkspaceId]);
+  }, [activeWorkspaceName]);
 
   const loadWebhookChannels = useCallback(async () => {
-    if (!activeWorkspaceId) return;
+    if (!activeWorkspaceName) return;
     try {
-      const res = await fetch(`/api/channels?workspaceId=${activeWorkspaceId}`);
+      const res = await fetch(`/api/channels?workspaceId=${encodeURIComponent(activeWorkspaceName)}`);
       if (res.ok) {
         const data = await res.json();
         // channels API returns [{channel: {...}, ...}, ...]
@@ -197,7 +197,7 @@ export default function WorkspaceSettingsPage() {
     } catch {
       // ignore
     }
-  }, [activeWorkspaceId]);
+  }, [activeWorkspaceName]);
 
   useEffect(() => {
     if (isPrivileged) {
@@ -207,7 +207,7 @@ export default function WorkspaceSettingsPage() {
   }, [isPrivileged, loadWebhooks, loadWebhookChannels]);
 
   async function handleAddWebhook() {
-    if (!activeWorkspaceId || !newWebhookName.trim() || !newWebhookChannelId) return;
+    if (!activeWorkspaceName || !newWebhookName.trim() || !newWebhookChannelId) return;
     setSavingWebhook(true);
     setWebhookError(null);
     try {
@@ -215,7 +215,7 @@ export default function WorkspaceSettingsPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          workspaceId: activeWorkspaceId,
+          workspaceId: activeWorkspaceName,
           channelId: newWebhookChannelId,
           name: newWebhookName.trim(),
         }),
@@ -236,13 +236,13 @@ export default function WorkspaceSettingsPage() {
   }
 
   async function handleRemoveWebhook(id: string) {
-    if (!activeWorkspaceId) return;
+    if (!activeWorkspaceName) return;
     setRemovingWebhookId(id);
     try {
       await fetch('/api/webhooks', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, workspaceId: activeWorkspaceId }),
+        body: JSON.stringify({ id, workspaceId: activeWorkspaceName }),
       });
       await loadWebhooks();
     } finally {
@@ -259,22 +259,22 @@ export default function WorkspaceSettingsPage() {
   }
 
   const loadOutgoingWebhooks = useCallback(async () => {
-    if (!activeWorkspaceId) return;
+    if (!activeWorkspaceName) return;
     setLoadingOutgoing(true);
     try {
-      const res = await fetch(`/api/webhooks/outgoing?workspaceId=${activeWorkspaceId}`);
+      const res = await fetch(`/api/webhooks/outgoing?workspaceId=${encodeURIComponent(activeWorkspaceName)}`);
       if (res.ok) setOutgoingWebhooks(await res.json());
     } finally {
       setLoadingOutgoing(false);
     }
-  }, [activeWorkspaceId]);
+  }, [activeWorkspaceName]);
 
   useEffect(() => {
     if (isPrivileged) loadOutgoingWebhooks();
   }, [isPrivileged, loadOutgoingWebhooks]);
 
   async function handleAddOutgoingWebhook() {
-    if (!activeWorkspaceId || !newOutgoingName.trim() || !newOutgoingTrigger.trim() || !newOutgoingUrl.trim()) return;
+    if (!activeWorkspaceName || !newOutgoingName.trim() || !newOutgoingTrigger.trim() || !newOutgoingUrl.trim()) return;
     setSavingOutgoing(true);
     setOutgoingError(null);
     try {
@@ -282,7 +282,7 @@ export default function WorkspaceSettingsPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          workspaceId: activeWorkspaceId,
+          workspaceId: activeWorkspaceName,
           channelId: newOutgoingChannelId || undefined,
           name: newOutgoingName.trim(),
           triggerWords: newOutgoingTrigger.trim(),
@@ -307,13 +307,13 @@ export default function WorkspaceSettingsPage() {
   }
 
   async function handleRemoveOutgoingWebhook(id: string) {
-    if (!activeWorkspaceId) return;
+    if (!activeWorkspaceName) return;
     setRemovingOutgoingId(id);
     try {
       await fetch('/api/webhooks/outgoing', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, workspaceId: activeWorkspaceId }),
+        body: JSON.stringify({ id, workspaceId: activeWorkspaceName }),
       });
       await loadOutgoingWebhooks();
     } finally {
@@ -322,11 +322,11 @@ export default function WorkspaceSettingsPage() {
   }
 
   async function handleSaveDefaults() {
-    if (!activeWorkspaceId) return;
+    if (!activeWorkspaceName) return;
     setSavingDefaults(true);
     setDefaultsSaved(false);
     try {
-      const res = await fetch(`/api/workspaces/${activeWorkspaceId}`, {
+      const res = await fetch(`/api/workspaces/${encodeURIComponent(activeWorkspaceName)}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ defaultNotificationPref: defaultNotifPref, defaultChannels: defaultChannelIds }),
@@ -342,10 +342,10 @@ export default function WorkspaceSettingsPage() {
   }
 
   async function handleRoleChange(userId: string, newRole: string) {
-    if (!activeWorkspaceId) return;
+    if (!activeWorkspaceName) return;
     setUpdatingRoleId(userId);
     try {
-      const res = await fetch(`/api/workspaces/${activeWorkspaceId}/members`, {
+      const res = await fetch(`/api/workspaces/${encodeURIComponent(activeWorkspaceName)}/members`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId, role: newRole }),
@@ -364,7 +364,7 @@ export default function WorkspaceSettingsPage() {
   }
 
   async function handleAddCommand() {
-    if (!activeWorkspaceId || !newCmdName.trim() || !newCmdResponse.trim()) return;
+    if (!activeWorkspaceName || !newCmdName.trim() || !newCmdResponse.trim()) return;
     setSavingCmd(true);
     setCmdError(null);
     try {
@@ -372,7 +372,7 @@ export default function WorkspaceSettingsPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          workspaceId: activeWorkspaceId,
+          workspaceId: activeWorkspaceName,
           name: newCmdName.trim(),
           description: newCmdDescription.trim(),
           responseText: newCmdResponse.trim(),
@@ -395,13 +395,13 @@ export default function WorkspaceSettingsPage() {
   }
 
   async function handleRemoveCommand(id: string) {
-    if (!activeWorkspaceId) return;
+    if (!activeWorkspaceName) return;
     setRemovingCmdId(id);
     try {
       await fetch('/api/commands', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, workspaceId: activeWorkspaceId }),
+        body: JSON.stringify({ id, workspaceId: activeWorkspaceName }),
       });
       await loadCustomCommands();
     } finally {
@@ -410,11 +410,11 @@ export default function WorkspaceSettingsPage() {
   }
 
   const loadData = useCallback(async () => {
-    if (!activeWorkspaceId) return;
+    if (!activeWorkspaceName) return;
     setLoadingData(true);
     setError(null);
     try {
-      const res = await fetch(`/api/workspaces/${activeWorkspaceId}/members`);
+      const res = await fetch(`/api/workspaces/${encodeURIComponent(activeWorkspaceName)}/members`);
       if (!res.ok) throw new Error('Failed to load workspace data');
       const json: SettingsData = await res.json();
       setData(json);
@@ -423,7 +423,7 @@ export default function WorkspaceSettingsPage() {
     } finally {
       setLoadingData(false);
     }
-  }, [activeWorkspaceId]);
+  }, [activeWorkspaceName]);
 
   useEffect(() => {
     if (activeWorkspace) {
@@ -448,11 +448,11 @@ export default function WorkspaceSettingsPage() {
   }, [loadingData, activeWorkspace, isPrivileged, router]);
 
   async function handleSave() {
-    if (!activeWorkspaceId) return;
+    if (!activeWorkspaceName) return;
     setSaving(true);
     setSaveSuccess(false);
     try {
-      const res = await fetch(`/api/workspaces/${activeWorkspaceId}`, {
+      const res = await fetch(`/api/workspaces/${encodeURIComponent(activeWorkspaceName)}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: name.trim(), description: description.trim(), iconUrl: iconUrl.trim() }),
@@ -469,10 +469,10 @@ export default function WorkspaceSettingsPage() {
   }
 
   async function handleRemoveMember(userId: string) {
-    if (!activeWorkspaceId) return;
+    if (!activeWorkspaceName) return;
     setRemovingId(userId);
     try {
-      const res = await fetch(`/api/workspaces/${activeWorkspaceId}/members`, {
+      const res = await fetch(`/api/workspaces/${encodeURIComponent(activeWorkspaceName)}/members`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId }),

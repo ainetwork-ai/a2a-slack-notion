@@ -5,13 +5,13 @@ import { webhooks, workspaceMembers, channels } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
 import { randomBytes } from "crypto";
 import { logAudit } from "@/lib/audit";
+import { resolveWorkspaceIdQuery, resolveWorkspaceParam } from "@/lib/resolve";
 
 export async function GET(request: NextRequest) {
   const auth = await requireAuth();
   if ("error" in auth) return auth.error;
 
-  const { searchParams } = new URL(request.url);
-  const workspaceId = searchParams.get("workspaceId");
+  const workspaceId = await resolveWorkspaceIdQuery(request);
   if (!workspaceId) {
     return NextResponse.json({ error: "workspaceId is required" }, { status: 400 });
   }
@@ -53,15 +53,21 @@ export async function POST(request: NextRequest) {
   if ("error" in auth) return auth.error;
 
   const body = await request.json();
-  const { workspaceId, channelId, name } = body as {
+  const { workspaceId: workspaceRef, channelId, name } = body as {
     workspaceId?: string;
     channelId?: string;
     name?: string;
   };
 
-  if (!workspaceId || !channelId || !name) {
+  if (!workspaceRef || !channelId || !name) {
     return NextResponse.json({ error: "workspaceId, channelId, and name are required" }, { status: 400 });
   }
+
+  const ws = await resolveWorkspaceParam(workspaceRef);
+  if (!ws) {
+    return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
+  }
+  const workspaceId = ws.id;
 
   // Verify caller is admin or owner
   const [membership] = await db
@@ -102,11 +108,20 @@ export async function DELETE(request: NextRequest) {
   if ("error" in auth) return auth.error;
 
   const body = await request.json();
-  const { id, workspaceId } = body as { id?: string; workspaceId?: string };
+  const { id, workspaceId: workspaceRef } = body as {
+    id?: string;
+    workspaceId?: string;
+  };
 
-  if (!id || !workspaceId) {
+  if (!id || !workspaceRef) {
     return NextResponse.json({ error: "id and workspaceId are required" }, { status: 400 });
   }
+
+  const ws = await resolveWorkspaceParam(workspaceRef);
+  if (!ws) {
+    return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
+  }
+  const workspaceId = ws.id;
 
   // Verify caller is admin or owner
   const [membership] = await db

@@ -11,6 +11,7 @@ import {
   users,
 } from "@/lib/db/schema";
 import { and, eq } from "drizzle-orm";
+import { resolveWorkspaceParam } from "@/lib/resolve";
 
 export async function GET(
   _req: NextRequest,
@@ -20,7 +21,12 @@ export async function GET(
   if ("error" in auth) return auth.error;
   const { user } = auth;
 
-  const { workspaceId } = await params;
+  const { workspaceId: param } = await params;
+  const ws = await resolveWorkspaceParam(param);
+  if (!ws) {
+    return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
+  }
+  const workspaceId = ws.id;
 
   // Only workspace owners/admins can export
   const [membership] = await db

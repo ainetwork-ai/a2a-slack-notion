@@ -45,8 +45,8 @@ export default function DMPage({ params }: { params: Promise<{ conversationId: s
   const dmParam = decodeURIComponent(urlParam);
   const { user: authUser } = useAuth();
   const { activeThread } = useAppStore();
-  const { workspaces, activeWorkspaceId } = useWorkspaceStore();
-  const activeWorkspace = workspaces.find(w => w.id === activeWorkspaceId);
+  const { workspaces, activeWorkspaceName } = useWorkspaceStore();
+  const activeWorkspace = workspaces.find(w => w.name === activeWorkspaceName);
   const isWorkspaceOwner = activeWorkspace?.role === 'owner';
   const [selectedSkill, setSelectedSkill] = useState<AgentSkill | null>(null);
   const lastReadAtRef = useRef<string | null>(null);

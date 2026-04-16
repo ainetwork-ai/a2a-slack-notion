@@ -3,13 +3,13 @@ import { requireAuth } from "@/lib/auth/middleware";
 import { db } from "@/lib/db";
 import { outgoingWebhooks, workspaceMembers, channels } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
+import { resolveWorkspaceIdQuery, resolveWorkspaceParam } from "@/lib/resolve";
 
 export async function GET(request: NextRequest) {
   const auth = await requireAuth();
   if ("error" in auth) return auth.error;
 
-  const { searchParams } = new URL(request.url);
-  const workspaceId = searchParams.get("workspaceId");
+  const workspaceId = await resolveWorkspaceIdQuery(request);
   if (!workspaceId) {
     return NextResponse.json({ error: "workspaceId is required" }, { status: 400 });
   }
@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
   if ("error" in auth) return auth.error;
 
   const body = await request.json();
-  const { workspaceId, channelId, name, triggerWords, url } = body as {
+  const { workspaceId: workspaceRef, channelId, name, triggerWords, url } = body as {
     workspaceId?: string;
     channelId?: string;
     name?: string;
@@ -59,12 +59,18 @@ export async function POST(request: NextRequest) {
     url?: string;
   };
 
-  if (!workspaceId || !name || !triggerWords || !url) {
+  if (!workspaceRef || !name || !triggerWords || !url) {
     return NextResponse.json(
       { error: "workspaceId, name, triggerWords, and url are required" },
       { status: 400 }
     );
   }
+
+  const ws = await resolveWorkspaceParam(workspaceRef);
+  if (!ws) {
+    return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
+  }
+  const workspaceId = ws.id;
 
   const [membership] = await db
     .select({ role: workspaceMembers.role })
@@ -101,11 +107,20 @@ export async function DELETE(request: NextRequest) {
   if ("error" in auth) return auth.error;
 
   const body = await request.json();
-  const { id, workspaceId } = body as { id?: string; workspaceId?: string };
+  const { id, workspaceId: workspaceRef } = body as {
+    id?: string;
+    workspaceId?: string;
+  };
 
-  if (!id || !workspaceId) {
+  if (!id || !workspaceRef) {
     return NextResponse.json({ error: "id and workspaceId are required" }, { status: 400 });
   }
+
+  const ws = await resolveWorkspaceParam(workspaceRef);
+  if (!ws) {
+    return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
+  }
+  const workspaceId = ws.id;
 
   const [membership] = await db
     .select({ role: workspaceMembers.role })
