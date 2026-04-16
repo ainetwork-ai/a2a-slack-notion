@@ -119,6 +119,8 @@ export class UnblockExecutor implements AgentExecutor {
         ? userMessage.metadata.skillId
         : undefined;
 
+    const debug = userMessage.metadata?.debug === true;
+
     // Optional per-call template variables. Each key/value corresponds to
     // a `^KEY^` placeholder in the pipeline prompt (see FOLLOWUPS.md,
     // Slice A). The caller owns knowing which variables a given skill
@@ -164,13 +166,17 @@ export class UnblockExecutor implements AgentExecutor {
         { role: 'user', content: userText || '안녕하세요.' },
       ]);
 
+      const replyMeta: Record<string, unknown> = {};
+      if (skillId) replyMeta.skillId = skillId;
+      if (debug) replyMeta.systemPrompt = systemPrompt;
+
       const reply: Message = {
         kind: 'message',
         messageId: uuidv4(),
         role: 'agent',
         parts: [{ kind: 'text', text: responseText }],
         contextId,
-        ...(skillId && { metadata: { skillId } }),
+        ...(Object.keys(replyMeta).length > 0 && { metadata: replyMeta }),
       };
       eventBus.publish(reply);
     } catch (err) {
