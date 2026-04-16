@@ -36,13 +36,19 @@ const REPORTER_TO_MANAGER: Record<string, string> = {
 };
 
 function pickAgentFromText(text: string, roster: Record<string, { kor: string; en: string }>): string | null {
+  // Note: \b doesn't work with Korean in JS regex — use lookahead/behind or
+  // simple substring matching instead. @mentions use @\s*Name pattern without \b.
   const atHits: [number, string][] = [];
   const nameHits: [number, string][] = [];
   for (const [agentId, info] of Object.entries(roster)) {
     for (const form of [info.kor, info.en]) {
-      const atMatch = new RegExp(`@\\s*${form}\\b`, "i").exec(text);
+      // @mention match (no \b — Korean chars aren't word chars in JS)
+      const atMatch = new RegExp(`@\\s*${form}`, "i").exec(text);
       if (atMatch) atHits.push([atMatch.index, agentId]);
-      const nameRe = new RegExp(`\\b${form}\\b`, "ig");
+      // Plain name match — use word boundary only for ASCII names
+      const isAscii = /^[a-zA-Z]+$/.test(form);
+      const pattern = isAscii ? `\\b${form}\\b` : form;
+      const nameRe = new RegExp(pattern, "ig");
       let m;
       while ((m = nameRe.exec(text)) !== null) {
         nameHits.push([m.index, agentId]);
