@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import type { TriggerType } from './TriggerPicker';
+import EntityPicker from './EntityPicker';
 
 export interface TriggerConfigData {
   // shortcut
@@ -144,17 +145,14 @@ export default function TriggerConfig({ triggerType, onContinue, onBack }: Trigg
                 />
               </div>
               <div>
-                <label className="text-xs text-slate-400 mb-1 block">In channel</label>
-                <div className="relative">
-                  <select
-                    value={shortcutChannel}
-                    onChange={(e) => setShortcutChannel(e.target.value)}
-                    className="w-full bg-[#1a1d21] border border-white/10 rounded-lg px-3 py-2 text-white text-sm appearance-none pr-8"
-                  >
-                    <option value="all channels">all channels</option>
-                    <option value="general">general</option>
-                  </select>
-                </div>
+                <label className="text-xs text-slate-400 mb-1 block">In channel (leave empty for all channels)</label>
+                <EntityPicker
+                  kind="channel"
+                  value={shortcutChannel === 'all channels' ? '' : shortcutChannel}
+                  onChange={(v) => setShortcutChannel(v || 'all channels')}
+                  placeholder="All channels"
+                  clearable
+                />
               </div>
             </div>
           </>
@@ -216,17 +214,13 @@ export default function TriggerConfig({ triggerType, onContinue, onBack }: Trigg
 
         {triggerType === 'channel_message' && (
           <>
-            <div className="flex items-center gap-2 flex-wrap text-base text-slate-300">
+            <div className="space-y-2 text-base text-slate-300">
               <span>When a message is posted in</span>
-              <div className="inline-flex items-center gap-1">
-                <span className="text-slate-400">#</span>
-                <Input
-                  value={channelId}
-                  onChange={(e) => setChannelId(e.target.value)}
-                  placeholder="channel-name"
-                  className="bg-[#1a1d21] border-white/10 text-white text-sm w-40 inline-block"
-                />
-              </div>
+              <EntityPicker
+                kind="channel"
+                value={channelId}
+                onChange={setChannelId}
+              />
             </div>
             <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
               <input
@@ -249,17 +243,13 @@ export default function TriggerConfig({ triggerType, onContinue, onBack }: Trigg
         )}
 
         {triggerType === 'channel_join' && (
-          <div className="flex items-center gap-2 flex-wrap text-base text-slate-300">
+          <div className="space-y-2 text-base text-slate-300">
             <span>When someone joins</span>
-            <div className="inline-flex items-center gap-1">
-              <span className="text-slate-400">#</span>
-              <Input
-                value={joinChannelId}
-                onChange={(e) => setJoinChannelId(e.target.value)}
-                placeholder="channel-name"
-                className="bg-[#1a1d21] border-white/10 text-white text-sm w-40 inline-block"
-              />
-            </div>
+            <EntityPicker
+              kind="channel"
+              value={joinChannelId}
+              onChange={setJoinChannelId}
+            />
           </div>
         )}
 

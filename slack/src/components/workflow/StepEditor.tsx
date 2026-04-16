@@ -6,6 +6,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Plus, Trash2 } from 'lucide-react';
 import type { WorkflowStep, FormField } from '@/lib/workflow/types';
+import EntityPicker from './EntityPicker';
 
 interface StepEditorProps {
   step: WorkflowStep;
@@ -97,21 +98,24 @@ export default function StepEditor({ step, onChange, onDone }: StepEditorProps) 
       {step.type === 'ask_agent' && (
         <>
           <div>
-            <label className="text-xs text-slate-400 mb-1 block">Agent ID</label>
-            <Input
-              placeholder="e.g. researcher"
+            <label className="text-xs text-slate-400 mb-1 block">Agent</label>
+            <EntityPicker
+              kind="agent"
               value={(s.agentId as string) || ''}
-              onChange={(e) => set('agentId', e.target.value)}
-              className={inputCls()}
+              onChange={(v) => {
+                // Changing the agent invalidates the previously selected skill.
+                onChange({ ...step, agentId: v, skillId: undefined } as WorkflowStep);
+              }}
             />
           </div>
           <div>
-            <label className="text-xs text-slate-400 mb-1 block">Skill ID (optional)</label>
-            <Input
-              placeholder="e.g. web-search"
+            <label className="text-xs text-slate-400 mb-1 block">Skill (optional)</label>
+            <EntityPicker
+              kind="skill"
+              agentId={(s.agentId as string) || ''}
               value={(s.skillId as string) || ''}
-              onChange={(e) => set('skillId', e.target.value)}
-              className={inputCls()}
+              onChange={(v) => set('skillId', v || undefined)}
+              clearable
             />
           </div>
           <div>
@@ -140,12 +144,11 @@ export default function StepEditor({ step, onChange, onDone }: StepEditorProps) 
       {(step.type === 'send_message' || step.type === 'post_to_channel') && (
         <>
           <div>
-            <label className="text-xs text-slate-400 mb-1 block">Channel ID</label>
-            <Input
-              placeholder="e.g. general"
+            <label className="text-xs text-slate-400 mb-1 block">Channel</label>
+            <EntityPicker
+              kind="channel"
               value={(s.channelId as string) || ''}
-              onChange={(e) => set('channelId', e.target.value)}
-              className={inputCls()}
+              onChange={(v) => set('channelId', v)}
             />
           </div>
           <div>
@@ -165,12 +168,11 @@ export default function StepEditor({ step, onChange, onDone }: StepEditorProps) 
       {step.type === 'dm_user' && (
         <>
           <div>
-            <label className="text-xs text-slate-400 mb-1 block">User ID</label>
-            <Input
-              placeholder="User to DM"
+            <label className="text-xs text-slate-400 mb-1 block">User</label>
+            <EntityPicker
+              kind="user"
               value={(s.userId as string) || ''}
-              onChange={(e) => set('userId', e.target.value)}
-              className={inputCls()}
+              onChange={(v) => set('userId', v)}
             />
           </div>
           <div>
@@ -190,21 +192,19 @@ export default function StepEditor({ step, onChange, onDone }: StepEditorProps) 
       {step.type === 'add_to_channel' && (
         <>
           <div>
-            <label className="text-xs text-slate-400 mb-1 block">Channel ID</label>
-            <Input
-              placeholder="Channel to add user to"
+            <label className="text-xs text-slate-400 mb-1 block">Channel</label>
+            <EntityPicker
+              kind="channel"
               value={(s.channelId as string) || ''}
-              onChange={(e) => set('channelId', e.target.value)}
-              className={inputCls()}
+              onChange={(v) => set('channelId', v)}
             />
           </div>
           <div>
-            <label className="text-xs text-slate-400 mb-1 block">User ID</label>
-            <Input
-              placeholder="User to add"
+            <label className="text-xs text-slate-400 mb-1 block">User</label>
+            <EntityPicker
+              kind="user"
               value={(s.userId as string) || ''}
-              onChange={(e) => set('userId', e.target.value)}
-              className={inputCls()}
+              onChange={(v) => set('userId', v)}
             />
           </div>
         </>
@@ -213,12 +213,11 @@ export default function StepEditor({ step, onChange, onDone }: StepEditorProps) 
       {step.type === 'approval' && (
         <>
           <div>
-            <label className="text-xs text-slate-400 mb-1 block">Approver User ID</label>
-            <Input
-              placeholder="Who approves?"
+            <label className="text-xs text-slate-400 mb-1 block">Approver</label>
+            <EntityPicker
+              kind="user"
               value={(s.approverUserId as string) || ''}
-              onChange={(e) => set('approverUserId', e.target.value)}
-              className={inputCls()}
+              onChange={(v) => set('approverUserId', v)}
             />
           </div>
           <div>
@@ -309,11 +308,11 @@ export default function StepEditor({ step, onChange, onDone }: StepEditorProps) 
           </div>
           <div>
             <label className="text-xs text-slate-400 mb-1 block">Post to channel (optional)</label>
-            <Input
-              placeholder="Channel ID to post responses"
+            <EntityPicker
+              kind="channel"
               value={(s.submitToChannelId as string) || ''}
-              onChange={(e) => set('submitToChannelId', e.target.value)}
-              className={inputCls()}
+              onChange={(v) => set('submitToChannelId', v || undefined)}
+              clearable
             />
           </div>
           <div>

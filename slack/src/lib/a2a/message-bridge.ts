@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { messages, users } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, or } from "drizzle-orm";
 import { sendA2AMessage } from "./client";
 import { executeTool } from "@/lib/mcp/executor";
 import { MCP_SERVERS } from "@/lib/mcp/registry";
@@ -64,13 +64,22 @@ export async function sendToAgent(params: {
   senderName?: string;
   fileUrls?: string[];
 }) {
+  // Accept either the users.id UUID or the natural a2aId (e.g. "bitcoinnewsresearcher").
+  // Workflows and A2A calls prefer the a2aId so the step config stays human-readable.
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+    params.agentId
+  );
   const [agent] = await db
     .select()
     .from(users)
-    .where(eq(users.id, params.agentId))
+    .where(
+      isUuid
+        ? or(eq(users.id, params.agentId), eq(users.a2aId, params.agentId))!
+        : eq(users.a2aId, params.agentId)
+    )
     .limit(1);
 
-  if (!agent) throw new Error("Agent not found");
+  if (!agent) throw new Error(`Agent not found: ${params.agentId}`);
 
   const agentName = agent.displayName;
   const card = agent.agentCardJson as BuiltAgentCard | null;
