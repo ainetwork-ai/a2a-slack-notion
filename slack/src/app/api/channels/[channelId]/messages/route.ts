@@ -1,10 +1,11 @@
 import { db } from "@/lib/db";
-import { users, channels, channelMembers, messages, reactions, mentions, files, notifications, outgoingWebhooks } from "@/lib/db/schema";
+import { users, channels, channelMembers, messages, reactions, mentions, files, notifications, outgoingWebhooks, workflows } from "@/lib/db/schema";
 import { eq, and, desc, lt, sql, inArray, or, ilike, isNull } from "drizzle-orm";
 import { requireAuth } from "@/lib/auth/middleware";
 import { NextRequest, NextResponse } from "next/server";
 import { sendToAgent } from "@/lib/a2a/message-bridge";
 import { checkAutoEngagement } from "@/lib/a2a/auto-engage";
+import { runWorkflow } from "@/lib/workflow/executor";
 
 export async function GET(
   request: NextRequest,
@@ -202,6 +203,45 @@ export async function POST(
   }).catch(() => {
     // Fire-and-forget, ignore errors
   });
+
+  // Trigger channel_message workflows
+  {
+    const [channelRow] = await db
+      .select({ workspaceId: channels.workspaceId })
+      .from(channels)
+      .where(eq(channels.id, channelId))
+      .limit(1);
+
+    if (channelRow?.workspaceId) {
+      const matchingWorkflows = await db
+        .select()
+        .from(workflows)
+        .where(
+          and(
+            eq(workflows.workspaceId, channelRow.workspaceId),
+            eq(workflows.triggerType, "channel_message"),
+            eq(workflows.enabled, true)
+          )
+        );
+
+      for (const wf of matchingWorkflows) {
+        const config = wf.triggerConfig as { channelId?: string; pattern?: string } | null;
+        if (config?.channelId && config.channelId !== channelId) continue;
+        if (config?.pattern) {
+          try {
+            if (!new RegExp(config.pattern).test(content)) continue;
+          } catch {
+            continue;
+          }
+        }
+        runWorkflow(wf.id, {
+          trigger: { message: content, userId: user.id, channelId },
+        }).catch(() => {
+          // Fire-and-forget
+        });
+      }
+    }
+  }
 
   // Parse @mentions from content
   const broadcastMentionPattern = /@(channel|here|everyone)\b/i;

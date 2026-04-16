@@ -489,6 +489,38 @@ export const messageEdits = pgTable(
   (t) => [index("message_edits_message_idx").on(t.messageId)]
 );
 
+export const workflows = pgTable("workflows", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  workspaceId: uuid("workspace_id")
+    .references(() => workspaces.id, { onDelete: "cascade" })
+    .notNull(),
+  name: text("name").notNull(),
+  description: text("description"),
+  triggerType: text("trigger_type").notNull(),
+  triggerConfig: jsonb("trigger_config").default({}),
+  steps: jsonb("steps").default([]).notNull(),
+  enabled: boolean("enabled").default(true).notNull(),
+  createdBy: uuid("created_by")
+    .references(() => users.id)
+    .notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const workflowRuns = pgTable("workflow_runs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  workflowId: uuid("workflow_id")
+    .references(() => workflows.id, { onDelete: "cascade" })
+    .notNull(),
+  status: text("status").default("pending").notNull(),
+  triggeredBy: uuid("triggered_by").references(() => users.id),
+  variables: jsonb("variables").default({}),
+  currentStepIndex: integer("current_step_index").default(0),
+  error: text("error"),
+  startedAt: timestamp("started_at").defaultNow().notNull(),
+  completedAt: timestamp("completed_at"),
+});
+
 export const agentSkillConfigs = pgTable(
   "agent_skill_configs",
   {

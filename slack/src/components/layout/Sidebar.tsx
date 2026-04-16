@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 
-import { Home, Search, MessageSquare, Smile, LogOut, Sun, Moon, Inbox, MessagesSquare, Plus, Bookmark, BellOff, Volume2, VolumeX, User, Settings } from 'lucide-react';
+import { Home, Search, MessageSquare, Smile, LogOut, Sun, Moon, Inbox, MessagesSquare, Plus, Bookmark, BellOff, Volume2, VolumeX, User, Settings, Zap } from 'lucide-react';
 import Image from 'next/image';
 import NotificationPanel from '@/components/modals/NotificationPanel';
 import ProfileEditModal from '@/components/modals/ProfileEditModal';
@@ -251,6 +251,12 @@ export default function Sidebar() {
         label="All unreads"
         onClick={() => router.push('/workspace/unreads')}
         active={pathname === '/workspace/unreads'}
+      />
+      <NavButton
+        icon={<Zap className="w-5 h-5" />}
+        label="Workflow Builder"
+        onClick={() => router.push('/workspace/workflows')}
+        active={pathname === '/workspace/workflows'}
       />
       {(activeWorkspace?.role === 'owner' || activeWorkspace?.role === 'admin') && (
         <NavButton

@@ -1,8 +1,9 @@
 import { db } from "@/lib/db";
-import { users, channels, channelMembers, messages, reactions, mentions, files, notifications } from "@/lib/db/schema";
-import { eq, and, desc, lt, sql, inArray, or, ilike } from "drizzle-orm";
+import { users, channels, channelMembers, messages, workflows } from "@/lib/db/schema";
+import { eq, and } from "drizzle-orm";
 import { requireAuth } from "@/lib/auth/middleware";
 import { NextRequest, NextResponse } from "next/server";
+import { runWorkflow } from "@/lib/workflow/executor";
 
 export async function GET(
   _request: NextRequest,
@@ -132,6 +133,38 @@ export async function POST(
     content: `${targetUser.displayName} joined #${channelRow?.name ?? channelId}`,
     contentType: "system",
   });
+
+  // Trigger channel_join workflows
+  {
+    const [chanRow] = await db
+      .select({ workspaceId: channels.workspaceId })
+      .from(channels)
+      .where(eq(channels.id, channelId))
+      .limit(1);
+
+    if (chanRow?.workspaceId) {
+      const matchingWorkflows = await db
+        .select()
+        .from(workflows)
+        .where(
+          and(
+            eq(workflows.workspaceId, chanRow.workspaceId),
+            eq(workflows.triggerType, "channel_join"),
+            eq(workflows.enabled, true)
+          )
+        );
+
+      for (const wf of matchingWorkflows) {
+        const config = wf.triggerConfig as { channelId?: string } | null;
+        if (config?.channelId && config.channelId !== channelId) continue;
+        runWorkflow(wf.id, {
+          trigger: { userId, channelId },
+        }).catch(() => {
+          // Fire-and-forget
+        });
+      }
+    }
+  }
 
   return NextResponse.json(newMember, { status: 201 });
 }
