@@ -261,7 +261,14 @@ async function runAgent(
   }
 
   // 5. Skill hint — if user invoked a specific skill
+  // Truncate long messages to avoid exceeding LLM context window (Gemma4 = 4096 tokens)
+  // Agent can use slack:read_thread to fetch full content if needed
+  const MAX_MSG_CHARS = 2000;
   let userContent = userMessage;
+  if (userMessage.length > MAX_MSG_CHARS) {
+    userContent = userMessage.slice(0, MAX_MSG_CHARS) +
+      `\n\n[TRUNCATED — ${userMessage.length - MAX_MSG_CHARS} more chars. Use slack:read_thread with conversationId=${pointer.conversationId || "..."} or channelId=${pointer.channelId || "..."} to fetch recent messages in full.]`;
+  }
   if (skillHint) {
     const skill = card.skills?.find((s) => s.id === skillHint);
     if (skill) {
@@ -435,9 +442,14 @@ export async function* streamAgentResponse(params: {
   // Build system prompt (same as runAgent)
   const systemContent = buildSystemPrompt(card, agentName, pointer, params.skillId);
 
+  const MAX_STREAM_MSG = 2000;
+  const streamUserContent = params.text.length > MAX_STREAM_MSG
+    ? params.text.slice(0, MAX_STREAM_MSG) + `\n\n[TRUNCATED — use slack:read_thread to fetch full context]`
+    : params.text;
+
   const llmMessages: Array<{ role: string; content: string }> = [
     { role: "system", content: systemContent },
-    { role: "user", content: params.text },
+    { role: "user", content: streamUserContent },
   ];
 
   // Tool-use rounds (non-streaming — need full text to parse tool calls)
