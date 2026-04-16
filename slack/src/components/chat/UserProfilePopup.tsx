@@ -62,7 +62,8 @@ export default function UserProfilePopup({
       });
       if (res.ok) {
         const data = await res.json();
-        router.push(`/workspace/dm/${data.id}`);
+        const key = data.dmKey || data.id;
+        router.push(`/workspace/dm/${encodeURIComponent(key)}`);
       }
     } catch {
       // silently fail

@@ -47,10 +47,10 @@ export default function BrowseChannelsModal() {
 
   const channels = Array.isArray(data) ? data : [];
 
-  async function handleJoin(channelId: string) {
-    setJoining(channelId);
+  async function handleJoin(ch: { id: string; name: string }) {
+    setJoining(ch.id);
     try {
-      const res = await fetch(`/api/channels/${channelId}/members`, {
+      const res = await fetch(`/api/channels/${ch.id}/members`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({}),
@@ -58,16 +58,16 @@ export default function BrowseChannelsModal() {
       if (res.ok) {
         await mutate();
         setBrowseChannelsOpen(false);
-        router.push(`/workspace/channel/${channelId}`);
+        router.push(`/workspace/channel/${encodeURIComponent(ch.name)}`);
       }
     } finally {
       setJoining(null);
     }
   }
 
-  function handleOpen(channelId: string) {
+  function handleOpen(ch: { name: string }) {
     setBrowseChannelsOpen(false);
-    router.push(`/workspace/channel/${channelId}`);
+    router.push(`/workspace/channel/${encodeURIComponent(ch.name)}`);
   }
 
   function handleClose() {
@@ -141,7 +141,7 @@ export default function BrowseChannelsModal() {
                   <Button
                     size="sm"
                     variant="ghost"
-                    onClick={() => handleOpen(channel.id)}
+                    onClick={() => handleOpen(channel)}
                     className="h-7 px-3 text-xs text-[#bcabbc] hover:text-white hover:bg-white/10"
                   >
                     Open
@@ -149,7 +149,7 @@ export default function BrowseChannelsModal() {
                 ) : (
                   <Button
                     size="sm"
-                    onClick={() => handleJoin(channel.id)}
+                    onClick={() => handleJoin(channel)}
                     disabled={joining === channel.id}
                     className="h-7 px-3 text-xs bg-[#4a154b] hover:bg-[#611f6a] text-white"
                   >

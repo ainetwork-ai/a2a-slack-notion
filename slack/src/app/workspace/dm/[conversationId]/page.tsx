@@ -41,7 +41,8 @@ interface Conversation {
 }
 
 export default function DMPage({ params }: { params: Promise<{ conversationId: string }> }) {
-  const { conversationId } = use(params);
+  const { conversationId: urlParam } = use(params);
+  const dmParam = decodeURIComponent(urlParam);
   const { user: authUser } = useAuth();
   const { activeThread } = useAppStore();
   const { workspaces, activeWorkspaceId } = useWorkspaceStore();
@@ -56,8 +57,16 @@ export default function DMPage({ params }: { params: Promise<{ conversationId: s
   const [isOwner, setIsOwner] = useState(false);
   const [cardUrlCopied, setCardUrlCopied] = useState(false);
 
+  const { data: convoData, mutate: mutateConvo } = useSWR<{ conversation: Conversation }>(
+    `/api/dm/${encodeURIComponent(dmParam)}`,
+    fetcher
+  );
+
+  const conversation = convoData?.conversation;
+  const conversationId = conversation?.id ?? '';
+
   useEffect(() => {
-    // Mark as read and capture the previous lastReadAt in one call
+    if (!conversationId) return;
     fetch(`/api/dm/${conversationId}/read`, { method: 'PATCH' })
       .then(r => r.json())
       .then((data: { previousLastReadAt?: string | null }) => {
@@ -69,13 +78,6 @@ export default function DMPage({ params }: { params: Promise<{ conversationId: s
       })
       .catch(() => {});
   }, [conversationId]);
-
-  const { data: convoData, mutate: mutateConvo } = useSWR<{ conversation: Conversation }>(
-    `/api/dm/${conversationId}`,
-    fetcher
-  );
-
-  const conversation = convoData?.conversation;
 
   useEffect(() => {
     if (conversation?.isMuted !== undefined) {

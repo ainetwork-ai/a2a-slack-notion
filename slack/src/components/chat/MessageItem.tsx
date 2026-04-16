@@ -125,7 +125,8 @@ function BuilderResultActions({ metadata }: { metadata: unknown }) {
     });
     if (res.ok) {
       const conv = await res.json();
-      router.push(`/workspace/dm/${conv.id}`);
+      const key = conv.dmKey || conv.id;
+      router.push(`/workspace/dm/${encodeURIComponent(key)}`);
     }
   }
 

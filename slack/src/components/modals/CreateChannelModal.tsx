@@ -56,8 +56,8 @@ export default function CreateChannelModal() {
       setName('');
       setDescription('');
       setIsPrivate(false);
-      if (result?.channel?.id) {
-        router.push(`/workspace/channel/${result.channel.id}`);
+      if (result?.channel?.name) {
+        router.push(`/workspace/channel/${encodeURIComponent(result.channel.name)}`);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create channel');

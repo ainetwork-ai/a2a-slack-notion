@@ -49,8 +49,9 @@ interface Channel {
   isArchived?: boolean;
 }
 
-export default function ChannelPage({ params }: { params: Promise<{ channelId: string }> }) {
-  const { channelId } = use(params);
+export default function ChannelPage({ params }: { params: Promise<{ channelName: string }> }) {
+  const { channelName: urlParam } = use(params);
+  const channelName = decodeURIComponent(urlParam);
   const { user: authUser } = useAuth();
   const { activeThread, setActiveThread } = useAppStore();
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -105,6 +106,23 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
     if (archived) router.push('/workspace');
   }
 
+  // Resolve the channel name from the URL to the canonical channel row.
+  // The backend endpoint accepts either a UUID or a workspace-scoped channel name.
+  const { data: channelData } = useSWR<Channel & { members?: ChannelMember[] }>(
+    `/api/channels/${encodeURIComponent(channelName)}`,
+    fetcher
+  );
+  const channelId = channelData?.id ?? '';
+
+  const { data: canvasData } = useSWR<{ id: string; title: string; content: string } | null>(
+    channelId ? `/api/channels/${channelId}/canvas` : null,
+    fetcher
+  );
+
+  const channel = channelData?.id
+    ? { ...channelData, memberCount: channelData.members?.length }
+    : undefined;
+
   // Auto-open canvas if ?canvas=1 in URL
   useEffect(() => {
     if (searchParams.get('canvas') === '1') {
@@ -115,10 +133,10 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
   // Issue 1: Reset active thread when switching channels
   useEffect(() => {
     setActiveThread(null);
-  }, [channelId]);
+  }, [channelId, setActiveThread]);
 
   useEffect(() => {
-    // Mark as read and capture the previous lastReadAt in one call
+    if (!channelId) return;
     fetch(`/api/channels/${channelId}/read`, { method: 'PATCH' })
       .then(r => r.json())
       .then((data: { previousLastReadAt?: string | null }) => {
@@ -132,6 +150,7 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
   }, [channelId]);
 
   useEffect(() => {
+    if (!channelId) return;
     fetch(`/api/channels/${channelId}/notifications`)
       .then(r => r.json())
       .then((data: { pref?: string }) => {
@@ -141,6 +160,7 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
   }, [channelId]);
 
   async function updateNotifPref(pref: 'all' | 'mentions' | 'none') {
+    if (!channelId) return;
     setNotifPref(pref);
     await fetch(`/api/channels/${channelId}/notifications`, {
       method: 'PATCH',
@@ -159,7 +179,7 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
   }, [searchOpen]);
 
   useEffect(() => {
-    if (!searchQuery.trim()) {
+    if (!searchQuery.trim() || !channelId) {
       setSearchResults([]);
       return;
     }
@@ -177,20 +197,6 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
     }, 300);
     return () => clearTimeout(timer);
   }, [searchQuery, channelId]);
-
-  const { data: channelData } = useSWR<Channel & { members?: ChannelMember[] }>(
-    `/api/channels/${channelId}`,
-    fetcher
-  );
-
-  const { data: canvasData } = useSWR<{ id: string; title: string; content: string } | null>(
-    `/api/channels/${channelId}/canvas`,
-    fetcher
-  );
-
-  const channel = channelData?.id
-    ? { ...channelData, memberCount: channelData.members?.length }
-    : undefined;
 
   const { messages, isLoading, hasMore, sendMessage, editMessage, deleteMessage, loadMore } =
     useMessages({ channelId, currentUser: authUser ? { id: authUser.id, displayName: authUser.displayName, avatarUrl: authUser.avatarUrl } : undefined });

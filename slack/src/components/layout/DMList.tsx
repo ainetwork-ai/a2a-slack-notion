@@ -17,6 +17,8 @@ interface DMMember {
   avatarUrl?: string;
   isAgent?: boolean;
   status?: string;
+  ainAddress?: string;
+  a2aId?: string | null;
 }
 
 interface DMConversation {
@@ -28,6 +30,8 @@ interface DMConversation {
     avatarUrl?: string;
     isAgent?: boolean;
     status?: string;
+    ainAddress?: string;
+    a2aId?: string | null;
   } | null;
   members: DMMember[];
   lastMessage?: string;
@@ -36,6 +40,21 @@ interface DMConversation {
   unreadCount?: number;
   isMuted?: boolean;
   updatedAt?: string;
+}
+
+/**
+ * URL segment for a DM conversation:
+ *  - 1:1 human DM → partner's AIN address (0x…)
+ *  - 1:1 agent DM → agent's a2aId (e.g. "bitcoinnewsresearcher")
+ *  - group DM    → conversation UUID (no natural key exists)
+ */
+function dmHref(convo: DMConversation): string {
+  const other = convo.otherUser;
+  if (other) {
+    const key = other.a2aId || other.ainAddress;
+    if (key) return `/workspace/dm/${encodeURIComponent(key)}`;
+  }
+  return `/workspace/dm/${convo.id}`;
 }
 
 export default function DMList() {
@@ -78,8 +97,8 @@ export default function DMList() {
     if (userIds.length > 0) fetchPresence(userIds);
   }, [conversations.map(c => c.id).join(',')]);
 
-  function isActive(conversationId: string) {
-    return pathname === `/workspace/dm/${conversationId}`;
+  function isActive(convo: DMConversation) {
+    return pathname === dmHref(convo);
   }
 
   return (
@@ -120,14 +139,14 @@ export default function DMList() {
                 <button
                   key={convo.id}
                   role="option"
-                  aria-selected={isActive(convo.id)}
-                  onClick={() => router.push(`/workspace/dm/${convo.id}`)}
+                  aria-selected={isActive(convo)}
+                  onClick={() => router.push(dmHref(convo))}
                   className={cn(
                     'w-full flex items-center gap-2 px-2 py-1.5 rounded text-[15px] transition-colors text-left',
-                    isActive(convo.id)
+                    isActive(convo)
                       ? 'bg-[#4a154b]/60 text-white'
                       : 'text-[#bcabbc] hover:bg-white/5 hover:text-white',
-                    convo.isMuted && !isActive(convo.id) && 'opacity-50'
+                    convo.isMuted && !isActive(convo) && 'opacity-50'
                   )}
                 >
                   <div className="relative shrink-0">
@@ -135,13 +154,13 @@ export default function DMList() {
                       <Users className="w-3.5 h-3.5 text-[#bcabbc]" />
                     </div>
                   </div>
-                  <span className={cn('truncate flex-1', convo.unread && !isActive(convo.id) && !convo.isMuted && 'font-semibold text-white')}>
+                  <span className={cn('truncate flex-1', convo.unread && !isActive(convo) && !convo.isMuted && 'font-semibold text-white')}>
                     {names}
                   </span>
                   <span className="shrink-0 text-[10px] bg-white/10 text-[#bcabbc] rounded-full px-1.5 py-0.5 font-medium">
                     {memberCount}
                   </span>
-                  {(convo.unreadCount ?? 0) > 0 && !isActive(convo.id) && !convo.isMuted && (
+                  {(convo.unreadCount ?? 0) > 0 && !isActive(convo) && !convo.isMuted && (
                     <span className="flex items-center justify-center min-w-[18px] h-[18px] rounded-full bg-red-500 text-white text-[10px] font-bold px-1 shrink-0">
                       {(convo.unreadCount ?? 0) > 99 ? '99+' : convo.unreadCount}
                     </span>
@@ -165,14 +184,14 @@ export default function DMList() {
               <button
                 key={convo.id}
                 role="option"
-                aria-selected={isActive(convo.id)}
-                onClick={() => router.push(`/workspace/dm/${convo.id}`)}
+                aria-selected={isActive(convo)}
+                onClick={() => router.push(dmHref(convo))}
                 className={cn(
                   'w-full flex items-center gap-2 px-2 py-1.5 rounded text-[15px] transition-colors text-left',
-                  isActive(convo.id)
+                  isActive(convo)
                     ? 'bg-[#4a154b]/60 text-white'
                     : 'text-[#bcabbc] hover:bg-white/5 hover:text-white',
-                  convo.isMuted && !isActive(convo.id) && 'opacity-50'
+                  convo.isMuted && !isActive(convo) && 'opacity-50'
                 )}
               >
                 <div className="relative shrink-0">
@@ -196,10 +215,10 @@ export default function DMList() {
                     </span>
                   )}
                 </div>
-                <span className={cn('truncate flex-1', convo.unread && !isActive(convo.id) && !convo.isMuted && 'font-semibold text-white')}>
+                <span className={cn('truncate flex-1', convo.unread && !isActive(convo) && !convo.isMuted && 'font-semibold text-white')}>
                   {convo.otherUser.displayName}
                 </span>
-                {(convo.unreadCount ?? 0) > 0 && !isActive(convo.id) && !convo.isMuted && (
+                {(convo.unreadCount ?? 0) > 0 && !isActive(convo) && !convo.isMuted && (
                   <span className="ml-auto flex items-center justify-center min-w-[18px] h-[18px] rounded-full bg-red-500 text-white text-[10px] font-bold px-1 shrink-0">
                     {(convo.unreadCount ?? 0) > 99 ? '99+' : convo.unreadCount}
                   </span>
