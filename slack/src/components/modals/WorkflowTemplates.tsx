@@ -252,7 +252,7 @@ const TEMPLATES: WorkflowTemplate[] = [
         skillId: 'assignment',
         inputs: {
           TODAY_DATE: new Date().toISOString().slice(0, 10),
-          BASIC_ARTICLE_SOURCE: '{{trigger.message}}',
+          BASIC_ARTICLE_SOURCE: '{{trigger.body}}',
         },
         saveAs: 'assignment',
       },
@@ -269,7 +269,7 @@ const TEMPLATES: WorkflowTemplate[] = [
         skillId: 'report',
         inputs: {
           TODAY_DATE: new Date().toISOString().slice(0, 10),
-          BASIC_ARTICLE_SOURCE: '{{trigger.message}}',
+          BASIC_ARTICLE_SOURCE: '{{trigger.body}}',
           CHIEF_COMMENT: '{{assignment}}',
         },
         saveAs: 'report',
@@ -304,7 +304,7 @@ const TEMPLATES: WorkflowTemplate[] = [
         inputs: {
           REPORTER: '{{routing.reporterKor}}',
           TODAY_DATE: new Date().toISOString().slice(0, 10),
-          BASIC_ARTICLE_SOURCE: '{{trigger.message}}',
+          BASIC_ARTICLE_SOURCE: '{{trigger.body}}',
           ARTICLE_DRAFT: '{{draft}}',
         },
         saveAs: 'feedback',

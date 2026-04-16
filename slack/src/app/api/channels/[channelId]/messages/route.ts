@@ -234,8 +234,13 @@ export async function POST(
             continue;
           }
         }
+        // Strip the trigger pattern from the message so downstream steps
+        // get only the article source / topic, not the command keyword.
+        const body = config?.pattern
+          ? content.replace(new RegExp(config.pattern), "").trim()
+          : content;
         runWorkflow(wf.id, {
-          trigger: { message: content, userId: user.id, channelId },
+          trigger: { message: content, body, userId: user.id, channelId },
         }).catch(() => {
           // Fire-and-forget
         });
