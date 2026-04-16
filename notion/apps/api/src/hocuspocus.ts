@@ -9,6 +9,25 @@ const logger = createLogger('hocuspocus');
 // Track last auto-snapshot time per document (in-memory, resets on server restart)
 const lastSnapshotTime = new Map<string, number>();
 
+// Build Redis extension only when REDIS_HOST is configured; fail softly if unavailable
+function buildRedisExtension(): Redis | null {
+  if (!process.env['REDIS_HOST']) return null;
+  try {
+    return new Redis({
+      host: process.env['REDIS_HOST'],
+      port: Number(process.env['REDIS_PORT'] ?? 6379),
+      options: {
+        password: process.env['REDIS_PASSWORD'] || undefined,
+      },
+    });
+  } catch (err) {
+    logger.error({ err }, 'Failed to initialize Redis extension — continuing without it');
+    return null;
+  }
+}
+
+const redisExtension = buildRedisExtension();
+
 const server = new Server({
   // No authentication required — accept all connections
   async onAuthenticate({ documentName }: { documentName: string }) {
@@ -17,73 +36,89 @@ const server = new Server({
   },
 
   extensions: [
-    new Redis({
-      host: process.env['REDIS_HOST'] ?? 'localhost',
-      port: Number(process.env['REDIS_PORT'] ?? 6379),
-      options: {
-        password: process.env['REDIS_PASSWORD'] || undefined,
-      },
-    }),
+    ...(redisExtension ? [redisExtension] : []),
     new Database({
       fetch: async ({ documentName }) => {
-        const record = await prisma.block.findUnique({
-          where: { id: documentName },
-          select: { content: true },
-        });
+        try {
+          const record = await prisma.block.findUnique({
+            where: { id: documentName },
+            select: { content: true },
+          });
 
-        if (record?.content && typeof record.content === 'object') {
-          const data = record.content as Record<string, unknown>;
-          const snapshot = data['yjsSnapshot'];
-          if (snapshot && typeof snapshot === 'string') {
-            return Buffer.from(snapshot, 'base64');
+          if (record?.content && typeof record.content === 'object') {
+            const data = record.content as Record<string, unknown>;
+            const snapshot = data['yjsSnapshot'];
+            if (snapshot && typeof snapshot === 'string') {
+              return Buffer.from(snapshot, 'base64');
+            }
           }
+        } catch (err) {
+          logger.error({ documentName, err }, 'Failed to fetch document from DB');
         }
 
         return null;
       },
 
       store: async ({ documentName, state }) => {
-        const existing = await prisma.block.findUnique({
-          where: { id: documentName },
-          select: { content: true, properties: true },
-        });
+        try {
+          const existing = await prisma.block.findUnique({
+            where: { id: documentName },
+            select: { content: true, properties: true },
+          }).catch((err) => {
+            logger.warn({ documentName, err }, 'findUnique failed during store — will upsert with empty content');
+            return null;
+          });
 
-        const content = (existing?.content as Record<string, unknown>) ?? {};
+          const content = (existing?.content as Record<string, unknown>) ?? {};
 
-        await prisma.block.update({
-          where: { id: documentName },
-          data: {
-            content: {
-              ...content,
-              yjsSnapshot: Buffer.from(state).toString('base64'),
-            } as Record<string, string>,
-          },
-        });
+          await prisma.block.upsert({
+            where: { id: documentName },
+            update: {
+              content: {
+                ...content,
+                yjsSnapshot: Buffer.from(state).toString('base64'),
+              } as Record<string, string>,
+            },
+            create: {
+              id: documentName,
+              type: 'page',
+              pageId: documentName,
+              workspaceId: '',
+              createdBy: 'system',
+              properties: {},
+              content: {
+                yjsSnapshot: Buffer.from(state).toString('base64'),
+              } as Record<string, string>,
+            },
+          });
 
-        logger.debug({ documentName, size: state.length }, 'Snapshot saved');
+          logger.debug({ documentName, size: state.length }, 'Snapshot saved');
 
-        // Auto-snapshot: save a PageSnapshot every hour (or on first store for this session)
-        const now = Date.now();
-        const lastTime = lastSnapshotTime.get(documentName) ?? 0;
-        const ONE_HOUR = 3600000;
-        if (now - lastTime > ONE_HOUR) {
-          try {
-            const title =
-              ((existing?.properties as Record<string, unknown>)?.['title'] as string) ?? 'Untitled';
-            await prisma.pageSnapshot.create({
-              data: {
-                pageId: documentName,
-                title,
-                snapshot: Buffer.from(state),
-                createdBy: 'system',
-              },
-            });
-            lastSnapshotTime.set(documentName, now);
-            logger.debug({ documentName }, 'Auto-snapshot created');
-          } catch (err) {
-            // Non-fatal: log and continue
-            logger.warn({ documentName, err }, 'Auto-snapshot failed');
+          // Auto-snapshot: save a PageSnapshot every hour (or on first store for this session)
+          const now = Date.now();
+          const lastTime = lastSnapshotTime.get(documentName) ?? 0;
+          const ONE_HOUR = 3600000;
+          if (now - lastTime > ONE_HOUR) {
+            try {
+              const title =
+                ((existing?.properties as Record<string, unknown>)?.['title'] as string) ?? 'Untitled';
+              await prisma.pageSnapshot.create({
+                data: {
+                  pageId: documentName,
+                  title,
+                  snapshot: Buffer.from(state),
+                  createdBy: 'system',
+                },
+              });
+              lastSnapshotTime.set(documentName, now);
+              logger.debug({ documentName }, 'Auto-snapshot created');
+            } catch (err) {
+              // Non-fatal: log and continue
+              logger.warn({ documentName, err }, 'Auto-snapshot failed');
+            }
           }
+        } catch (err) {
+          logger.error({ documentName, err }, 'Failed to store document snapshot');
         }
       },
     }),

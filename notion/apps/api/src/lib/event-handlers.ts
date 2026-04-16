@@ -1,6 +1,7 @@
 import { appEvents } from './events.js';
 import { notificationQueue, webhookQueue } from './queue.js';
 import { prisma } from './prisma.js';
+import { indexPage } from './search.js';
 import type { MentionEvent } from './events.js';
 
 export interface CommentEvent {
@@ -16,6 +17,11 @@ export interface CommentEvent {
 export function setupEventHandlers() {
   // mention.created → notification for the mentioned user
   appEvents.on('mention.created', async (event: MentionEvent) => {
+    if (event.type === 'agent') {
+      // Agent mentions are handled directly by the AgentMentionTrigger on the client.
+      // No server-side notification needed — the invoke happens via POST /agents/invoke.
+      return;
+    }
     if (event.type !== 'user') return; // Only notify for user mentions
 
     try {
@@ -86,21 +92,65 @@ export function setupEventHandlers() {
 
   const WEBHOOK_JOB_OPTS = { attempts: 5, backoff: { type: 'exponential' as const, delay: 1000 } };
 
-  // page.created → webhook
+  // page.created → webhook + search index
   appEvents.on('page.created', async (event: { pageId: string; workspaceId: string; createdBy: string }) => {
     try {
       await webhookQueue.add('webhook', { event: 'page.created', data: event }, WEBHOOK_JOB_OPTS);
     } catch (err) {
       console.error('[event-handlers] Failed to enqueue page.created webhook:', err);
     }
+
+    // Index in Meilisearch (non-fatal)
+    try {
+      const block = await prisma.block.findUnique({
+        where: { id: event.pageId },
+        select: { id: true, workspaceId: true, properties: true, type: true, createdBy: true, updatedAt: true },
+      });
+      if (block) {
+        const props = block.properties as Record<string, unknown>;
+        await indexPage({
+          id: block.id,
+          workspaceId: block.workspaceId,
+          title: (props['title'] as string) ?? 'Untitled',
+          textContent: (props['title'] as string) ?? '',
+          createdBy: block.createdBy,
+          type: block.type,
+          updatedAt: block.updatedAt.toISOString(),
+        });
+      }
+    } catch {
+      // Non-fatal: search index failure must not break the event pipeline
+    }
   });
 
-  // page.updated → webhook
+  // page.updated → webhook + search index
   appEvents.on('page.updated', async (event: { pageId: string; workspaceId: string; updatedBy: string }) => {
     try {
       await webhookQueue.add('webhook', { event: 'page.updated', data: event }, WEBHOOK_JOB_OPTS);
     } catch (err) {
       console.error('[event-handlers] Failed to enqueue page.updated webhook:', err);
+    }
+
+    // Re-index in Meilisearch (non-fatal)
+    try {
+      const block = await prisma.block.findUnique({
+        where: { id: event.pageId },
+        select: { id: true, workspaceId: true, properties: true, type: true, createdBy: true, updatedAt: true },
+      });
+      if (block) {
+        const props = block.properties as Record<string, unknown>;
+        await indexPage({
+          id: block.id,
+          workspaceId: block.workspaceId,
+          title: (props['title'] as string) ?? 'Untitled',
+          textContent: (props['title'] as string) ?? '',
+          createdBy: block.createdBy,
+          type: block.type,
+          updatedAt: block.updatedAt.toISOString(),
+        });
+      }
+    } catch {
+      // Non-fatal: search index failure must not break the event pipeline
     }
   });
 

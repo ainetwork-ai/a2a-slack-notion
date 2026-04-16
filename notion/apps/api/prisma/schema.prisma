@@ -19,6 +19,12 @@ model User {
   createdAt     DateTime  @default(now()) @map("created_at")
   updatedAt     DateTime  @updatedAt @map("updated_at")
 
+  // Agent fields
+  isAgent       Boolean   @default(false) @map("is_agent")
+  a2aUrl        String?   @map("a2a_url")
+  agentCardJson Json?     @map("agent_card_json")
+  agentStatus   String?   @map("agent_status")
+
   // App relations
   workspaceMembers WorkspaceMember[]
   blocks           Block[]          @relation("CreatedByUser")
@@ -43,6 +49,7 @@ model Workspace {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   members       WorkspaceMember[]
+  invites       WorkspaceInvite[]
   blocks        Block[]
   pageTemplates PageTemplate[]
   automations   Automation[]
@@ -68,6 +75,21 @@ model WorkspaceMember {
 
   @@unique([workspaceId, userId])
   @@map("workspace_members")
+}
+
+model WorkspaceInvite {
+  id          String        @id @default(cuid())
+  workspaceId String        @map("workspace_id")
+  token       String        @unique @default(cuid())
+  role        WorkspaceRole @default(member)
+  createdBy   String        @map("created_by")
+  expiresAt   DateTime?     @map("expires_at")
+  createdAt   DateTime      @default(now()) @map("created_at")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@map("workspace_invites")
 }
 
 // ============================================================

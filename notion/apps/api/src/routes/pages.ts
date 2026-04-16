@@ -27,6 +27,7 @@ const UpdatePageSchema = z.object({
   icon: z.string().optional(),
   coverUrl: z.string().optional(),
   archived: z.boolean().optional(),
+  content: z.any().optional(),
 });
 
 // List workspace pages (tree roots — pages without a page parent)
@@ -261,6 +262,7 @@ pages.patch('/:pageId', requirePermission('can_edit'), async (c) => {
     data: {
       properties: updatedProps as Record<string, string | number | boolean | null>,
       archived: parsed.data.archived ?? existing.archived,
+      ...(parsed.data.content !== undefined && { content: parsed.data.content }),
     },
   });
 

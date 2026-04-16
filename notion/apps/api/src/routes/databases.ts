@@ -622,7 +622,10 @@ databases.post('/', async (c) => {
     type: 'title',
   };
 
-  const extraProps: PropertyDefinition[] = (schema.properties ?? []).map((p) => ({
+  // Filter out any title-type properties from the schema — we always add exactly one "Name" title
+  const extraProps: PropertyDefinition[] = (schema.properties ?? [])
+    .filter((p) => p.type !== 'title')
+    .map((p) => ({
     id: randomUUID(),
     name: p.name,
     type: p.type,
@@ -801,6 +804,12 @@ databases.post('/:databaseId/properties', async (c) => {
   }
 
   const props = existing.properties as unknown as DatabaseBlockProperties;
+
+  // Guard: prevent adding a second title property
+  if (parsed.data.type === 'title') {
+    return c.json({ object: 'error', status: 400, code: 'cannot_add_title', message: 'A database can only have one title property' }, 400);
+  }
+
   const newPropId = randomUUID();
 
   const newProp: PropertyDefinition = {
@@ -893,6 +902,12 @@ databases.patch('/:databaseId/properties/:propertyId', async (c) => {
   }
 
   const existingProp = props.schema.properties[propIndex]!;
+
+  // Guard: prevent changing a non-title property into a title (would create duplicate)
+  if (parsed.data.type === 'title' && existingProp.type !== 'title') {
+    return c.json({ object: 'error', status: 400, code: 'cannot_convert_to_title', message: 'Cannot convert a property to type title' }, 400);
+  }
+
   const updatedProp: PropertyDefinition = {
     ...existingProp,
     ...(parsed.data.name !== undefined ? { name: parsed.data.name } : {}),

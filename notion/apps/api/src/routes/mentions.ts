@@ -21,21 +21,45 @@ mentions.get('/suggest', async (c) => {
     return c.json({ object: 'error', status: 400, code: 'validation_error', message: 'workspace_id required' }, 400);
   }
 
+  if (type === 'agent') {
+    // Search agents in workspace by name
+    const agentUsers = await prisma.user.findMany({
+      where: {
+        isAgent: true,
+        name: { contains: q, mode: 'insensitive' },
+        workspaceMembers: { some: { workspaceId } },
+      },
+      select: { id: true, name: true, image: true, a2aUrl: true, agentStatus: true },
+      take: 5,
+    });
+
+    const results = agentUsers.map((a) => ({
+      id: a.id,
+      name: a.name,
+      avatar: a.image ?? undefined,
+      isAgent: true,
+      a2aUrl: a.a2aUrl,
+      agentStatus: a.agentStatus,
+    }));
+
+    return c.json(results);
+  }
+
   if (type === 'user') {
+    const includeAgents = c.req.query('include_agents') === 'true';
+
     // Search workspace members by name (ILIKE)
     const members = await prisma.workspaceMember.findMany({
       where: {
         workspaceId,
         user: {
-          name: {
-            contains: q,
-            mode: 'insensitive',
-          },
+          name: { contains: q, mode: 'insensitive' },
+          ...(includeAgents ? {} : { isAgent: false }),
         },
       },
       include: {
         user: {
-          select: { id: true, name: true, image: true },
+          select: { id: true, name: true, image: true, isAgent: true, a2aUrl: true, agentStatus: true },
         },
       },
       take: 5,
@@ -45,6 +69,11 @@ mentions.get('/suggest', async (c) => {
       id: m.user.id,
       name: m.user.name,
       avatar: m.user.image ?? undefined,
+      ...(m.user.isAgent && {
+        isAgent: true,
+        a2aUrl: m.user.a2aUrl,
+        agentStatus: m.user.agentStatus,
+      }),
     }));
 
     return c.json(results);
@@ -92,7 +121,7 @@ mentions.post('/notify', async (c) => {
   }
 
   const body = await c.req.json() as {
-    type: 'user' | 'page' | 'date';
+    type: 'user' | 'page' | 'date' | 'agent';
     targetId: string;
     pageId: string;
     blockId: string;
