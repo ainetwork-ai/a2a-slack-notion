@@ -21,8 +21,8 @@ export async function invokeAgent(params: {
   const card = agent.agentCardJson as unknown as AgentCard | null;
   const rpcUrl = card?.url || agent.a2aUrl;
 
-  // Build context with page info
-  const contextMessage = `[Context: Editing document pageId=${pageId}${blockId ? `, blockId=${blockId}` : ''}, workspaceId=${workspaceId}]\n\n${prompt}`;
+  // Build context with page info — prompt first so agents see the request immediately
+  const contextMessage = `${prompt}\n\n[Document context: pageId=${pageId}${blockId ? `, blockId=${blockId}` : ''}, workspaceId=${workspaceId}]`;
 
   logger.info({ agentId, agentName: agent.name, pageId }, 'Invoking agent');
 
@@ -69,7 +69,7 @@ export async function* invokeAgentStream(params: {
 
   const apiBaseUrl = process.env['API_BASE_URL'] || 'http://localhost:3011';
   const registryUrl = `${apiBaseUrl}/api/v1/agents/registry?workspace_id=${workspaceId}`;
-  const contextMessage = `[Context: Editing document pageId=${pageId}${blockId ? `, blockId=${blockId}` : ''}, workspaceId=${workspaceId}, agentRegistry=${registryUrl}]\n\n${prompt}`;
+  const contextMessage = `${prompt}\n\n[Document context: pageId=${pageId}${blockId ? `, blockId=${blockId}` : ''}, workspaceId=${workspaceId}, agentRegistry=${registryUrl}]`;
 
   logger.info({ agentId, agentName: agent.name, pageId }, 'Invoking agent (streaming)');
 
@@ -159,4 +159,59 @@ export async function* invokeAgentStream(params: {
       logger.error({ chainError }, 'Multi-agent chain lookup failed');
     }
   }
+}
+
+export async function* invokeRevisionStream(
+  agentId: string,
+  params: {
+    originalText: string
+    instruction: string
+    pageId: string
+    workspaceId: string
+    commentId: string
+  },
+): AsyncGenerator<{ type: string; content: string }> {
+  const agent = await prisma.user.findFirst({
+    where: { id: agentId, isAgent: true },
+  })
+  if (!agent?.a2aUrl) {
+    yield { type: 'error', content: `Agent ${agentId} not found or has no A2A URL` }
+    return
+  }
+
+  const card = agent.agentCardJson as unknown as AgentCard | null;
+  const rpcUrl = card?.url || agent.a2aUrl;
+
+  const revisionPrompt = [
+    `다음 텍스트를 아래 지시사항에 따라 첨삭해주세요.`,
+    ``,
+    `[원본 텍스트]`,
+    params.originalText,
+    ``,
+    `[첨삭 지시사항]`,
+    params.instruction,
+    ``,
+    `[규칙]`,
+    `- 첨삭된 텍스트만 출력하세요. 설명이나 부가 문구는 포함하지 마세요.`,
+    `- 원본 텍스트의 형식(줄바꿈 등)을 최대한 유지하세요.`,
+  ].join('\n')
+
+  yield { type: 'revision_start', content: JSON.stringify({ agentId, commentId: params.commentId }) }
+
+  if (card?.capabilities?.streaming) {
+    for await (const chunk of streamA2AMessage(rpcUrl, revisionPrompt, { agentName: agent.name })) {
+      yield chunk
+    }
+  } else {
+    const response = await sendA2AMessage(rpcUrl, revisionPrompt, { agentName: agent.name })
+    if (response.content) {
+      const words = response.content.split(' ')
+      for (let i = 0; i < words.length; i++) {
+        yield { type: 'text', content: (i === 0 ? '' : ' ') + words[i] }
+        await new Promise(r => setTimeout(r, 25))
+      }
+    }
+  }
+
+  yield { type: 'revision_end', content: JSON.stringify({ agentId, commentId: params.commentId }) }
 }
