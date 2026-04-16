@@ -2,7 +2,7 @@ import { useState, useCallback, useRef } from 'react';
 
 export interface SearchResult {
   id: string;
-  type: 'message' | 'channel' | 'user';
+  type: 'message' | 'channel' | 'user' | 'canvas';
   content: string;
   channelId?: string;
   channelName?: string;

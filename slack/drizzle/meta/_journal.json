@@ -29,6 +29,13 @@
       "when": 1776226333436,
       "tag": "0003_robust_gauntlet",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1776308413249,
+      "tag": "0004_flashy_randall_flagg",
+      "breakpoints": true
     }
   ]
 }

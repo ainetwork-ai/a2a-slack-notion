@@ -521,6 +521,27 @@ export const workflowRuns = pgTable("workflow_runs", {
   completedAt: timestamp("completed_at"),
 });
 
+export const canvases = pgTable("canvases", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  channelId: uuid("channel_id").references(() => channels.id, { onDelete: "cascade" }).unique(),
+  conversationId: uuid("conversation_id").references(() => dmConversations.id, { onDelete: "cascade" }).unique(),
+  workspaceId: uuid("workspace_id").references(() => workspaces.id, { onDelete: "cascade" }).notNull(),
+  title: text("title").notNull(),
+  content: text("content").notNull().default(""),
+  createdBy: uuid("created_by").references(() => users.id).notNull(),
+  updatedBy: uuid("updated_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const canvasRevisions = pgTable("canvas_revisions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  canvasId: uuid("canvas_id").references(() => canvases.id, { onDelete: "cascade" }).notNull(),
+  content: text("content").notNull(),
+  editedBy: uuid("edited_by").references(() => users.id).notNull(),
+  editedAt: timestamp("edited_at").defaultNow().notNull(),
+});
+
 export const agentSkillConfigs = pgTable(
   "agent_skill_configs",
   {

@@ -26,6 +26,9 @@ const providers: Record<string, Record<string, ProviderFn>> = {
     memory_delete: slack.memory_delete as ProviderFn,
     agent_create: slack.agent_create as ProviderFn,
     agent_list: slack.agent_list as ProviderFn,
+    canvas_read: slack.canvas_read as ProviderFn,
+    canvas_write: slack.canvas_write as ProviderFn,
+    canvas_append: slack.canvas_append as ProviderFn,
   },
   document: {
     convert: document.convert as ProviderFn,

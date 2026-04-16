@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, use, useEffect, useRef } from 'react';
-import { Hash, Users, Settings, Pin, LogOut, Search, X, Bell, BellOff, BellRing } from 'lucide-react';
+import { useState, use, useEffect, useRef, useCallback } from 'react';
+import { Hash, Users, Settings, Pin, LogOut, Search, X, Bell, BellOff, BellRing, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -20,11 +20,12 @@ import TypingIndicator from '@/components/chat/TypingIndicator';
 import ThreadPanel from '@/components/chat/ThreadPanel';
 import InviteMemberModal from '@/components/modals/InviteMemberModal';
 import ChannelDetailPanel from '@/components/chat/ChannelDetailPanel';
+import CanvasEditor from '@/components/canvas/CanvasEditor';
 import { useMessages, Message } from '@/lib/hooks/use-messages';
 import { useAuth } from '@/lib/hooks/use-auth';
 import { useTyping } from '@/lib/realtime/use-typing';
 import { useAppStore } from '@/lib/stores/app-store';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import useSWR, { useSWRConfig } from 'swr';
 
 const fetcher = (url: string) => fetch(url).then(r => r.json());
@@ -62,7 +63,9 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
   const [searchLoading, setSearchLoading] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [notifPref, setNotifPref] = useState<'all' | 'mentions' | 'none'>('all');
+  const [canvasOpen, setCanvasOpen] = useState(false);
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { mutate } = useSWRConfig();
 
   // Capture lastReadAt before marking as read
@@ -101,6 +104,13 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
     mutate((key: string) => typeof key === 'string' && key.startsWith('/api/channels'), undefined, { revalidate: true });
     if (archived) router.push('/workspace');
   }
+
+  // Auto-open canvas if ?canvas=1 in URL
+  useEffect(() => {
+    if (searchParams.get('canvas') === '1') {
+      setCanvasOpen(true);
+    }
+  }, [searchParams]);
 
   // Issue 1: Reset active thread when switching channels
   useEffect(() => {
@@ -173,6 +183,11 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
     fetcher
   );
 
+  const { data: canvasData } = useSWR<{ id: string; title: string; content: string } | null>(
+    `/api/channels/${channelId}/canvas`,
+    fetcher
+  );
+
   const channel = channelData?.id
     ? { ...channelData, memberCount: channelData.members?.length }
     : undefined;
@@ -233,6 +248,17 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
           ) : null}
         </div>
         <div className="flex items-center gap-1 shrink-0">
+          {/* Canvas button */}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setCanvasOpen(v => !v)}
+            className={`gap-1.5 h-8 text-xs ${canvasOpen ? 'text-white bg-white/10' : 'text-slate-400 hover:text-white hover:bg-white/10'}`}
+            title="Canvas"
+          >
+            <FileText className="w-4 h-4" />
+            <span className="hidden sm:inline">Canvas</span>
+          </Button>
           {/* H4: Channel-scoped search */}
           {searchOpen ? (
             <div className="flex items-center gap-1 bg-white/10 rounded px-2 h-8">
@@ -387,6 +413,27 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
       {/* Messages */}
       <div className="flex flex-1 overflow-hidden">
         <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
+          {/* Canvas pinned preview */}
+          {canvasData?.id && !canvasOpen && (
+            <div className="mx-4 mt-3 mb-1 flex items-start gap-2 bg-white/5 border border-white/10 rounded-lg px-3 py-2 shrink-0">
+              <FileText className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold text-slate-300 truncate">{canvasData.title}</p>
+                {canvasData.content && (
+                  <p className="text-xs text-slate-500 line-clamp-1 mt-0.5">
+                    {canvasData.content.slice(0, 200)}
+                  </p>
+                )}
+              </div>
+              <button
+                onClick={() => setCanvasOpen(true)}
+                className="shrink-0 text-xs text-[#1d9bd1] hover:underline whitespace-nowrap"
+              >
+                Open canvas
+              </button>
+            </div>
+          )}
+
           {/* Channel welcome banner when < 3 messages */}
           {!isLoading && messages.filter(m => m.contentType !== 'system').length < 3 && channel && (
             <div className="px-6 pt-8 pb-4 border-b border-white/5">
@@ -426,6 +473,14 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
             channelId={channelId}
           />
         </div>
+
+        {/* Canvas Panel */}
+        {canvasOpen && (
+          <CanvasEditor
+            channelId={channelId}
+            onClose={() => setCanvasOpen(false)}
+          />
+        )}
 
         {/* Thread Panel */}
         {activeThread && (

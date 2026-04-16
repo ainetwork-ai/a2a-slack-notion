@@ -29,7 +29,7 @@ function clearHistory() {
   localStorage.removeItem(HISTORY_KEY);
 }
 
-type FilterType = 'all' | 'messages' | 'channels' | 'people';
+type FilterType = 'all' | 'messages' | 'channels' | 'people' | 'canvases';
 
 function highlightText(text: string, query: string): React.ReactNode {
   if (!query.trim()) return text;
@@ -51,6 +51,7 @@ const FILTER_LABELS: { key: FilterType; label: string }[] = [
   { key: 'all', label: 'All' },
   { key: 'messages', label: 'Messages' },
   { key: 'channels', label: 'Channels' },
+  { key: 'canvases', label: 'Canvases' },
   { key: 'people', label: 'People' },
 ];
 
@@ -101,12 +102,14 @@ export default function SearchModal() {
     clearSearch();
   }
 
-  function handleSelect(result: { type: string; channelId?: string; id: string }) {
+  function handleSelect(result: { type: string; channelId?: string | null; id: string }) {
     if (textQuery.trim()) saveToHistory(textQuery.trim());
     if (result.type === 'channel') {
       router.push(`/workspace/channel/${result.id}`);
     } else if (result.type === 'message' && result.channelId) {
       router.push(`/workspace/channel/${result.channelId}#msg-${result.id}`);
+    } else if (result.type === 'canvas' && result.channelId) {
+      router.push(`/workspace/channel/${result.channelId}?canvas=1`);
     }
     handleClose();
   }
@@ -126,12 +129,14 @@ export default function SearchModal() {
   const channelResults = results.filter(r => r.type === 'channel');
   const messageResults = results.filter(r => r.type === 'message');
   const userResults = results.filter(r => r.type === 'user');
+  const canvasResults = results.filter(r => r.type === 'canvas');
 
   const visibleChannels = activeFilter === 'all' || activeFilter === 'channels' ? channelResults : [];
   const visibleMessages = activeFilter === 'all' || activeFilter === 'messages' ? messageResults : [];
   const visibleUsers = activeFilter === 'all' || activeFilter === 'people' ? userResults : [];
+  const visibleCanvases = activeFilter === 'all' || activeFilter === 'canvases' ? canvasResults : [];
 
-  const hasResults = visibleChannels.length > 0 || visibleMessages.length > 0 || visibleUsers.length > 0;
+  const hasResults = visibleChannels.length > 0 || visibleMessages.length > 0 || visibleUsers.length > 0 || visibleCanvases.length > 0;
 
   return (
     <>
@@ -183,6 +188,7 @@ export default function SearchModal() {
                     <span className="ml-1 opacity-60">
                       {key === 'messages' && `(${messageResults.length})`}
                       {key === 'channels' && `(${channelResults.length})`}
+                      {key === 'canvases' && `(${canvasResults.length})`}
                       {key === 'people' && `(${userResults.length})`}
                     </span>
                   )}
@@ -264,9 +270,28 @@ export default function SearchModal() {
               </div>
             )}
 
-            {visibleMessages.length > 0 && (
+            {visibleCanvases.length > 0 && (
               <div>
                 {visibleChannels.length > 0 && <div className="h-px bg-white/10 mx-4" />}
+                <div className="px-4 py-1.5 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+                  Canvases
+                </div>
+                {visibleCanvases.map(result => (
+                  <button
+                    key={result.id}
+                    onClick={() => handleSelect(result)}
+                    className="w-full flex items-center gap-2 px-4 py-2 text-sm text-white hover:bg-white/10 transition-colors text-left"
+                  >
+                    <span className="text-base shrink-0">📝</span>
+                    <span>{highlightText(result.content, textQuery)}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {visibleMessages.length > 0 && (
+              <div>
+                {(visibleChannels.length > 0 || visibleCanvases.length > 0) && <div className="h-px bg-white/10 mx-4" />}
                 <div className="px-4 py-1.5 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
                   Messages
                 </div>
@@ -295,7 +320,7 @@ export default function SearchModal() {
 
             {visibleUsers.length > 0 && (
               <div>
-                {(visibleChannels.length > 0 || visibleMessages.length > 0) && (
+                {(visibleChannels.length > 0 || visibleCanvases.length > 0 || visibleMessages.length > 0) && (
                   <div className="h-px bg-white/10 mx-4" />
                 )}
                 <div className="px-4 py-1.5 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">

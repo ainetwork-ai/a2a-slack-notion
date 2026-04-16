@@ -2,7 +2,7 @@
 // Used by agents to fetch conversation context on-demand
 
 import { db } from "@/lib/db";
-import { messages, users, channels, channelMembers, agentMemories } from "@/lib/db/schema";
+import { messages, users, channels, channelMembers, agentMemories, canvases, canvasRevisions } from "@/lib/db/schema";
 import { eq, and, desc, lt, gt, ilike, sql } from "drizzle-orm";
 
 export async function read_thread(params: {
@@ -405,5 +405,145 @@ export async function agent_list(params: {
     return `**Agents (${agents.length})**\n\n${lines.join("\n\n")}`;
   } catch (err) {
     return `Failed to list agents: ${err instanceof Error ? err.message : "Unknown error"}`;
+  }
+}
+
+// ─── Canvas Tools ───────────────────────────────────────────
+
+export async function canvas_read(params: {
+  channelId: string;
+}): Promise<string> {
+  if (!params.channelId) return "channelId is required.";
+  try {
+    const [canvas] = await db
+      .select()
+      .from(canvases)
+      .where(eq(canvases.channelId, params.channelId))
+      .limit(1);
+
+    if (!canvas) return "No canvas found for this channel.";
+
+    return `**Canvas: ${canvas.title}**\n\n${canvas.content || "_empty_"}\n\n_Last updated: ${new Date(canvas.updatedAt).toLocaleString()}_`;
+  } catch (err) {
+    return `Failed to read canvas: ${err instanceof Error ? err.message : "Unknown error"}`;
+  }
+}
+
+export async function canvas_write(params: {
+  channelId: string;
+  title?: string;
+  content: string;
+}): Promise<string> {
+  if (!params.channelId) return "channelId is required.";
+  if (params.content === undefined) return "content is required.";
+
+  try {
+    const [ch] = await db
+      .select({ workspaceId: channels.workspaceId, name: channels.name })
+      .from(channels)
+      .where(eq(channels.id, params.channelId))
+      .limit(1);
+
+    if (!ch) return "Channel not found.";
+
+    const [existing] = await db
+      .select()
+      .from(canvases)
+      .where(eq(canvases.channelId, params.channelId))
+      .limit(1);
+
+    // Get a system user id (channel creator as fallback) for agentless writes
+    const [firstMember] = await db
+      .select({ userId: channelMembers.userId })
+      .from(channelMembers)
+      .where(eq(channelMembers.channelId, params.channelId))
+      .limit(1);
+
+    const actorId = firstMember?.userId;
+    if (!actorId) return "Cannot determine actor for canvas write.";
+
+    if (existing) {
+      // Save revision
+      if (params.content !== existing.content) {
+        await db.insert(canvasRevisions).values({
+          canvasId: existing.id,
+          content: existing.content,
+          editedBy: actorId,
+        });
+      }
+      const updates: Record<string, unknown> = { content: params.content, updatedAt: new Date(), updatedBy: actorId };
+      if (params.title) updates.title = params.title;
+      const [updated] = await db
+        .update(canvases)
+        .set(updates)
+        .where(eq(canvases.id, existing.id))
+        .returning();
+      return `Canvas updated: **${updated.title}**`;
+    } else {
+      const title = params.title?.trim() || `#${ch.name} canvas`;
+      const [created] = await db
+        .insert(canvases)
+        .values({
+          channelId: params.channelId,
+          workspaceId: ch.workspaceId!,
+          title,
+          content: params.content,
+          createdBy: actorId,
+        })
+        .returning();
+      return `Canvas created: **${created.title}**`;
+    }
+  } catch (err) {
+    return `Failed to write canvas: ${err instanceof Error ? err.message : "Unknown error"}`;
+  }
+}
+
+export async function canvas_append(params: {
+  channelId: string;
+  content: string;
+}): Promise<string> {
+  if (!params.channelId) return "channelId is required.";
+  if (!params.content) return "content is required.";
+
+  try {
+    const [existing] = await db
+      .select()
+      .from(canvases)
+      .where(eq(canvases.channelId, params.channelId))
+      .limit(1);
+
+    if (!existing) {
+      // Create via canvas_write
+      return canvas_write({ channelId: params.channelId, content: params.content });
+    }
+
+    const [firstMember] = await db
+      .select({ userId: channelMembers.userId })
+      .from(channelMembers)
+      .where(eq(channelMembers.channelId, params.channelId))
+      .limit(1);
+
+    const actorId = firstMember?.userId;
+    if (!actorId) return "Cannot determine actor for canvas append.";
+
+    const newContent = existing.content
+      ? `${existing.content}\n\n${params.content}`
+      : params.content;
+
+    await db.insert(canvasRevisions).values({
+      canvasId: existing.id,
+      content: existing.content,
+      editedBy: actorId,
+    });
+
+    const [updated] = await db
+      .update(canvases)
+      .set({ content: newContent, updatedAt: new Date(), updatedBy: actorId })
+      .where(eq(canvases.id, existing.id))
+      .returning();
+
+    return `Appended to canvas: **${updated.title}**`;
+  } catch (err) {
+    return `Failed to append to canvas: ${err instanceof Error ? err.message : "Unknown error"}`;
   }
 }

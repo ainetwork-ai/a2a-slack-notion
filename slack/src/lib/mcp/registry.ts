@@ -195,6 +195,30 @@ export const MCP_SERVERS: McpServer[] = [
           creatorId: { type: "string", description: "Filter by creator ID" },
         },
       },
+      {
+        name: "canvas_read",
+        description: "Read the canvas for a channel",
+        parameters: {
+          channelId: { type: "string", required: true, description: "Channel ID" },
+        },
+      },
+      {
+        name: "canvas_write",
+        description: "Update the canvas content for a channel (replaces existing content)",
+        parameters: {
+          channelId: { type: "string", required: true, description: "Channel ID" },
+          title: { type: "string", required: false, description: "New title" },
+          content: { type: "string", required: true, description: "Markdown content" },
+        },
+      },
+      {
+        name: "canvas_append",
+        description: "Append markdown to existing canvas",
+        parameters: {
+          channelId: { type: "string", required: true, description: "Channel ID" },
+          content: { type: "string", required: true, description: "Markdown to append" },
+        },
+      },
     ],
   },
 ];

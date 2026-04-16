@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { users, channels, channelMembers, messages, dmMembers } from "@/lib/db/schema";
+import { users, channels, channelMembers, messages, dmMembers, canvases } from "@/lib/db/schema";
 import { eq, and, desc, isNotNull, lt, gt, inArray, or, ilike, SQL } from "drizzle-orm";
 import { requireAuth } from "@/lib/auth/middleware";
 import { NextRequest, NextResponse } from "next/server";
@@ -329,6 +329,20 @@ export async function GET(request: NextRequest) {
         .limit(10)
     : [];
 
+  // Canvas search
+  const canvasResults = textPattern && !parsed.in && !parsed.from
+    ? await db
+        .select({ id: canvases.id, title: canvases.title, content: canvases.content, channelId: canvases.channelId })
+        .from(canvases)
+        .where(
+          and(
+            or(ilike(canvases.title, textPattern), ilike(canvases.content, textPattern))!,
+            channelIds.length > 0 ? inArray(canvases.channelId, channelIds) : undefined
+          )
+        )
+        .limit(10)
+    : [];
+
   const allResults = [
     ...channelResults.map(ch => ({
       id: ch.id,
@@ -337,6 +351,14 @@ export async function GET(request: NextRequest) {
       channelName: ch.name,
       senderName: null,
       channelId: ch.id,
+    })),
+    ...canvasResults.map(c => ({
+      id: c.id,
+      type: 'canvas' as const,
+      content: c.title,
+      channelId: c.channelId ?? null,
+      channelName: null,
+      senderName: null,
     })),
     ...enriched,
     ...userResults.map(u => ({
