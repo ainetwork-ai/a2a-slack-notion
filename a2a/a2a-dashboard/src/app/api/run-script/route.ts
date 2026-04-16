@@ -91,7 +91,10 @@ export async function POST(request: NextRequest) {
       );
     }
     cmd = "python3";
-    args = [scriptPath, "--json-events"];
+    // Only pass --json-events if the script supports it (has the flag in its source).
+    const pySource = fs.readFileSync(scriptPath, "utf-8");
+    const supportsJsonEvents = pySource.includes("json-events");
+    args = supportsJsonEvents ? [scriptPath, "--json-events"] : [scriptPath];
     if (baseUrl && typeof baseUrl === "string" && /^https?:\/\//.test(baseUrl)) {
       args.push("--base-url", baseUrl);
     }
