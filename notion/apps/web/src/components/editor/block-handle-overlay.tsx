@@ -5,7 +5,7 @@ import { Plus, GripVertical } from 'lucide-react';
 import { TextSelection } from '@tiptap/pm/state';
 import { NodeSelection } from '@tiptap/pm/state';
 import { useDraggable } from '@dnd-kit/core';
-import { blockHandleState, subscribeBlockHandle, notifyBlockHandle, openContextMenu, selectBlock } from './block-handle-state';
+import { blockHandleState, subscribeBlockHandle, notifyBlockHandle, openContextMenu, selectBlock, setHoveredBlock } from './block-handle-state';
 
 interface HandlePos {
   top: number;
@@ -132,6 +132,12 @@ export function BlockHandleOverlay() {
         pointerEvents: isVisible ? 'auto' : 'none',
       }}
       contentEditable={false}
+      onMouseLeave={(e) => {
+        const related = e.relatedTarget as HTMLElement | null;
+        // If moving back into the editor, mouseover will re-activate the handle
+        if (related && blockHandleState.editorView?.dom.contains(related)) return;
+        setHoveredBlock(null, null);
+      }}
     >
       <button
         className="block-handle-btn"
