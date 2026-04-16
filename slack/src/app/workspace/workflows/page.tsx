@@ -1,9 +1,10 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Zap, Plus, Play, Trash2, Pencil, CheckCircle, XCircle, Clock, ToggleLeft, ToggleRight, Loader2 } from 'lucide-react';
+import { Zap, Plus, Play, Trash2, Pencil, CheckCircle, XCircle, Clock, ToggleLeft, ToggleRight, Loader2, LayoutTemplate } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import WorkflowEditorModal from '@/components/modals/WorkflowEditorModal';
+import WorkflowTemplates from '@/components/modals/WorkflowTemplates';
 import { useWorkspaceStore } from '@/lib/stores/workspace-store';
 import { cn } from '@/lib/utils';
 
@@ -33,6 +34,8 @@ const TRIGGER_LABELS: Record<string, string> = {
   channel_message: 'Channel message',
   channel_join: 'Channel join',
   mention: 'Agent mention',
+  slash_command: 'Slash command',
+  shortcut: 'Shortcut',
 };
 
 function StatusBadge({ status }: { status: string }) {
@@ -58,6 +61,7 @@ export default function WorkflowsPage() {
   const [loading, setLoading] = useState(true);
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingWorkflow, setEditingWorkflow] = useState<Workflow | null>(null);
+  const [templatesOpen, setTemplatesOpen] = useState(false);
   const [runningId, setRunningId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
@@ -150,14 +154,25 @@ export default function WorkflowsPage() {
           <Zap className="w-4 h-4 text-yellow-400" />
           <span className="font-semibold text-white text-sm">Workflow Builder</span>
         </div>
-        <Button
-          size="sm"
-          onClick={handleNewWorkflow}
-          className="bg-[#4a154b] hover:bg-[#611f6a] text-white h-7 text-xs px-3"
-        >
-          <Plus className="w-3 h-3 mr-1" />
-          New workflow
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => setTemplatesOpen(true)}
+            className="text-slate-400 hover:text-white h-7 text-xs px-3"
+          >
+            <LayoutTemplate className="w-3 h-3 mr-1" />
+            Templates
+          </Button>
+          <Button
+            size="sm"
+            onClick={handleNewWorkflow}
+            className="bg-[#4a154b] hover:bg-[#611f6a] text-white h-7 text-xs px-3"
+          >
+            <Plus className="w-3 h-3 mr-1" />
+            New workflow
+          </Button>
+        </div>
       </div>
 
       {/* Content */}
@@ -282,6 +297,13 @@ export default function WorkflowsPage() {
           ))
         )}
       </div>
+
+      <WorkflowTemplates
+        open={templatesOpen}
+        onOpenChange={setTemplatesOpen}
+        workspaceId={activeWorkspaceId}
+        onCreated={fetchWorkflows}
+      />
 
       <WorkflowEditorModal
         open={editorOpen}

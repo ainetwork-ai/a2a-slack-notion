@@ -3,12 +3,12 @@
 import { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Paperclip, Send, Bold, Italic, Strikethrough, Code, List, Quote, Smile, AtSign, Clock, Eye, EyeOff, Link, ListOrdered, CodeSquare } from 'lucide-react';
+import { Paperclip, Send, Bold, Italic, Strikethrough, Code, List, Quote, Smile, AtSign, Clock, Eye, EyeOff, Link, ListOrdered, CodeSquare, Zap } from 'lucide-react';
 import { useTyping } from '@/lib/realtime/use-typing';
 import { cn } from '@/lib/utils';
 import { replaceShortcodes, emojiMap } from '@/lib/emoji-map';
 import { htmlToMarkdown, normalizeMarkdown } from '@/lib/html-to-markdown';
-import { commands, findCommand, findCustomCommand } from '@/lib/slash-commands';
+import { commands, findCommand, findCustomCommand, findWorkflowCommand } from '@/lib/slash-commands';
 import { useWorkspaceStore } from '@/lib/stores/workspace-store';
 import ReactionPicker from './ReactionPicker';
 import GifPicker from './GifPicker';
@@ -69,6 +69,8 @@ export default function MessageInput({
     return !localStorage.getItem('shiftEnterHintDismissed');
   });
   const [previewVisible, setPreviewVisible] = useState(false);
+  const [shortcutOpen, setShortcutOpen] = useState(false);
+  const [shortcutWorkflows, setShortcutWorkflows] = useState<Array<{ id: string; name: string; description: string | null }>>([]);
 
   // Show preview only when content contains formatting characters
   const hasFormatting = /[*_`~>]/.test(content);
@@ -160,6 +162,20 @@ export default function MessageInput({
     }
   }
 
+  async function handleShortcutOpen() {
+    if (!activeWorkspaceId) return;
+    setShortcutOpen(true);
+    try {
+      const res = await fetch(`/api/workflows?workspaceId=${encodeURIComponent(activeWorkspaceId)}`);
+      if (!res.ok) return;
+      const all: Array<{ id: string; name: string; description: string | null; triggerType: string; enabled: boolean }> = await res.json();
+      const shortcuts = all.filter(w => w.enabled && w.triggerType === 'shortcut');
+      setShortcutWorkflows(shortcuts);
+    } catch {
+      setShortcutWorkflows([]);
+    }
+  }
+
   function handleMentionButton() {
     insertAtCursor('@');
     // Trigger handleChange logic by simulating input — we update state then trigger fetch
@@ -180,7 +196,8 @@ export default function MessageInput({
     // Slash command interception
     if (trimmed.startsWith('/')) {
       const match = findCommand(trimmed) ||
-        (activeWorkspaceId ? await findCustomCommand(trimmed, activeWorkspaceId) : null);
+        (activeWorkspaceId ? await findCustomCommand(trimmed, activeWorkspaceId) : null) ||
+        (activeWorkspaceId ? await findWorkflowCommand(trimmed, activeWorkspaceId) : null);
       if (match) {
         setIsSending(true);
         try {
@@ -922,6 +939,57 @@ export default function MessageInput({
           >
             <AtSign className="w-4 h-4" />
           </button>
+
+          {/* Shortcut workflows button */}
+          {channelId && (
+            <div className="relative">
+              <button
+                title="Run a shortcut workflow"
+                onClick={() => shortcutOpen ? setShortcutOpen(false) : handleShortcutOpen()}
+                className="w-7 h-7 flex items-center justify-center rounded text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
+              >
+                <Zap className="w-4 h-4" />
+              </button>
+              {shortcutOpen && (
+                <div className="absolute bottom-full right-0 mb-2 w-64 bg-[#222529] border border-white/10 rounded-lg shadow-xl overflow-hidden z-50">
+                  <p className="px-3 py-1.5 text-[11px] text-slate-500 font-semibold uppercase tracking-wider border-b border-white/5">Shortcut Workflows</p>
+                  {shortcutWorkflows.length === 0 ? (
+                    <p className="px-3 py-3 text-xs text-slate-500">No shortcut workflows available.</p>
+                  ) : (
+                    shortcutWorkflows.map(wf => (
+                      <button
+                        key={wf.id}
+                        className="w-full text-left px-3 py-2 text-sm text-slate-300 hover:bg-white/10 hover:text-white transition-colors"
+                        onClick={async () => {
+                          setShortcutOpen(false);
+                          try {
+                            const res = await fetch(`/api/workflows/${wf.id}/run`, {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ variables: { channelId } }),
+                            });
+                            if (res.ok) {
+                              setEphemeralMessage(`Workflow "${wf.name}" started.`);
+                              setTimeout(() => setEphemeralMessage(null), 5000);
+                            } else {
+                              setEphemeralMessage(`Failed to run workflow "${wf.name}".`);
+                              setTimeout(() => setEphemeralMessage(null), 5000);
+                            }
+                          } catch {
+                            setEphemeralMessage('Failed to run workflow.');
+                            setTimeout(() => setEphemeralMessage(null), 5000);
+                          }
+                        }}
+                      >
+                        <span className="font-medium block">{wf.name}</span>
+                        {wf.description && <span className="text-xs text-slate-500 block">{wf.description}</span>}
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Schedule button */}
           <div className="relative">

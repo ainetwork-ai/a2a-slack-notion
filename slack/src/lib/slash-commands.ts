@@ -496,3 +496,51 @@ export async function findCustomCommand(
     return null;
   }
 }
+
+/**
+ * Try to match input against workflow slash_command triggers.
+ * Returns a synthetic SlashCommand if a matching workflow is found.
+ */
+export async function findWorkflowCommand(
+  input: string,
+  workspaceId: string
+): Promise<{ command: SlashCommand; args: string } | null> {
+  const trimmed = input.trim();
+  if (!trimmed.startsWith('/')) return null;
+
+  const [rawName, ...rest] = trimmed.slice(1).split(' ');
+  const name = rawName.toLowerCase();
+  if (!name) return null;
+
+  try {
+    const res = await fetch(`/api/workflows?workspaceId=${encodeURIComponent(workspaceId)}`);
+    if (!res.ok) return null;
+    const workflows: Array<{ id: string; name: string; description: string | null; triggerType: string; triggerConfig: Record<string, unknown>; enabled: boolean }> = await res.json();
+
+    const match = workflows.find(
+      (w) =>
+        w.enabled &&
+        w.triggerType === 'slash_command' &&
+        typeof w.triggerConfig?.command === 'string' &&
+        w.triggerConfig.command.toLowerCase() === name
+    );
+    if (!match) return null;
+
+    const command: SlashCommand = {
+      name: `/${name}`,
+      description: match.description ?? match.name,
+      execute: async (args, context) => {
+        const res = await fetch(`/api/workflows/${match.id}/run`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ variables: { args, channelId: context.channelId } }),
+        });
+        if (!res.ok) return { response: `Failed to run workflow "${match.name}".`, ephemeral: true };
+        return { response: `Workflow "${match.name}" started.`, ephemeral: true };
+      },
+    };
+    return { command, args: rest.join(' ') };
+  } catch {
+    return null;
+  }
+}
