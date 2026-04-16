@@ -141,6 +141,64 @@ const TEMPLATES: WorkflowTemplate[] = [
       },
     ],
   },
+  {
+    name: 'Newsroom article pipeline',
+    description:
+      'Reporter drafts → Editor edits → FactChecker verifies → Publisher finalizes and writes to canvas.',
+    icon: '📰',
+    triggerType: 'shortcut',
+    triggerConfig: { label: 'Write news article' },
+    steps: [
+      {
+        type: 'form',
+        title: 'Article topic',
+        fields: [
+          { name: 'topic', label: 'Topic', type: 'text', required: true },
+          { name: 'lang', label: 'Language (ko/en)', type: 'select', options: ['ko', 'en'], required: false },
+        ],
+        saveAs: 'brief',
+      },
+      {
+        type: 'invoke_skill',
+        agent: 'Reporter',
+        skillId: 'draft-article',
+        inputs: { topic: '{{brief.topic}}', lang: '{{brief.lang}}' },
+        saveAs: 'draft',
+      },
+      {
+        type: 'invoke_skill',
+        agent: 'Editor',
+        skillId: 'edit-draft',
+        inputs: { draft: '{{draft}}' },
+        saveAs: 'edited',
+      },
+      {
+        type: 'invoke_skill',
+        agent: 'FactChecker',
+        skillId: 'verify-article',
+        inputs: { article: '{{edited}}' },
+        saveAs: 'verdict',
+      },
+      {
+        type: 'invoke_skill',
+        agent: 'Publisher',
+        skillId: 'finalize-article',
+        inputs: { article: '{{edited}}', verdict: '{{verdict}}' },
+        saveAs: 'final',
+      },
+      {
+        type: 'write_canvas',
+        channel: '',
+        content: '{{final}}',
+        title: '{{brief.topic}}',
+      },
+      {
+        type: 'post_to_channel',
+        channelId: '',
+        message: '**[PUBLISHED ✅]** {{brief.topic}}\n\nFull article saved to the channel canvas.',
+      },
+    ],
+  },
 ];
 
 interface WorkflowTemplatesProps {
