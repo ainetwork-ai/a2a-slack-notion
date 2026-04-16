@@ -462,65 +462,70 @@ export default function AgentTester() {
               ))}
             </div>
 
-            {/* News search (report skill — auto-fill BASIC_ARTICLE_SOURCE) */}
-            {selectedSkill === "report" && (
-              <div className="border border-amber-900/40 rounded-lg p-3 bg-amber-950/20 mb-3 shrink-0 space-y-2">
-                <div className="text-[10px] font-medium text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
-                  <Search className="w-3 h-3" />
-                  News Search — 실제 뉴스로 원문 자동 채우기
-                </div>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && searchNews()}
-                    placeholder="검색 키워드 (예: bitcoin ETF, 이더리움 업그레이드)"
-                    className="flex-1 px-2 py-1.5 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-200 focus:outline-none focus:border-amber-600 placeholder:text-zinc-600"
-                  />
-                  <button
-                    onClick={searchNews}
-                    disabled={searching || !searchQuery.trim()}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 hover:bg-amber-500 disabled:bg-zinc-800 disabled:text-zinc-600 rounded-lg text-xs font-medium transition-colors"
-                  >
-                    {searching ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
-                    {searching ? "..." : "Search"}
-                  </button>
-                </div>
-                {newsItems.length > 0 && (
-                  <div className="space-y-1 max-h-48 overflow-y-auto">
-                    {newsItems.map((item, i) => (
+            {/* Scrollable form area: news search + variables */}
+            {selectedSkill && (
+              <div className="mb-3 shrink-0 overflow-y-auto max-h-[45vh] space-y-3">
+                {/* News search (report skill — auto-fill BASIC_ARTICLE_SOURCE) */}
+                {selectedSkill === "report" && (
+                  <div className="border border-amber-900/40 rounded-lg p-3 bg-amber-950/20 space-y-2">
+                    <div className="text-[10px] font-medium text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+                      <Search className="w-3 h-3" />
+                      News Search — 실제 뉴스로 원문 자동 채우기
+                    </div>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        onKeyDown={(e) => e.key === "Enter" && searchNews()}
+                        placeholder="검색 키워드 (예: bitcoin ETF, 이더리움 업그레이드)"
+                        className="flex-1 px-2 py-1.5 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-200 focus:outline-none focus:border-amber-600 placeholder:text-zinc-600"
+                      />
                       <button
-                        key={i}
-                        onClick={() => selectNewsItem(item)}
-                        className="w-full text-left p-2 rounded bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-amber-700 transition-colors"
+                        onClick={searchNews}
+                        disabled={searching || !searchQuery.trim()}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 hover:bg-amber-500 disabled:bg-zinc-800 disabled:text-zinc-600 rounded-lg text-xs font-medium transition-colors shrink-0"
                       >
-                        <div className="text-xs font-medium text-zinc-200 line-clamp-1">{item.title}</div>
-                        <div className="text-[10px] text-zinc-500 line-clamp-2 mt-0.5">{item.snippet}</div>
+                        {searching ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
+                        {searching ? "..." : "Search"}
                       </button>
+                    </div>
+                    {newsItems.length > 0 && (
+                      <div className="space-y-1">
+                        {newsItems.map((item, i) => (
+                          <button
+                            key={i}
+                            onClick={() => selectNewsItem(item)}
+                            className="w-full text-left p-2 rounded bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-amber-700 transition-colors"
+                          >
+                            <div className="text-xs font-medium text-zinc-200 line-clamp-1">{item.title}</div>
+                            <div className="text-[10px] text-zinc-500 line-clamp-2 mt-0.5">{item.snippet}</div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Variables */}
+                {SKILL_VARIABLES[selectedSkill] && SKILL_VARIABLES[selectedSkill].length > 0 && (
+                  <div className="border border-zinc-800 rounded-lg p-3 bg-zinc-950 space-y-2">
+                    <div className="text-[10px] font-medium text-zinc-500 uppercase tracking-wider">Variables</div>
+                    {SKILL_VARIABLES[selectedSkill].map((v) => (
+                      <div key={v.key}>
+                        <label className="text-[11px] text-zinc-400 block mb-0.5">{v.label}</label>
+                        <textarea
+                          value={variableValues[v.key] ?? ""}
+                          onChange={(e) =>
+                            setVariableValues((prev) => ({ ...prev, [v.key]: e.target.value }))
+                          }
+                          rows={v.autoToday ? 1 : 3}
+                          className="w-full px-2 py-1.5 rounded bg-zinc-900 border border-zinc-800 text-xs font-mono text-zinc-200 resize-y focus:outline-none focus:border-zinc-600"
+                        />
+                      </div>
                     ))}
                   </div>
                 )}
-              </div>
-            )}
-
-            {/* Variables */}
-            {selectedSkill && SKILL_VARIABLES[selectedSkill] && SKILL_VARIABLES[selectedSkill].length > 0 && (
-              <div className="border border-zinc-800 rounded-lg p-3 bg-zinc-950 mb-3 shrink-0 space-y-2 max-h-[35vh] overflow-y-auto">
-                <div className="text-[10px] font-medium text-zinc-500 uppercase tracking-wider">Variables</div>
-                {SKILL_VARIABLES[selectedSkill].map((v) => (
-                  <div key={v.key}>
-                    <label className="text-[11px] text-zinc-400 block mb-0.5">{v.label}</label>
-                    <textarea
-                      value={variableValues[v.key] ?? ""}
-                      onChange={(e) =>
-                        setVariableValues((prev) => ({ ...prev, [v.key]: e.target.value }))
-                      }
-                      rows={v.autoToday ? 1 : 3}
-                      className="w-full px-2 py-1.5 rounded bg-zinc-900 border border-zinc-800 text-xs font-mono text-zinc-200 resize-y focus:outline-none focus:border-zinc-600"
-                    />
-                  </div>
-                ))}
               </div>
             )}
 
