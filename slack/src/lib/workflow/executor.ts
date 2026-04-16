@@ -1,9 +1,85 @@
 import { db } from "@/lib/db";
-import { workflows, workflowRuns, channels, channelMembers, messages, dmConversations, dmMembers } from "@/lib/db/schema";
-import { eq, and } from "drizzle-orm";
+import { workflows, workflowRuns, channels, channelMembers, messages, dmConversations, dmMembers, users } from "@/lib/db/schema";
+import { eq, and, or, ilike } from "drizzle-orm";
 import { sendToAgent } from "@/lib/a2a/message-bridge";
 import { substituteVariables } from "./substitute";
 import type { WorkflowStep, PendingInput } from "./types";
+
+/**
+ * Resolve an agent reference (name, a2aId, or UUID) to the agent row.
+ * Prefer name/a2aId per workspace convention; UUID is accepted for back-compat.
+ */
+async function resolveAgent(ref: string): Promise<{
+  id: string;
+  displayName: string;
+  agentCardJson: unknown;
+} | null> {
+  const trimmed = ref.trim().replace(/^@/, "");
+  if (!trimmed) return null;
+
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+    trimmed
+  );
+
+  const [row] = await db
+    .select({
+      id: users.id,
+      displayName: users.displayName,
+      agentCardJson: users.agentCardJson,
+    })
+    .from(users)
+    .where(
+      and(
+        eq(users.isAgent, true),
+        isUuid
+          ? or(eq(users.id, trimmed), eq(users.a2aId, trimmed))!
+          : or(ilike(users.displayName, trimmed), eq(users.a2aId, trimmed))!
+      )
+    )
+    .limit(1);
+
+  return row ?? null;
+}
+
+/**
+ * Resolve a channel reference (name with or without #, or UUID).
+ */
+async function resolveChannel(ref: string): Promise<{ id: string; name: string } | null> {
+  const trimmed = ref.trim().replace(/^#/, "");
+  if (!trimmed) return null;
+
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+    trimmed
+  );
+
+  const [row] = await db
+    .select({ id: channels.id, name: channels.name })
+    .from(channels)
+    .where(isUuid ? eq(channels.id, trimmed) : ilike(channels.name, trimmed))
+    .limit(1);
+
+  return row ?? null;
+}
+
+/**
+ * Resolve a user reference (display name or UUID).
+ */
+async function resolveUser(ref: string): Promise<{ id: string; displayName: string } | null> {
+  const trimmed = ref.trim().replace(/^@/, "");
+  if (!trimmed) return null;
+
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+    trimmed
+  );
+
+  const [row] = await db
+    .select({ id: users.id, displayName: users.displayName })
+    .from(users)
+    .where(isUuid ? eq(users.id, trimmed) : ilike(users.displayName, trimmed))
+    .limit(1);
+
+  return row ?? null;
+}
 
 export async function runWorkflow(
   workflowId: string,
@@ -273,6 +349,68 @@ async function executeStep(
       const agentMessage = await sendToAgent({
         agentId: step.agentId,
         text: prompt,
+        skillId: step.skillId,
+      });
+
+      return agentMessage.content;
+    }
+
+    case "invoke_skill": {
+      // Resolve agent by name (preferred) or UUID
+      const agent = await resolveAgent(step.agent);
+      if (!agent) {
+        throw new Error(`Agent not found: "${step.agent}"`);
+      }
+
+      const card = agent.agentCardJson as {
+        skills?: Array<{
+          id: string;
+          name: string;
+          description: string;
+          instruction?: string;
+        }>;
+      } | null;
+      const skill = card?.skills?.find((s) => s.id === step.skillId);
+      if (!skill) {
+        const available = card?.skills?.map((s) => s.id).join(", ") || "none";
+        throw new Error(
+          `Skill "${step.skillId}" not found on agent ${agent.displayName}. Available: ${available}`
+        );
+      }
+
+      // Build structured skill invocation. The agent's system prompt + skill
+      // instruction drive behavior — no free-form prompt needed.
+      const resolvedInputs = step.inputs
+        ? Object.fromEntries(
+            Object.entries(step.inputs).map(([k, v]) => [
+              k,
+              substituteVariables(v, vars),
+            ])
+          )
+        : {};
+
+      const inputsBlock = Object.keys(resolvedInputs).length
+        ? Object.entries(resolvedInputs)
+            .map(([k, v]) => `${k}: ${v}`)
+            .join("\n")
+        : "";
+
+      const skillMessage = [
+        `[A2A Skill Invocation]`,
+        `Skill: ${skill.name} (${skill.id})`,
+        `Description: ${skill.description}`,
+        skill.instruction ? `Instruction: ${skill.instruction}` : "",
+        "",
+        inputsBlock
+          ? `Inputs:\n${inputsBlock}`
+          : "Execute this skill with the conversation context.",
+      ]
+        .filter(Boolean)
+        .join("\n");
+
+      const agentMessage = await sendToAgent({
+        agentId: agent.id,
+        text: skillMessage,
         skillId: step.skillId,
       });
 

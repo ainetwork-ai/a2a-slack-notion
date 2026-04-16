@@ -8,7 +8,29 @@ export type FormField = {
 
 export type WorkflowStep =
   | { type: "send_message"; channelId: string; message: string; saveAs?: string }
-  | { type: "ask_agent"; agentId: string; skillId?: string; prompt: string; saveAs?: string }
+  | {
+      // A2A skill invocation — preferred. The agent's A2A card defines what
+      // the skill does (name, description, instruction). Callers just pass
+      // inputs and save the result. No free-form prompt needed.
+      //
+      // `agent` is the agent's display name (e.g. "Reporter") or a2aId —
+      // UUIDs are discouraged since agents are discoverable by name in the
+      // workspace.
+      type: "invoke_skill";
+      agent: string;
+      skillId: string;
+      inputs?: Record<string, string>;
+      saveAs?: string;
+    }
+  | {
+      // @deprecated — use `invoke_skill` with a skill defined in the agent's
+      // A2A card. This type remains for backwards compatibility only.
+      type: "ask_agent";
+      agentId: string;
+      skillId?: string;
+      prompt: string;
+      saveAs?: string;
+    }
   | { type: "condition"; if: string; then: WorkflowStep[]; else?: WorkflowStep[] }
   | { type: "wait"; durationMs: number }
   | { type: "create_channel"; name: string; description?: string; inviteAgents?: string[] }

@@ -11,6 +11,7 @@ function stepIcon(type: WorkflowStep['type']): string {
   const map: Record<WorkflowStep['type'], string> = {
     send_message: '💬',
     post_to_channel: '↩️',
+    invoke_skill: '⚡',
     ask_agent: '🤖',
     condition: '🔀',
     wait: '⏱️',
@@ -27,7 +28,8 @@ function stepLabel(type: WorkflowStep['type']): string {
   const map: Record<WorkflowStep['type'], string> = {
     send_message: 'Send a message',
     post_to_channel: 'Post to channel',
-    ask_agent: 'Ask an agent',
+    invoke_skill: 'Invoke agent skill',
+    ask_agent: 'Ask an agent (legacy)',
     condition: 'If/else condition',
     wait: 'Wait for time',
     create_channel: 'Create channel',
@@ -47,6 +49,11 @@ function stepPreview(step: WorkflowStep): string {
       const ch = (s.channelId as string) || '?';
       const msg = (s.message as string) || '';
       return `in #${ch}${msg ? `: "${msg.slice(0, 40)}${msg.length > 40 ? '…' : ''}"` : ''}`;
+    }
+    case 'invoke_skill': {
+      const agent = (s.agent as string) || '?';
+      const skill = (s.skillId as string) || '?';
+      return `${agent}.${skill}`;
     }
     case 'ask_agent': {
       const agent = (s.agentId as string) || '?';
@@ -76,6 +83,7 @@ function stepPreview(step: WorkflowStep): string {
 
 function defaultStep(type: WorkflowStep['type']): WorkflowStep {
   switch (type) {
+    case 'invoke_skill': return { type, agent: '', skillId: '', inputs: {}, saveAs: '' };
     case 'ask_agent': return { type, agentId: '', prompt: '', saveAs: '' };
     case 'send_message': return { type, channelId: '', message: '' };
     case 'post_to_channel': return { type, channelId: '', message: '' };
