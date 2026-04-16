@@ -17,6 +17,14 @@ export async function apiFetch<T>(path: string, options?: RequestInit): Promise<
     },
   });
 
+  if (res.status === 401) {
+    if (typeof window !== 'undefined') {
+      const returnUrl = encodeURIComponent(window.location.pathname + window.location.search);
+      window.location.replace(`/login?return_url=${returnUrl}`);
+    }
+    throw new Error('Unauthorized');
+  }
+
   if (!res.ok) {
     const error = await res.json().catch(() => ({ message: res.statusText }));
     throw new Error(error.message ?? `API Error: ${res.status}`);

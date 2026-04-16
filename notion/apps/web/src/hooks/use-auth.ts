@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter, usePathname } from 'next/navigation';
 import { getSession, type User } from '@/lib/auth-client';
 
 export function useAuth() {
@@ -16,7 +17,16 @@ export function useAuth() {
   return { user, loading };
 }
 
-// No longer redirects to login — always considered authenticated
 export function useRequireAuth(): { user: User | null; loading: boolean } {
-  return useAuth();
+  const router = useRouter();
+  const pathname = usePathname();
+  const { user, loading } = useAuth();
+
+  useEffect(() => {
+    if (!loading && !user) {
+      router.replace(`/login?return_url=${encodeURIComponent(pathname)}`);
+    }
+  }, [user, loading, router, pathname]);
+
+  return { user, loading };
 }

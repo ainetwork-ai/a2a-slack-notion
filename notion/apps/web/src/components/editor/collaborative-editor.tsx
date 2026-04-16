@@ -12,6 +12,26 @@ import { BlockHandleOverlay } from './block-handle-overlay';
 import { BlockContextMenu } from './block-context-menu';
 import { BlockSelectionToolbar } from './block-selection-toolbar';
 import { BlockDragProvider } from './block-drag-overlay';
+import { CommentBubble, type CommentBubblePosition } from './comment-bubble';
+import { CommentSidebar } from './comment-sidebar';
+import { RevisionOverlay } from './revision-overlay';
+import { useCommentAgent } from './use-comment-agent';
+import { findCommentHighlightRange } from './extensions/comment-highlight';
+
+interface CommentContent {
+  text: string
+  selectedText: string
+  commentMarkId: string
+}
+
+interface PageComment {
+  id: string
+  content: CommentContent
+  author: { name: string; avatar: string | null }
+  resolved: boolean
+  createdAt: string
+  replies: PageComment[]
+}
 
 interface CollaborativeEditorProps {
   pageId: string;
@@ -120,22 +140,63 @@ export function CollaborativeEditor({ pageId, userName, editable = true, workspa
 
   const editorRef = useRef<Editor | null>(null);
   const workspaceIdRef = useRef(workspaceId ?? '');
+  const abortControllerRef = useRef<AbortController | null>(null);
   const [streamingAgents, setStreamingAgents] = useState<StreamingAgent[]>([]);
+  // Optimistic badge: set before fetch so it renders even if SSE never fires
+  const [pendingAgent, setPendingAgent] = useState<StreamingAgent | null>(null);
+
+  const [bubblePosition, setBubblePosition] = useState<CommentBubblePosition | null>(null);
+  const editorContainerRef = useRef<HTMLDivElement>(null);
+  const [pageComments, setPageComments] = useState<PageComment[]>([]);
+  const [revisionAnchorRects, setRevisionAnchorRects] = useState<Map<string, DOMRect>>(new Map());
+  const [workspaceAgents, setWorkspaceAgents] = useState<Array<{ id: string; name: string }>>([]);
 
   useEffect(() => {
     workspaceIdRef.current = workspaceId ?? '';
   }, [workspaceId]);
 
-  const handleAgentInvoke = useCallback(async (params: { agentId: string; prompt: string; pageId: string; workspaceId: string }) => {
+  useEffect(() => {
+    return () => {
+      abortControllerRef.current?.abort();
+    };
+  }, []);
+
+  const resolveAgentId = useCallback(
+    (name: string) => {
+      return workspaceAgents.find(
+        (a) => a.name.toLowerCase().includes(name.toLowerCase()),
+      )?.id;
+    },
+    [workspaceAgents],
+  );
+
+  const { revisions, startRevision, acceptRevision, rejectRevision } = useCommentAgent({
+    workspaceId: workspaceId ?? '',
+    pageId,
+    editorRef,
+    resolveAgentId,
+  });
+
+  const handleAgentInvoke = useCallback(async (params: { agentId: string; agentName: string; prompt: string; pageId: string; workspaceId: string }) => {
     const apiUrl =
       process.env['NEXT_PUBLIC_API_URL'] ??
       `${window.location.protocol}//${window.location.hostname}:3011`;
+
+    // Abort any previous in-flight stream and create a new controller
+    abortControllerRef.current?.abort();
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
+
+    // Optimistic badge — shows immediately before SSE stream starts
+    const pendingColor = AGENT_COLORS[params.agentId.charCodeAt(0) % AGENT_COLORS.length] ?? '#6366f1';
+    setPendingAgent({ agentId: params.agentId, name: params.agentName || 'Agent', color: pendingColor });
 
     try {
       const response = await fetch(`${apiUrl}/api/v1/agents/invoke?stream=true`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
+        signal: abortController.signal,
         body: JSON.stringify({
           agentId: params.agentId,
           prompt: params.prompt,
@@ -171,11 +232,12 @@ export function CollaborativeEditor({ pageId, userName, editable = true, workspa
             if (chunk.type === 'agent_start') {
               const info = JSON.parse(chunk.content) as { agentId: string; name: string };
               const color = AGENT_COLORS[info.agentId.charCodeAt(0) % AGENT_COLORS.length] ?? '#6366f1';
+              setPendingAgent(null); // real badge takes over
               setStreamingAgents(prev => [...prev.filter(a => a.agentId !== info.agentId), { ...info, color }]);
             } else if (chunk.type === 'agent_end') {
               const info = JSON.parse(chunk.content) as { agentId: string };
               setStreamingAgents(prev => prev.filter(a => a.agentId !== info.agentId));
-            } else if (chunk.content && editorRef.current) {
+            } else if (chunk.content && editorRef.current && !abortController.signal.aborted) {
               editorRef.current.commands.insertContent(chunk.content);
             }
           } catch {
@@ -184,7 +246,9 @@ export function CollaborativeEditor({ pageId, userName, editable = true, workspa
         }
       }
     } catch (error) {
+      if (abortController.signal.aborted) return; // intentional abort, ignore
       console.error('[Agent Invoke Error]', error);
+      setPendingAgent(null);
       setStreamingAgents([]);
       try {
         const res = await fetch(`${apiUrl}/api/v1/agents/invoke`, {
@@ -203,6 +267,132 @@ export function CollaborativeEditor({ pageId, userName, editable = true, workspa
     }
   }, []);
 
+  const handleSelectionUpdate = useCallback(({ editor }: { editor: Editor }) => {
+    const { from, to } = editor.state.selection;
+    if (from === to) {
+      setBubblePosition(null);
+      return;
+    }
+    const selectedText = editor.state.doc.textBetween(from, to, ' ');
+    if (!selectedText.trim()) {
+      setBubblePosition(null);
+      return;
+    }
+
+    const coords = editor.view.coordsAtPos(to);
+    const container = editorContainerRef.current?.getBoundingClientRect();
+    if (!container) return;
+
+    setBubblePosition({
+      top: coords.top - container.top - 8,
+      left: coords.left - container.left + 16,
+      selectedText,
+    });
+  }, []);
+
+  const handleCommentSubmit = useCallback(async (content: string) => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    const { from, to } = editor.state.selection;
+    const selectedText = editor.state.doc.textBetween(from, to, ' ');
+    const commentMarkId = `cm_${crypto.randomUUID().replace(/-/g, '').slice(0, 8)}`;
+
+    editor.commands.setTextSelection({ from, to });
+    editor.commands.setCommentHighlight({ commentId: commentMarkId, status: 'active' });
+    editor.commands.setTextSelection(to);
+
+    const apiUrl =
+      process.env['NEXT_PUBLIC_API_URL'] ??
+      `${window.location.protocol}//${window.location.hostname}:3011`;
+
+    try {
+      const res = await fetch(`${apiUrl}/api/v1/comments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          blockId: pageId,
+          content: { text: content, selectedText, commentMarkId },
+        }),
+      });
+      if (res.ok) {
+        const newComment = await res.json() as PageComment;
+        setPageComments((prev) => [newComment, ...prev]);
+      }
+    } catch {
+      // comment saved locally on mark, DB sync best-effort
+    }
+
+    setBubblePosition(null);
+
+    if (content.includes('@')) {
+      await startRevision({ commentMarkId, commentText: content, selectedText });
+    }
+  }, [pageId, startRevision]);
+
+  const handleCommentClick = useCallback(
+    (commentMarkId: string) => {
+      const editor = editorRef.current;
+      if (!editor) return;
+
+      const range = findCommentHighlightRange(editor.state.doc, commentMarkId);
+      if (!range) return;
+
+      editor.commands.setTextSelection(range.from);
+      editor.commands.scrollIntoView();
+
+      const coords = editor.view.coordsAtPos(range.from);
+      const endCoords = editor.view.coordsAtPos(range.to);
+      const rect = new DOMRect(
+        coords.left,
+        coords.top,
+        endCoords.right - coords.left,
+        endCoords.bottom - coords.top,
+      );
+      setRevisionAnchorRects((prev) => new Map(prev).set(commentMarkId, rect));
+    },
+    [],
+  );
+
+  const handleResolveComment = useCallback(async (commentId: string) => {
+    const apiUrl =
+      process.env['NEXT_PUBLIC_API_URL'] ??
+      `${window.location.protocol}//${window.location.hostname}:3011`;
+
+    await fetch(`${apiUrl}/api/v1/comments/${commentId}/resolve`, {
+      method: 'PATCH',
+      credentials: 'include',
+    }).catch(() => {});
+
+    setPageComments((prev) =>
+      prev.map((c) => (c.id === commentId ? { ...c, resolved: !c.resolved } : c)),
+    );
+    const comment = pageComments.find((c) => c.id === commentId);
+    if (comment?.content.commentMarkId) {
+      editorRef.current?.commands.updateCommentHighlightStatus(
+        comment.content.commentMarkId,
+        'resolved',
+      );
+    }
+  }, [pageComments]);
+
+  const handleDeleteComment = useCallback(async (commentId: string) => {
+    const apiUrl =
+      process.env['NEXT_PUBLIC_API_URL'] ??
+      `${window.location.protocol}//${window.location.hostname}:3011`;
+
+    await fetch(`${apiUrl}/api/v1/comments/${commentId}`, {
+      method: 'DELETE',
+      credentials: 'include',
+    }).catch(() => {});
+
+    const comment = pageComments.find((c) => c.id === commentId);
+    if (comment?.content.commentMarkId) {
+      editorRef.current?.commands.removeCommentHighlight(comment.content.commentMarkId);
+    }
+    setPageComments((prev) => prev.filter((c) => c.id !== commentId));
+  }, [pageComments]);
+
   const editor = useEditor({
     immediatelyRender: false,
     extensions: [
@@ -217,9 +407,30 @@ export function CollaborativeEditor({ pageId, userName, editable = true, workspa
         class: 'outline-none min-h-[200px]',
       },
     },
+    onSelectionUpdate: handleSelectionUpdate,
   });
 
   useEffect(() => { editorRef.current = editor; }, [editor]);
+
+  useEffect(() => {
+    if (!workspaceId) return;
+    const apiUrl =
+      process.env['NEXT_PUBLIC_API_URL'] ??
+      (typeof window !== 'undefined'
+        ? `${window.location.protocol}//${window.location.hostname}:3011`
+        : 'http://localhost:3011');
+
+    Promise.all([
+      fetch(`${apiUrl}/api/v1/agents?workspace_id=${workspaceId}`, { credentials: 'include' })
+        .then(r => r.ok ? r.json() : [])
+        .then((agents: Array<{ id: string; name: string }>) => setWorkspaceAgents(agents))
+        .catch(() => {}),
+      fetch(`${apiUrl}/api/v1/comments?block_id=${pageId}`, { credentials: 'include' })
+        .then(r => r.ok ? r.json() : [])
+        .then((comments: PageComment[]) => setPageComments(comments))
+        .catch(() => {}),
+    ]);
+  }, [workspaceId, pageId]);
 
   if (!editor) return null;
 
@@ -247,8 +458,44 @@ export function CollaborativeEditor({ pageId, userName, editable = true, workspa
         )}
       </div>
 
-      {streamingAgents.length > 0 && (
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
+      {(streamingAgents.length > 0 || pendingAgent) && (
+        <div className="flex gap-2 flex-wrap" style={{ marginBottom: 6 }}>
+          {/* Pending badge: subdued until SSE agent_start confirms streaming */}
+          {pendingAgent && !streamingAgents.find(a => a.agentId === pendingAgent.agentId) && (
+            <div
+              key={`pending-${pendingAgent.agentId}`}
+              className="agent-typing-badge"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '3px 10px',
+                borderRadius: 20,
+                boxShadow: `0 0 0 1.5px ${pendingAgent.color}40`,
+                background: `${pendingAgent.color}18`,
+                fontSize: 12,
+                color: pendingAgent.color,
+                fontWeight: 500,
+                opacity: 0.5,
+              }}
+            >
+              <span
+                style={{
+                  width: 7,
+                  height: 7,
+                  borderRadius: '50%',
+                  backgroundColor: pendingAgent.color,
+                  display: 'inline-block',
+                  flexShrink: 0,
+                }}
+              />
+              {pendingAgent.name} is writing
+              <span className="agent-typing-dots">
+                <span>.</span><span>.</span><span>.</span>
+              </span>
+            </div>
+          )}
+          {/* Confirmed streaming badges: full opacity with pulse */}
           {streamingAgents.map(agent => (
             <div
               key={agent.agentId}
@@ -259,7 +506,7 @@ export function CollaborativeEditor({ pageId, userName, editable = true, workspa
                 gap: 6,
                 padding: '3px 10px',
                 borderRadius: 20,
-                border: `1.5px solid ${agent.color}`,
+                boxShadow: `0 0 0 1.5px ${agent.color}40`,
                 background: `${agent.color}18`,
                 fontSize: 12,
                 color: agent.color,
@@ -291,11 +538,43 @@ export function CollaborativeEditor({ pageId, userName, editable = true, workspa
           <span className="text-sm text-[var(--text-tertiary)]">Connecting...</span>
         </div>
       )}
-      <EditorBubbleMenu editor={editor} />
-      <EditorContent editor={editor} />
-      <BlockHandleOverlay />
-      <BlockContextMenu />
-      <BlockSelectionToolbar />
+
+      <div className="flex h-full">
+        {/* Editor area */}
+        <div ref={editorContainerRef} className="relative flex-1 overflow-auto">
+          <EditorBubbleMenu editor={editor} />
+          <EditorContent editor={editor} />
+          <BlockHandleOverlay />
+          <BlockContextMenu />
+          <BlockSelectionToolbar />
+
+          <CommentBubble
+            position={bubblePosition}
+            onSubmit={handleCommentSubmit}
+            onClose={() => setBubblePosition(null)}
+            workspaceId={workspaceId ?? ''}
+          />
+
+          {[...revisions.values()].map((revision) => (
+            <RevisionOverlay
+              key={revision.commentMarkId}
+              revision={revision}
+              anchorRect={revisionAnchorRects.get(revision.commentMarkId) ?? null}
+              onAccept={acceptRevision}
+              onReject={rejectRevision}
+            />
+          ))}
+        </div>
+
+        {pageComments.length > 0 && (
+          <CommentSidebar
+            comments={pageComments}
+            onCommentClick={handleCommentClick}
+            onResolve={handleResolveComment}
+            onDelete={handleDeleteComment}
+          />
+        )}
+      </div>
 
       <style jsx global>{`
         .notion-editor .tiptap { font-family: var(--font-sans); font-size: 16px; line-height: 1.5; color: var(--text-primary); }
