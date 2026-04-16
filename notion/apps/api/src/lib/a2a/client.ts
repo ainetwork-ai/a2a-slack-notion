@@ -25,7 +25,44 @@ function extractBaseUrl(inputUrl: string): string {
     .replace(/\/+$/, '');
 }
 
+function validateAgentUrl(inputUrl: string): void {
+  let parsed: URL;
+  try {
+    parsed = new URL(inputUrl);
+  } catch {
+    throw new Error('Invalid URL');
+  }
+
+  if (!['http:', 'https:'].includes(parsed.protocol)) {
+    throw new Error('Only http and https URLs are allowed');
+  }
+
+  const hostname = parsed.hostname.toLowerCase();
+
+  // Block private/internal IP ranges and localhost
+  if (
+    hostname === 'localhost' ||
+    hostname === '127.0.0.1' ||
+    hostname === '::1' ||
+    hostname.startsWith('192.168.') ||
+    hostname.startsWith('10.') ||
+    hostname.startsWith('172.16.') ||
+    hostname.startsWith('172.17.') ||
+    hostname.startsWith('172.18.') ||
+    hostname.startsWith('172.19.') ||
+    hostname.startsWith('172.2') ||
+    hostname.startsWith('172.30.') ||
+    hostname.startsWith('172.31.') ||
+    hostname === '169.254.169.254' || // AWS metadata
+    hostname.endsWith('.local') ||
+    hostname.endsWith('.internal')
+  ) {
+    throw new Error('URL targets a private or internal address');
+  }
+}
+
 export async function fetchAgentCard(inputUrl: string): Promise<AgentCard> {
+  validateAgentUrl(inputUrl);
   const baseUrl = extractBaseUrl(inputUrl);
 
   // Try /.well-known/agent.json first

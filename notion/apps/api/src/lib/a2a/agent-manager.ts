@@ -50,6 +50,8 @@ export async function inviteAgent(a2aUrl: string, workspaceId: string) {
 }
 
 export async function removeAgent(agentId: string) {
+  const agent = await prisma.user.findUnique({ where: { id: agentId } });
+  if (!agent?.isAgent) throw new Error('Not an agent');
   // Delete workspace memberships first, then user
   await prisma.workspaceMember.deleteMany({ where: { userId: agentId } });
   await prisma.user.delete({ where: { id: agentId } });

@@ -9,6 +9,9 @@ export const agents = new Hono<{ Variables: AppVariables }>();
 
 // List agents in workspace
 agents.get('/', async (c) => {
+  const user = c.get('user');
+  if (!user) return c.json({ error: 'Unauthorized' }, 401);
+
   const workspaceId = c.req.query('workspace_id');
   if (!workspaceId) return c.json({ error: 'workspace_id required' }, 400);
 
@@ -18,6 +21,9 @@ agents.get('/', async (c) => {
 
 // Preview agent card (without inviting)
 agents.get('/card', async (c) => {
+  const user = c.get('user');
+  if (!user) return c.json({ error: 'Unauthorized' }, 401);
+
   const url = c.req.query('url');
   if (!url) return c.json({ error: 'url required' }, 400);
 
@@ -29,8 +35,11 @@ agents.get('/card', async (c) => {
   }
 });
 
-// Agent registry for external agents
+// Agent registry for external agents (strips internal a2aUrl)
 agents.get('/registry', async (c) => {
+  const user = c.get('user');
+  if (!user) return c.json({ error: 'Unauthorized' }, 401);
+
   const workspaceId = c.req.query('workspace_id');
   if (!workspaceId) return c.json({ error: 'workspace_id required' }, 400);
 
@@ -39,13 +48,15 @@ agents.get('/registry', async (c) => {
     id: a.id,
     name: a.name,
     status: a.agentStatus,
-    a2aUrl: a.a2aUrl,
     skills: (a.agentCardJson as any)?.skills || [],
   })));
 });
 
 // Invoke agent (called by mention trigger) — must be before /:agentId
 agents.post('/invoke', async (c) => {
+  const user = c.get('user');
+  if (!user) return c.json({ error: 'Unauthorized' }, 401);
+
   const body = await c.req.json();
   const { agentId, prompt, pageId, blockId, workspaceId } = body;
   const useStream = c.req.query('stream') === 'true';
@@ -75,6 +86,9 @@ agents.post('/invoke', async (c) => {
 
 // Invite (register) a new agent
 agents.post('/', async (c) => {
+  const user = c.get('user');
+  if (!user) return c.json({ error: 'Unauthorized' }, 401);
+
   const body = await c.req.json();
   const { a2aUrl, workspace_id } = body;
 
@@ -92,6 +106,9 @@ agents.post('/', async (c) => {
 
 // Get single agent
 agents.get('/:agentId', async (c) => {
+  const user = c.get('user');
+  if (!user) return c.json({ error: 'Unauthorized' }, 401);
+
   const agentId = c.req.param('agentId');
   const { prisma } = await import('../lib/prisma.js');
   const found = await prisma.user.findUnique({
@@ -107,6 +124,9 @@ agents.get('/:agentId', async (c) => {
 
 // Delete agent
 agents.delete('/:agentId', async (c) => {
+  const user = c.get('user');
+  if (!user) return c.json({ error: 'Unauthorized' }, 401);
+
   const agentId = c.req.param('agentId');
   try {
     await removeAgent(agentId);
@@ -118,6 +138,9 @@ agents.delete('/:agentId', async (c) => {
 
 // Health check
 agents.post('/:agentId/health', async (c) => {
+  const user = c.get('user');
+  if (!user) return c.json({ error: 'Unauthorized' }, 401);
+
   const agentId = c.req.param('agentId');
   const isOnline = await healthCheck(agentId);
   return c.json({ agentId, status: isOnline ? 'online' : 'offline' });
@@ -125,6 +148,9 @@ agents.post('/:agentId/health', async (c) => {
 
 // Get agent skills
 agents.get('/:agentId/skills', async (c) => {
+  const user = c.get('user');
+  if (!user) return c.json({ error: 'Unauthorized' }, 401);
+
   const agentId = c.req.param('agentId');
   const skills = await getAgentSkills(agentId);
   return c.json(skills);
