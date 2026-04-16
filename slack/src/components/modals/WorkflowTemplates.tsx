@@ -243,12 +243,12 @@ const TEMPLATES: WorkflowTemplate[] = [
       '채널 메시지 트리거 → Damien 배정 → 기자 리포트 → 팀장 가이드 → 초안 → 피드백 → 수정 → 최종 승인 (7단계 A2A 파이프라인)',
     icon: '📝',
     triggerType: 'channel_message',
-    triggerConfig: { channel: '', pattern: '' },
+    triggerConfig: { channel: 'unblockmedia-test-1', pattern: 'start-writing-article' },
     steps: [
       // Step 1: Damien assigns reporter + manager
       {
         type: 'invoke_skill',
-        agent: 'unblock-damien',
+        agent: 'damien',
         skillId: 'assignment',
         inputs: {
           TODAY_DATE: new Date().toISOString().slice(0, 10),
@@ -323,7 +323,7 @@ const TEMPLATES: WorkflowTemplate[] = [
       // Step 8: Damien confirms or rejects
       {
         type: 'invoke_skill',
-        agent: 'unblock-damien',
+        agent: 'damien',
         skillId: 'confirm',
         inputs: {
           REPORTER: '{{routing.reporterKor}}',

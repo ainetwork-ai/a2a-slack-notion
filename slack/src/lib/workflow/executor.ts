@@ -12,26 +12,27 @@ const AIN_ADDRESS_RE = /^0x[a-f0-9]{40}$/i;
 // Extracts reporter and manager agent IDs from the text (same regex logic
 // as test_confirm.py's pick_reporter / pick_manager).
 
+// a2aId values match DB registration (without "unblock-" prefix)
 const REPORTERS: Record<string, { kor: string; en: string }> = {
-  "unblock-max":   { kor: "맥스",     en: "Max" },
-  "unblock-techa": { kor: "테카",     en: "Techa" },
-  "unblock-mark":  { kor: "마크",     en: "Mark" },
-  "unblock-roy":   { kor: "로이",     en: "Roy" },
-  "unblock-april": { kor: "에이프릴", en: "April" },
+  "max":   { kor: "맥스",     en: "Max" },
+  "techa": { kor: "테카",     en: "Techa" },
+  "mark":  { kor: "마크",     en: "Mark" },
+  "roy":   { kor: "로이",     en: "Roy" },
+  "april": { kor: "에이프릴", en: "April" },
 };
 
 const MANAGERS: Record<string, { kor: string; en: string }> = {
-  "unblock-victoria": { kor: "빅토리아", en: "Victoria" },
-  "unblock-logan":    { kor: "로건",     en: "Logan" },
-  "unblock-lilly":    { kor: "릴리",     en: "Lilly" },
+  "victoria": { kor: "빅토리아", en: "Victoria" },
+  "logan":    { kor: "로건",     en: "Logan" },
+  "lilly":    { kor: "릴리",     en: "Lilly" },
 };
 
 const REPORTER_TO_MANAGER: Record<string, string> = {
-  "unblock-max":   "unblock-victoria",
-  "unblock-mark":  "unblock-victoria",
-  "unblock-techa": "unblock-logan",
-  "unblock-april": "unblock-logan",
-  "unblock-roy":   "unblock-lilly",
+  "max":   "victoria",
+  "mark":  "victoria",
+  "techa": "logan",
+  "april": "logan",
+  "roy":   "lilly",
 };
 
 function pickAgentFromText(text: string, roster: Record<string, { kor: string; en: string }>): string | null {
