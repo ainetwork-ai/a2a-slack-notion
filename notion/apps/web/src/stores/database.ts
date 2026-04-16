@@ -66,16 +66,19 @@ export const useDatabaseStore = create<DatabaseState>((set, get) => ({
   loadDatabase: async (databaseId: string) => {
     set({ loading: true, error: null });
     try {
+      // API returns the block directly (flat), not nested under {database, schema, views}
       const data = await apiFetch<{
-        database: DatabaseBlock;
-        schema: DatabaseSchema;
+        id: string;
+        properties: DatabaseBlockProperties;
         views: DatabaseViewData[];
       }>(`/api/v1/databases/${databaseId}`);
 
+      const database: DatabaseBlock = { id: data.id, properties: data.properties };
+      const schema: DatabaseSchema = data.properties.schema ?? { properties: [] };
       const firstViewId = data.views[0]?.id ?? null;
       set({
-        database: data.database,
-        schema: data.schema,
+        database,
+        schema,
         views: data.views,
         activeViewId: firstViewId,
         loading: false,
@@ -108,10 +111,11 @@ export const useDatabaseStore = create<DatabaseState>((set, get) => ({
     const vid = viewId ?? activeViewId;
     const query = vid ? `?view_id=${vid}` : '';
     try {
-      const data = await apiFetch<{ rows: DatabaseRow[] }>(
+      // API returns { results: [...] } (Notion-style pagination), not { rows: [...] }
+      const data = await apiFetch<{ results?: DatabaseRow[]; rows?: DatabaseRow[] }>(
         `/api/v1/databases/${database.id}/rows${query}`,
       );
-      set({ rows: data.rows });
+      set({ rows: data.results ?? data.rows ?? [] });
     } catch (err) {
       set({ error: err instanceof Error ? err.message : 'Failed to load rows' });
     }
@@ -161,13 +165,25 @@ export const useDatabaseStore = create<DatabaseState>((set, get) => ({
   },
 
   addProperty: async (def: Omit<PropertyDefinition, 'id'>) => {
-    const { database } = get();
+    const { database, activeViewId, views } = get();
     if (!database) return;
 
-    const updated = await apiFetch<{ schema: DatabaseSchema }>(
+    const updated = await apiFetch<{ property: PropertyDefinition; schema: DatabaseSchema }>(
       `/api/v1/databases/${database.id}/properties`,
       { method: 'POST', body: JSON.stringify(def) },
     );
+
+    // Update active view's visibleProperties to include the new property
+    if (activeViewId) {
+      const activeView = views.find((v) => v.id === activeViewId);
+      if (activeView) {
+        const currentVisible = activeView.config.visibleProperties ?? updated.schema.properties.map((p) => p.id);
+        await get().updateView(activeViewId, {
+          config: { ...activeView.config, visibleProperties: [...currentVisible, updated.property.id] },
+        });
+      }
+    }
+
     set((s) => ({
       schema: updated.schema,
       database: s.database

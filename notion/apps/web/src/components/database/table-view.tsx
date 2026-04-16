@@ -1,44 +1,54 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { Plus } from 'lucide-react';
+import { Plus, ExternalLink } from 'lucide-react';
 import type { PropertyDefinition, PropertyValue, DatabaseViewData } from '@notion/shared';
 import type { DatabaseRow } from '@/stores/database';
 import { useDatabaseStore } from '@/stores/database';
 import { PropertyHeader } from './property-header';
 import { PropertyCell } from './property-cell';
 import { SubItemsRow } from './sub-items-row';
+import { RowDetailModal } from './row-detail-modal';
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 import { AddPropertyMenu } from './add-property-menu';
 import { TemplatePicker } from './template-picker';
 import { cn } from '@/lib/utils';
 import type { PropertyType } from '@notion/shared';
 
-const DEFAULT_COL_WIDTH = 200;
-const TITLE_COL_WIDTH = 300;
+const DEFAULT_COL_WIDTH = 160;
+const TITLE_COL_WIDTH = 260;
 const ROW_HEIGHT = 34;
 
 interface TableViewProps {
   properties: PropertyDefinition[];
   rows: DatabaseRow[];
   activeView: DatabaseViewData | null;
+  workspaceId?: string;
 }
 
-export function TableView({ properties, rows, activeView }: TableViewProps) {
+export function TableView({ properties, rows, activeView, workspaceId }: TableViewProps) {
   const { createRow, createRowFromTemplate, updateRow, deleteRow, addProperty, updateProperty, deleteProperty, updateView, templates } =
     useDatabaseStore();
 
   const [addPropOpen, setAddPropOpen] = useState(false);
   const [hoveredRowId, setHoveredRowId] = useState<string | null>(null);
   const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
+  const [selectedRowId, setSelectedRowId] = useState<string | null>(null);
 
   // Column widths from view config
   const colWidths: Record<string, number> = activeView?.config.columnWidths ?? {};
   const visiblePropertyIds = activeView?.config.visibleProperties ?? properties.map((p) => p.id);
 
-  const visibleProperties = properties.filter(
-    (p) => visiblePropertyIds.includes(p.id) || p.type === 'title',
-  );
+  // Deduplicate: only show the first title-type property (API bug may create extras)
+  let titleSeen = false;
+  const visibleProperties = properties.filter((p) => {
+    if (p.type === 'title') {
+      if (titleSeen) return false;
+      titleSeen = true;
+      return true;
+    }
+    return visiblePropertyIds.includes(p.id);
+  });
 
   function getColWidth(prop: PropertyDefinition): number {
     if (prop.type === 'title') return colWidths[prop.id] ?? TITLE_COL_WIDTH;
@@ -97,6 +107,7 @@ export function TableView({ properties, rows, activeView }: TableViewProps) {
     [createRow, createRowFromTemplate],
   );
 
+  const selectedRow = selectedRowId ? (rows.find((r) => r.id === selectedRowId) ?? null) : null;
   const totalWidth = visibleProperties.reduce((sum, p) => sum + getColWidth(p), 0) + 40; // 40 for row number
 
   return (
@@ -168,8 +179,20 @@ export function TableView({ properties, rows, activeView }: TableViewProps) {
                 onCellChange={handleCellChange}
                 onDelete={() => deleteRow(row.id).catch(console.error)}
                 activeView={activeView}
+                workspaceId={workspaceId}
+                onOpenDetail={() => setSelectedRowId(row.id)}
               />
             ))}
+
+            {selectedRow && (
+              <RowDetailModal
+                row={selectedRow}
+                properties={visibleProperties}
+                workspaceId={workspaceId ?? ''}
+                onClose={() => setSelectedRowId(null)}
+                onUpdate={handleCellChange}
+              />
+            )}
 
             {/* Add row button — shows template picker if templates exist */}
             <Popover open={templatePickerOpen} onOpenChange={setTemplatePickerOpen}>
@@ -217,6 +240,8 @@ interface TableRowProps {
   onCellChange: (rowId: string, propertyId: string, value: PropertyValue) => void;
   onDelete: () => void;
   activeView: DatabaseViewData | null;
+  workspaceId?: string;
+  onOpenDetail: () => void;
 }
 
 function TableRow({
@@ -230,6 +255,8 @@ function TableRow({
   onCellChange,
   onDelete,
   activeView,
+  workspaceId,
+  onOpenDetail,
 }: TableRowProps) {
   const [subItemsOpen, setSubItemsOpen] = useState(false);
   const values = row.properties.values;
@@ -274,7 +301,7 @@ function TableRow({
         {properties.map((prop) => (
           <div
             key={prop.id}
-            className="flex-shrink-0 border-r border-[var(--divider)] last:border-r-0 overflow-hidden"
+            className="flex-shrink-0 border-r border-[var(--divider)] last:border-r-0 overflow-hidden relative"
             style={{ width: getColWidth(prop), height: ROW_HEIGHT }}
           >
             <PropertyCell
@@ -282,7 +309,18 @@ function TableRow({
               value={values[prop.id]}
               onChange={(value) => onCellChange(row.id, prop.id, value)}
               rowIndex={rowIndex}
+              workspaceId={workspaceId}
             />
+            {prop.type === 'title' && isHovered && (
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onOpenDetail(); }}
+                className="absolute right-1 top-1/2 -translate-y-1/2 p-0.5 rounded-[3px] text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors duration-[var(--duration-micro)]"
+                title="Open detail"
+              >
+                <ExternalLink size={12} />
+              </button>
+            )}
           </div>
         ))}
       </div>

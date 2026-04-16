@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 import { OptionPicker } from './option-picker';
 import { RelationPicker } from './relation-picker';
+import { apiFetch } from '@/lib/api';
 
 interface PropertyCellProps {
   definition: PropertyDefinition;
@@ -15,9 +16,10 @@ interface PropertyCellProps {
   onChange: (value: PropertyValue) => void;
   rowIndex?: number;
   colIndex?: number;
+  workspaceId?: string;
 }
 
-export function PropertyCell({ definition, value, onChange }: PropertyCellProps) {
+export function PropertyCell({ definition, value, onChange, workspaceId }: PropertyCellProps) {
   const isAutomatic = AUTO_PROPERTIES.includes(definition.type);
 
   if (isAutomatic) {
@@ -77,7 +79,7 @@ export function PropertyCell({ definition, value, onChange }: PropertyCellProps)
         />
       );
     case 'person':
-      return <PersonCell value={value as { type: 'person'; value: string[] } | undefined} />;
+      return <PersonCell value={value as { type: 'person'; value: string[] } | undefined} workspaceId={workspaceId} onChange={onChange} />;
     case 'files':
       return <FilesCell value={value as { type: 'files'; value: { name: string; url: string; size?: number }[] } | undefined} />;
     case 'formula':
@@ -271,7 +273,7 @@ function DateCell({ value, onChange }: DateCellProps) {
         onClick={() => setEditing(true)}
       >
         {dateStr ? (
-          <span>{new Date(dateStr).toLocaleDateString()}</span>
+          <span>{new Date(dateStr + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
         ) : (
           <span className="text-[var(--text-tertiary)]" />
         )}
@@ -400,23 +402,106 @@ function MultiSelectCell({ definition, value, onChange }: MultiSelectCellProps) 
 
 // ---- Person ----
 
-interface PersonCellProps {
-  value: { type: 'person'; value: string[] } | undefined;
+interface WorkspaceMember {
+  id: string;
+  role: string;
+  user: { id: string; name: string; image: string | null; walletAddress: string };
 }
 
-function PersonCell({ value }: PersonCellProps) {
+interface PersonCellProps {
+  value: { type: 'person'; value: string[] } | undefined;
+  workspaceId?: string;
+  onChange?: (value: PropertyValue) => void;
+}
+
+function PersonCell({ value, workspaceId, onChange }: PersonCellProps) {
   const ids = value?.value ?? [];
+  const [members, setMembers] = useState<WorkspaceMember[]>([]);
+  const [loaded, setLoaded] = useState(false);
+
+  function handleOpen(open: boolean) {
+    if (open && !loaded && workspaceId) {
+      apiFetch<WorkspaceMember[]>(`/api/v1/workspaces/${workspaceId}/members`)
+        .then((data) => {
+          setMembers(Array.isArray(data) ? data : []);
+          setLoaded(true);
+        })
+        .catch(() => setLoaded(true));
+    }
+  }
+
+  function toggleMember(userId: string) {
+    if (!onChange) return;
+    const next = ids.includes(userId) ? ids.filter((x) => x !== userId) : [...ids, userId];
+    onChange({ type: 'person', value: next });
+  }
+
+  if (!workspaceId || !onChange) {
+    return (
+      <div className="h-full w-full px-2 flex items-center gap-1">
+        {ids.map((id) => (
+          <span
+            key={id}
+            className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-[var(--accent-blue)] text-white text-[10px] font-medium"
+          >
+            {id.charAt(0).toUpperCase()}
+          </span>
+        ))}
+      </div>
+    );
+  }
+
   return (
-    <div className="h-full w-full px-2 flex items-center gap-1">
-      {ids.map((id) => (
-        <span
-          key={id}
-          className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-[var(--accent-blue)] text-white text-[10px] font-medium"
-        >
-          {id.charAt(0).toUpperCase()}
-        </span>
-      ))}
-    </div>
+    <Popover onOpenChange={handleOpen}>
+      <PopoverTrigger className="h-full w-full">
+        <div className="h-full w-full px-2 flex items-center gap-1 cursor-pointer hover:bg-[var(--bg-hover)] transition-colors duration-[var(--duration-micro)]">
+          {ids.length === 0 ? (
+            <span className="text-xs text-[var(--text-tertiary)]" />
+          ) : (
+            ids.map((id) => {
+              const member = members.find((m) => m.user.id === id);
+              const label = member ? member.user.name.charAt(0).toUpperCase() : id.charAt(0).toUpperCase();
+              return (
+                <span
+                  key={id}
+                  title={member?.user.name ?? id}
+                  className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-[var(--accent-blue)] text-white text-[10px] font-medium shrink-0"
+                >
+                  {label}
+                </span>
+              );
+            })
+          )}
+        </div>
+      </PopoverTrigger>
+      <PopoverContent className="p-1 min-w-[180px]">
+        {!loaded ? (
+          <div className="px-3 py-2 text-xs text-[var(--text-tertiary)]">Loading...</div>
+        ) : members.length === 0 ? (
+          <div className="px-3 py-2 text-xs text-[var(--text-tertiary)]">No members found</div>
+        ) : (
+          members.map((m) => {
+            const selected = ids.includes(m.user.id);
+            return (
+              <button
+                key={m.user.id}
+                type="button"
+                onClick={() => toggleMember(m.user.id)}
+                className="flex items-center gap-2 w-full px-2 py-1.5 rounded-[3px] text-sm text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors duration-[var(--duration-micro)]"
+              >
+                <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-[var(--accent-blue)] text-white text-[10px] font-medium shrink-0">
+                  {m.user.name.charAt(0).toUpperCase()}
+                </span>
+                <span className="flex-1 text-left truncate">{m.user.name}</span>
+                {selected && (
+                  <span className="text-[var(--accent-blue)] text-xs font-bold">✓</span>
+                )}
+              </button>
+            );
+          })
+        )}
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -450,7 +535,7 @@ function AutoCell({ definition, value }: AutoCellProps) {
     // nothing
   } else if (definition.type === 'created_time' || definition.type === 'last_edited_time') {
     const v = value as { type: string; value: string };
-    display = v.value ? new Date(v.value).toLocaleDateString() : '';
+    display = v.value ? new Date(v.value).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
   } else {
     const v = value as { type: string; value: string };
     display = v.value ?? '';

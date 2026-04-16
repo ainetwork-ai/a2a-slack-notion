@@ -14,11 +14,13 @@ import { FilterToolbar } from './filter-toolbar';
 import { ChartView } from './chart-view';
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
+import { apiFetch } from '@/lib/api';
 import type { FilterGroup, SortRule } from '@notion/shared';
 
 interface DatabaseViewProps {
   databaseId: string;
   inline?: boolean;
+  workspaceId?: string;
 }
 
 const VIEW_TYPE_ICONS: Record<ViewType, React.ComponentType<{ size?: number; className?: string }>> = {
@@ -30,7 +32,7 @@ const VIEW_TYPE_ICONS: Record<ViewType, React.ComponentType<{ size?: number; cla
   timeline: GanttChart,
 };
 
-export function DatabaseView({ databaseId, inline = false }: DatabaseViewProps) {
+export function DatabaseView({ databaseId, inline = false, workspaceId }: DatabaseViewProps) {
   const {
     database,
     schema,
@@ -42,6 +44,7 @@ export function DatabaseView({ databaseId, inline = false }: DatabaseViewProps) 
     loadDatabase,
     setActiveView,
     createView,
+    createRow,
     updateView,
     loadRows,
   } = useDatabaseStore();
@@ -50,6 +53,8 @@ export function DatabaseView({ databaseId, inline = false }: DatabaseViewProps) 
   const [newViewName, setNewViewName] = useState('');
   const [newViewType, setNewViewType] = useState<ViewType>('table');
   const [chartOpen, setChartOpen] = useState(false);
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState('');
 
   useEffect(() => {
     loadDatabase(databaseId).catch(console.error);
@@ -75,6 +80,18 @@ export function DatabaseView({ databaseId, inline = false }: DatabaseViewProps) 
     await createView(name, newViewType);
     setNewViewOpen(false);
     setNewViewName('');
+  }
+
+  async function handleTitleSave() {
+    const newTitle = titleDraft.trim() || 'Untitled database';
+    if (newTitle !== (database?.properties.title ?? 'Untitled database')) {
+      await apiFetch(`/api/v1/databases/${databaseId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ title: newTitle }),
+      }).catch(console.error);
+      loadDatabase(databaseId).catch(console.error);
+    }
+    setEditingTitle(false);
   }
 
   if (loading) {
@@ -110,9 +127,26 @@ export function DatabaseView({ databaseId, inline = false }: DatabaseViewProps) 
     >
       {/* Database title */}
       <div className="px-4 pt-4 pb-1">
-        <h2 className="text-lg font-semibold text-[var(--text-primary)]">
-          {database.properties.title || 'Untitled database'}
-        </h2>
+        {editingTitle ? (
+          <input
+            autoFocus
+            value={titleDraft}
+            onChange={(e) => setTitleDraft(e.target.value)}
+            onBlur={handleTitleSave}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') e.currentTarget.blur();
+              if (e.key === 'Escape') setEditingTitle(false);
+            }}
+            className="text-lg font-semibold text-[var(--text-primary)] bg-transparent outline-none border-none w-full"
+          />
+        ) : (
+          <h2
+            onClick={() => { setEditingTitle(true); setTitleDraft(database.properties.title ?? ''); }}
+            className="text-lg font-semibold text-[var(--text-primary)] cursor-text hover:bg-[var(--bg-hover)] rounded-[3px] px-1 -mx-1 w-fit"
+          >
+            {database.properties.title || 'Untitled database'}
+          </h2>
+        )}
       </div>
 
       {/* View tabs + filter toolbar */}
@@ -194,7 +228,7 @@ export function DatabaseView({ databaseId, inline = false }: DatabaseViewProps) 
           </Popover>
         </div>
 
-        {/* Filter / sort toolbar + chart toggle */}
+        {/* Filter / sort toolbar + chart toggle + New button */}
         <div className="flex items-center gap-1">
           {activeView && (
             <FilterToolbar
@@ -219,6 +253,13 @@ export function DatabaseView({ databaseId, inline = false }: DatabaseViewProps) 
             <BarChart2 size={13} />
             <span>Chart</span>
           </button>
+          <button
+            type="button"
+            onClick={() => createRow().catch(console.error)}
+            className="flex items-center gap-1 px-3 py-1 rounded-[3px] text-sm font-medium bg-[var(--accent-blue)] text-white hover:bg-[var(--accent-blue)]/90 transition-colors duration-[var(--duration-micro)]"
+          >
+            New
+          </button>
         </div>
       </div>
 
@@ -234,6 +275,7 @@ export function DatabaseView({ databaseId, inline = false }: DatabaseViewProps) 
             properties={properties}
             rows={rows}
             activeView={activeView}
+            workspaceId={workspaceId}
           />
         ) : activeView.type === 'board' ? (
           <BoardView
