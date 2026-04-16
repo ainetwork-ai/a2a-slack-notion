@@ -6,6 +6,7 @@ import { createLogger, API_BASE_PATH } from '@notion/shared';
 import { traceMiddleware } from './middleware/trace.js';
 import { errorHandler } from './middleware/error-handler.js';
 import { rateLimit } from './middleware/rate-limit.js';
+import { demoModeMiddleware, checkDemoModeProductionGuard } from './middleware/demo-mode.js';
 import { prisma } from './lib/prisma.js';
 import { COOKIE_NAME } from './lib/auth.js';
 import { verifyToken } from './lib/jwt.js';
@@ -44,6 +45,9 @@ import type { AppVariables } from './types/app.js';
 const app = new Hono<{ Variables: AppVariables }>();
 const logger = createLogger('api');
 
+// DEMO_MODE production safety guard
+checkDemoModeProductionGuard();
+
 // Global middleware
 app.use(
   '*',
@@ -71,8 +75,17 @@ app.use(`${API_BASE_PATH}/*`, async (c, next) => {
   c.header('Notion-Version', '2026-04-15');
 });
 
+// DEMO_MODE: injects a fixed demo user, bypassing JWT validation
+app.use(`${API_BASE_PATH}/*`, demoModeMiddleware);
+
 // JWT cookie auth middleware — reads session_token cookie and sets user context
 app.use(`${API_BASE_PATH}/*`, async (c, next) => {
+  // If demo mode already injected a user, skip JWT validation
+  if (c.get('user')) {
+    await next();
+    return;
+  }
+
   const token = getCookie(c, COOKIE_NAME);
   if (token) {
     try {
