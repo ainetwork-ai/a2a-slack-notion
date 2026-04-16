@@ -5,11 +5,11 @@ import { sendA2AMessage } from "./client";
 import { executeTool } from "@/lib/mcp/executor";
 import { MCP_SERVERS } from "@/lib/mcp/registry";
 
-const VLLM_BASE_URL = process.env.VLLM_URL || "http://localhost:8000";
-const VLLM_MODEL = process.env.VLLM_MODEL || "gemma-3-27b-it";
+const VLLM_BASE_URL = process.env.VLLM_URL || "http://localhost:8100";
+const VLLM_MODEL = process.env.VLLM_MODEL || "gemma-4-31B-it";
 const MAX_TOOL_ROUNDS = 5;
-const VLLM_CONTEXT_LIMIT = Number(process.env.VLLM_CONTEXT_LIMIT || 8192);
-const VLLM_SAFETY_MARGIN = 400; // reserve for prompt overhead, safety
+const VLLM_CONTEXT_LIMIT = Number(process.env.VLLM_CONTEXT_LIMIT || 32768);
+const VLLM_SAFETY_MARGIN = 800;
 
 /**
  * Estimate token count (rough: 1 token ~= 3 chars for mixed English/Korean/code).
