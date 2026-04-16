@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { workflows, workflowRuns, channels, channelMembers, messages, dmConversations, dmMembers, users } from "@/lib/db/schema";
+import { workflows, workflowRuns, channels, channelMembers, messages, dmConversations, dmMembers, users, canvases } from "@/lib/db/schema";
 import { eq, and, or, ilike } from "drizzle-orm";
 import { sendToAgent } from "@/lib/a2a/message-bridge";
 import { substituteVariables } from "./substitute";
@@ -7,6 +7,71 @@ import type { WorkflowStep, PendingInput } from "./types";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const AIN_ADDRESS_RE = /^0x[a-f0-9]{40}$/i;
+
+// ── Unblock editorial pipeline: parse Damien's assignment response ──
+// Extracts reporter and manager agent IDs from the text (same regex logic
+// as test_confirm.py's pick_reporter / pick_manager).
+
+const REPORTERS: Record<string, { kor: string; en: string }> = {
+  "unblock-max":   { kor: "맥스",     en: "Max" },
+  "unblock-techa": { kor: "테카",     en: "Techa" },
+  "unblock-mark":  { kor: "마크",     en: "Mark" },
+  "unblock-roy":   { kor: "로이",     en: "Roy" },
+  "unblock-april": { kor: "에이프릴", en: "April" },
+};
+
+const MANAGERS: Record<string, { kor: string; en: string }> = {
+  "unblock-victoria": { kor: "빅토리아", en: "Victoria" },
+  "unblock-logan":    { kor: "로건",     en: "Logan" },
+  "unblock-lilly":    { kor: "릴리",     en: "Lilly" },
+};
+
+const REPORTER_TO_MANAGER: Record<string, string> = {
+  "unblock-max":   "unblock-victoria",
+  "unblock-mark":  "unblock-victoria",
+  "unblock-techa": "unblock-logan",
+  "unblock-april": "unblock-logan",
+  "unblock-roy":   "unblock-lilly",
+};
+
+function pickAgentFromText(text: string, roster: Record<string, { kor: string; en: string }>): string | null {
+  const atHits: [number, string][] = [];
+  const nameHits: [number, string][] = [];
+  for (const [agentId, info] of Object.entries(roster)) {
+    for (const form of [info.kor, info.en]) {
+      const atMatch = new RegExp(`@\\s*${form}\\b`, "i").exec(text);
+      if (atMatch) atHits.push([atMatch.index, agentId]);
+      const nameRe = new RegExp(`\\b${form}\\b`, "ig");
+      let m;
+      while ((m = nameRe.exec(text)) !== null) {
+        nameHits.push([m.index, agentId]);
+      }
+    }
+  }
+  if (atHits.length) {
+    atHits.sort((a, b) => a[0] - b[0]);
+    return atHits[0]![1];
+  }
+  if (nameHits.length) {
+    nameHits.sort((a, b) => a[0] - b[0]);
+    return nameHits[0]![1];
+  }
+  return null;
+}
+
+function parseAssignmentResponse(text: string): Record<string, string> {
+  const reporterId = pickAgentFromText(text, REPORTERS) ?? "unblock-max";
+  let managerId = pickAgentFromText(text, MANAGERS);
+  if (!managerId) {
+    managerId = REPORTER_TO_MANAGER[reporterId] ?? "unblock-victoria";
+  }
+  return {
+    reporter: reporterId,
+    manager: managerId,
+    reporterKor: REPORTERS[reporterId]?.kor ?? reporterId,
+    managerKor: MANAGERS[managerId]?.kor ?? managerId,
+  };
+}
 
 /**
  * Resolve an agent reference (a2aId, displayName, or UUID) to the agent row.
@@ -402,8 +467,10 @@ async function executeStep(
     }
 
     case "invoke_skill": {
-      const agent = await resolveAgent(step.agent);
-      if (!agent) throw new Error(`Agent not found: "${step.agent}"`);
+      // Support dynamic agent routing: agent field can contain {{variables}}
+      const agentRef = substituteVariables(step.agent, vars);
+      const agent = await resolveAgent(agentRef);
+      if (!agent) throw new Error(`Agent not found: "${agentRef}" (original: "${step.agent}")`);
 
       const card = agent.agentCardJson as {
         skills?: Array<{
@@ -430,6 +497,7 @@ async function executeStep(
           )
         : {};
 
+      // Build a human-readable prompt for the agent
       const inputsBlock = Object.keys(resolvedInputs).length
         ? Object.entries(resolvedInputs)
             .map(([k, v]) => `${k}: ${v}`)
@@ -449,13 +517,21 @@ async function executeStep(
         .filter(Boolean)
         .join("\n");
 
+      // Pass inputs as metadata.variables for external A2A agents (e.g. unblock-agents)
+      // that expect structured variables rather than text-formatted inputs.
       const agentMessage = await sendToAgent({
         agentId: agent.id,
         text: skillMessage,
         skillId: step.skillId,
+        variables: Object.keys(resolvedInputs).length > 0 ? resolvedInputs : undefined,
       });
 
       return agentMessage.content;
+    }
+
+    case "parse_assignment": {
+      const text = substituteVariables(step.input, vars);
+      return parseAssignmentResponse(text);
     }
 
     case "condition": {
@@ -607,6 +683,43 @@ async function executeStep(
       }
 
       return content;
+    }
+
+    case "create_canvas": {
+      const channel = await resolveChannel(step.channel, workspaceId);
+      if (!channel) throw new Error(`Channel not found: "${step.channel}"`);
+      if (!workspaceId) throw new Error("create_canvas requires workspaceId");
+
+      const title = substituteVariables(step.title, vars);
+      const topic = step.topic ? substituteVariables(step.topic, vars) : title;
+
+      // createdBy comes from whoever triggered this workflow; fall back to
+      // the first channel member when the trigger is system-initiated.
+      const triggeredBy =
+        (vars.triggeredBy as string | undefined) ??
+        (
+          await db
+            .select({ userId: channelMembers.userId })
+            .from(channelMembers)
+            .where(eq(channelMembers.channelId, channel.id))
+            .limit(1)
+        )[0]?.userId;
+      if (!triggeredBy) throw new Error("create_canvas: no creator available");
+
+      const [canvas] = await db
+        .insert(canvases)
+        .values({
+          channelId: channel.id,
+          workspaceId,
+          title,
+          topic,
+          content: "",
+          pipelineStatus: "draft",
+          createdBy: triggeredBy,
+        })
+        .returning();
+
+      return canvas.id;
     }
 
     case "form":

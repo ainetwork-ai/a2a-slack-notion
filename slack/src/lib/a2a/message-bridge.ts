@@ -60,6 +60,7 @@ export async function sendToAgent(params: {
   channelId?: string;
   conversationId?: string;
   skillId?: string;
+  variables?: Record<string, string>;
   messageId?: string;
   senderName?: string;
   fileUrls?: string[];
@@ -145,6 +146,7 @@ export async function sendToAgent(params: {
       const response = await sendA2AMessage(rpcUrl, params.text, {
         agentName,
         skillId: params.skillId,
+        variables: params.variables,
       });
       content = response.content;
       metadata = {

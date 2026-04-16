@@ -14,34 +14,52 @@ export type { AgentCard, AgentSkill, Message, Task, TextPart };
 export { AGENT_CARD_PATH };
 
 /**
- * Fetch an agent card from a URL using the SDK's built-in resolver.
+ * Fetch an agent card from a URL. Accepts either the base agent URL or a
+ * fully-qualified card URL (ending in /.well-known/agent-card.json or the
+ * legacy /.well-known/agent.json). Falls back between the two paths so that
+ * agents following either spec version work.
  */
 export async function fetchAgentCard(inputUrl: string): Promise<AgentCard> {
-  let url = inputUrl.replace(/\/$/, "");
+  const url = inputUrl.replace(/\/$/, "");
 
-  // If URL already ends with agent card path, strip it for the SDK
+  async function tryFetch(target: string): Promise<AgentCard | null> {
+    try {
+      const res = await fetch(target, { headers: { Accept: "application/json" } });
+      if (!res.ok) return null;
+      return (await res.json()) as AgentCard;
+    } catch {
+      return null;
+    }
+  }
+
+  // If the caller already provided a card path, fetch it directly.
   if (
     url.endsWith("/.well-known/agent.json") ||
     url.endsWith("/.well-known/agent-card.json")
   ) {
-    // Fetch directly since SDK expects base URL
-    const res = await fetch(url, { headers: { Accept: "application/json" } });
-    if (!res.ok) throw new Error(`Failed to fetch agent card: ${res.status}`);
-    return res.json();
+    const card = await tryFetch(url);
+    if (card) return card;
+    throw new Error(`Failed to fetch agent card from ${url}`);
   }
 
-  // Use SDK's A2AClient to resolve agent card
-  const client = new A2AClient(url);
-  // The constructor triggers card fetch internally; we use fromCardUrl for explicit fetch
-  const clientFromUrl = await A2AClient.fromCardUrl(
-    `${url}/${AGENT_CARD_PATH}`
+  // Base URL — try the current spec path first, then the legacy one.
+  const candidates = [
+    `${url}/${AGENT_CARD_PATH}`,
+    `${url}/.well-known/agent.json`,
+    `${url}/.well-known/agent-card.json`,
+  ];
+  // Dedupe while preserving order.
+  const seen = new Set<string>();
+  for (const target of candidates) {
+    if (seen.has(target)) continue;
+    seen.add(target);
+    const card = await tryFetch(target);
+    if (card) return card;
+  }
+
+  throw new Error(
+    `Failed to fetch agent card — tried ${Array.from(seen).join(", ")}`
   );
-  // Access the resolved card by sending a no-op — or fetch directly
-  const res = await fetch(`${url}/${AGENT_CARD_PATH}`, {
-    headers: { Accept: "application/json" },
-  });
-  if (!res.ok) throw new Error(`Failed to fetch agent card: ${res.status}`);
-  return res.json();
 }
 
 /**
@@ -55,6 +73,7 @@ export async function sendA2AMessage(
     taskId?: string;
     agentName?: string;
     skillId?: string;
+    variables?: Record<string, string>;
   }
 ): Promise<{
   kind: string;
@@ -62,43 +81,55 @@ export async function sendA2AMessage(
   taskId?: string;
   contextId?: string;
 }> {
-  const client = new A2AClient(agentUrl);
-
   const messageParts: Array<{ kind: "text"; text: string }> = [
     { kind: "text", text },
   ];
 
-  const params = {
-    message: {
-      kind: "message" as const,
-      messageId: uuidv4(),
-      role: "user" as const,
-      parts: messageParts,
-      ...(options?.contextId && { contextId: options.contextId }),
-      ...(options?.taskId && { taskId: options.taskId }),
-      ...(options?.skillId && {
-        metadata: { skillId: options.skillId },
-      }),
+  // Use direct JSON-RPC fetch instead of SDK A2AClient to avoid issues with
+  // agents that serve .well-known/agent.json (not agent-card.json).
+  const requestBody = {
+    jsonrpc: "2.0",
+    id: uuidv4(),
+    method: "message/send",
+    params: {
+      message: {
+        kind: "message",
+        messageId: uuidv4(),
+        role: "user",
+        parts: messageParts,
+        ...(options?.contextId && { contextId: options.contextId }),
+        ...(options?.taskId && { taskId: options.taskId }),
+        ...((options?.skillId || options?.variables) && {
+          metadata: {
+            ...(options?.skillId && { skillId: options.skillId }),
+            ...(options?.variables && Object.keys(options.variables).length > 0 && { variables: options.variables }),
+          },
+        }),
+      },
+      configuration: {
+        blocking: true,
+        acceptedOutputModes: ["text/plain"],
+      },
+      ...(options?.agentName && { metadata: { agentName: options.agentName } }),
     },
-    configuration: {
-      blocking: true,
-      acceptedOutputModes: ["text/plain"],
-    },
-    ...(options?.agentName && {
-      metadata: { agentName: options.agentName },
-    }),
   };
 
-  const response = await client.sendMessage(params);
+  const res = await fetch(agentUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(requestBody),
+  });
 
-  // Handle JSON-RPC error
-  if ("error" in response) {
-    throw new Error(
-      (response as { error: { message: string } }).error.message || "A2A error"
-    );
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status}: ${res.statusText}`);
   }
 
-  const result = (response as { result: unknown }).result;
+  const data = await res.json() as { result?: unknown; error?: { message?: string } };
+  if (data.error) {
+    throw new Error(data.error.message || "A2A error");
+  }
+
+  const result = data.result;
 
   // Task response (has artifacts)
   if (result && typeof result === "object" && "artifacts" in result) {

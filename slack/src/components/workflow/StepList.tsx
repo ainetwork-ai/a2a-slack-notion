@@ -21,6 +21,8 @@ function stepIcon(type: WorkflowStep['type']): string {
     dm_user: '👤',
     add_to_channel: '➕',
     write_canvas: '📄',
+    create_canvas: '🗒️',
+    parse_assignment: '🔍',
   };
   return map[type] ?? '⚙️';
 }
@@ -39,6 +41,8 @@ function stepLabel(type: WorkflowStep['type']): string {
     dm_user: 'Send a DM',
     add_to_channel: 'Add user to channel',
     write_canvas: 'Write to canvas',
+    create_canvas: 'Create per-article canvas',
+    parse_assignment: 'Parse assignment',
   };
   return map[type] ?? type;
 }
@@ -166,9 +170,9 @@ export default function StepList({ steps, onChange, onContinue, onBack }: StepLi
                 }`}
               >
                 {/* Step header row */}
-                <div className="flex items-center gap-3 px-4 py-3">
+                <div className="flex items-center gap-3 px-4 py-2">
                   <span className="text-xl w-7 text-center">{stepIcon(step.type)}</span>
-                  <div className="flex-1 min-w-0">
+                  <div className="flex-1 min-w-0 truncate">
                     <span className="text-white text-sm font-medium">{stepLabel(step.type)}</span>
                     {stepPreview(step) && (
                       <span className="text-slate-400 text-sm ml-2">{stepPreview(step)}</span>
@@ -220,8 +224,8 @@ export default function StepList({ steps, onChange, onContinue, onBack }: StepLi
 
               {/* Connector line between steps */}
               {i < steps.length - 1 && (
-                <div className="flex justify-center py-1">
-                  <div className="w-px h-4 bg-white/10" />
+                <div className="flex justify-center">
+                  <div className="w-px h-2 bg-white/10" />
                 </div>
               )}
             </div>

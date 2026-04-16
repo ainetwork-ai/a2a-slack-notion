@@ -50,6 +50,21 @@ export type WorkflowStep =
       title?: string;
       append?: boolean;
       saveAs?: string;
+    }
+  | {
+      /** Create a new per-article canvas and expose its ID via saveAs. */
+      type: "create_canvas";
+      channel: string;
+      title: string;
+      topic?: string;
+      saveAs?: string;
+    }
+  | {
+      /** Parse Damien's assignment response to extract reporter/manager IDs.
+       *  Returns { reporter, manager, reporterKor, managerKor }. */
+      type: "parse_assignment";
+      input: string;
+      saveAs: string;
     };
 
 export type WorkflowTrigger =
