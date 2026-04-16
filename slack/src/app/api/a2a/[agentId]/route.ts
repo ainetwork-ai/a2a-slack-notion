@@ -84,7 +84,7 @@ export async function GET(
       isAgent: users.isAgent,
     })
     .from(users)
-    .where(eq(users.id, agentId))
+    .where(eq(users.a2aId, agentId))
     .limit(1);
 
   if (!agent || !agent.isAgent) {
@@ -121,7 +121,7 @@ export async function POST(
       isAgent: users.isAgent,
     })
     .from(users)
-    .where(eq(users.id, agentId))
+    .where(eq(users.a2aId, agentId))
     .limit(1);
 
   if (!agent || !agent.isAgent) {

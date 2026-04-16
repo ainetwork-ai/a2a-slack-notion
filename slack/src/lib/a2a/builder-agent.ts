@@ -284,7 +284,38 @@ async function createAgent(
   const systemPrompt = def.systemPrompt || template.systemPrompt;
   const description = def.description || template.description || `${def.name} agent`;
 
-  const ainAddress = `agent-${def.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${Date.now()}`;
+  // Generate unique a2aId from name, appending suffix if collision
+  let a2aId = def.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/-+$/, "");
+  const [existing] = await db
+    .select({ a2aId: users.a2aId })
+    .from(users)
+    .where(eq(users.a2aId, a2aId))
+    .limit(1);
+  if (existing) {
+    let suffix = 2;
+    while (true) {
+      const candidate = `${a2aId}-${suffix}`;
+      const [dup] = await db.select({ a2aId: users.a2aId }).from(users).where(eq(users.a2aId, candidate)).limit(1);
+      if (!dup) { a2aId = candidate; break; }
+      suffix++;
+    }
+  }
+
+  // Generate real AIN blockchain address and encrypt private key
+  let ainAddress: string;
+  let encryptedPk: string | null = null;
+  try {
+    const crypto = await import("crypto");
+    const privateKey = crypto.randomBytes(32).toString("hex");
+    const Ain = (await import("@ainblockchain/ain-js")).default;
+    const ain = new Ain("https://devnet-api.ainetwork.ai", null, 0);
+    ainAddress = ain.wallet.add(privateKey);
+    const { encryptPrivateKey } = await import("@/lib/auth/agent-key");
+    encryptedPk = encryptPrivateKey(privateKey);
+  } catch {
+    const crypto = await import("crypto");
+    ainAddress = "0x" + crypto.randomBytes(20).toString("hex");
+  }
 
   // Standard A2A agent card: only id, name, description, skills (with id, name, description, tags, examples)
   const defaultSkillId = role;
@@ -301,29 +332,25 @@ async function createAgent(
     ],
   };
 
+  const appUrl = (process.env.NEXT_PUBLIC_APP_URL || "").replace(/\/$/, "");
+  const a2aUrl = appUrl ? `${appUrl}/api/a2a/${a2aId}` : null;
+
   const [agent] = await db
     .insert(users)
     .values({
       ainAddress,
       displayName: def.name,
       isAgent: true,
+      a2aId,
+      a2aUrl,
       status: "online",
       agentCardJson: agentCard,
+      encryptedPrivateKey: encryptedPk,
+      ownerId: userId,
     })
     .returning();
 
-  // Set a2aUrl to the dynamic endpoint served by this app — no separate deployment needed
-  const appUrl = (process.env.NEXT_PUBLIC_APP_URL || "").replace(/\/$/, "");
-  const a2aUrl: string | null = appUrl
-    ? `${appUrl}/api/a2a/${agent.id}`
-    : null;
-
-  if (a2aUrl) {
-    await db
-      .update(users)
-      .set({ a2aUrl })
-      .where(eq(users.id, agent.id));
-  }
+  // a2aUrl already set in insert above, no update needed
 
   // Create skill config with internal implementation details (not in agent card)
   await db
