@@ -1,3 +1,4 @@
+<!-- /autoplan restore point: /home/comcom/.gstack/projects/ainetwork-ai-a2a-slack-notion/feat-database-features-autoplan-restore-20260416-170333.md -->
 # Notion MCP + A2A Agent 설계 문서
 
 **날짜**: 2026-04-16  
@@ -105,7 +106,7 @@ NOTION_API_KEY=demo-secret-key-for-mcp
                border border-[var(--border-default)] rounded-[var(--radius-sm)]
                hover:text-[var(--text-primary)] hover:border-[var(--border-active)]"
   >
-    데모로 시작하기 →
+    Try Demo →
   </button>
 )}
 ```
@@ -202,7 +203,7 @@ NEXT_PUBLIC_DEMO_WORKSPACE_URL=/workspace/<workspace-id>
 ```
 NOTION_API_URL=http://localhost:3001
 NOTION_API_KEY=demo-secret-key-for-mcp
-MCP_MODE=all
+MCP_MODE=http
 MCP_HTTP_PORT=3002
 ANTHROPIC_API_KEY=sk-ant-...
 ```
@@ -220,3 +221,311 @@ ANTHROPIC_API_KEY=sk-ant-...
 | A2A JSON-RPC + Claude 루프 | `apps/mcp/src/index.ts` | 높음 |
 | MCP 도구 5개 추가 | `apps/mcp/src/index.ts` | 낮음 |
 | 의존성 추가 | `apps/mcp/package.json` | 낮음 |
+
+<!-- AUTONOMOUS DECISION LOG -->
+## Decision Audit Trail
+
+| # | Phase | Decision | Classification | Principle | Rationale | Rejected |
+|---|-------|----------|-----------|-----------|----------|---------|
+| 1 | CEO | MCP_MODE=all → http only for demo | User decision (P4) | User confirmed | stdio+HTTP lifecycle race condition avoided; demo only needs HTTP mode | MCP_MODE=all |
+
+---
+
+# /autoplan CEO Review
+
+## CURRENT → THIS PLAN → 12-MONTH IDEAL
+
+```
+CURRENT                    THIS PLAN               12-MONTH IDEAL
+──────────────────────     ──────────────────────  ──────────────────────
+stdio-only MCP (15 tools)  HTTP+A2A MCP (20 tools) Multi-agent orchestration
+wallet auth only           DEMO_MODE bypass        OAuth + API key auth
+no @mention                @NotionWriter agent     Any agent @mention
+535-line monolith          ~800-line monolith      Domain-modular tool layer
+no tests                   no tests                integration test suite
+no observability           no observability        structured logs + traces
+```
+
+## What Already Exists
+
+| Sub-problem | Existing code |
+|---|---|
+| 15 MCP tools | `notion/apps/mcp/src/index.ts` — TOOLS array + switch |
+| `apiCall()` HTTP helper | `notion/apps/mcp/src/index.ts:17-45` |
+| JWT auth middleware | `notion/apps/api/src/index.ts:75` |
+| Login page (wallet) | `notion/apps/web/src/app/(auth)/login/page.tsx` |
+| Agent routes | `notion/apps/api/src/routes/agents.js` |
+| Comments PATCH/DELETE routes | `notion/apps/api/src/routes/comments.js` |
+
+## NOT in scope (deferred to TODOS.md)
+
+- `/a2a` endpoint authentication (Bearer token guard)
+- `DEMO_MODE=true` production safety guard (`NODE_ENV=production` startup check)
+- MCP `index.ts` modularization (tools/ directory split)
+- Error retry logic for Claude tool-calling loop
+- Rate limiting on `/a2a`
+- Audit logging for agent actions
+- LLM model abstraction (currently hardcodes `claude-sonnet-4-6`)
+- Integration tests for A2A flow
+- `apiCall()` timeout guard (currently hangs indefinitely if Notion API unresponsive)
+
+## Error & Rescue Registry
+
+| Failure | Trigger | Catches | User sees | Tested? |
+|---|---|---|---|---|
+| `ANTHROPIC_API_KEY` invalid | `/a2a` request | Uncaught 401 from SDK | 500 JSON | No |
+| Notion API down mid-loop | `apiCall()` throws | `try/catch` in tool handler | SSE `error` event | No |
+| SSE client disconnects mid-stream | Network drop | No handler | Partial response, server keeps running | No |
+| `DEMO_MODE=true` in production | Misconfigured env | None | All requests pass as demo user | No |
+| Port 3002 unreachable from API | Networking issue | None | API 500 when calling `/a2a` | No |
+| `prisma.user.upsert()` fails in DEMO_MODE | DB unavailable | None | 500 on every request | No |
+
+## Failure Modes Registry
+
+| Mode | Severity | Addressed in plan? |
+|---|---|---|
+| Demo user upsert on every request (N+1 Prisma) | Medium | No — needs memoization |
+| Agent writes partial page then fails (idempotency) | High | No |
+| A2A caller with no auth (open port 3002) | High | No |
+| `DEMO_MODE=true` leaks to production | Critical | No |
+| MCP server OOM under concurrent A2A requests | Medium | No |
+| Claude SDK call takes >60s, SSE hangs | Medium | No timeout set |
+| MCP_MODE=all stdio closure kills HTTP server | High | Fixed (user confirmed http-only) |
+
+## CEO Completion Summary
+
+**Mode:** SELECTIVE EXPANSION
+**Premises:** P1-P3, P5 accepted. P4 modified (MCP_MODE=http only).
+**Scope verdict:** Acceptable for demo. NOT acceptable for production without safety guards.
+**Critical gaps:** DEMO_MODE production risk, /a2a has no auth, monolith grows without modularization plan.
+**Top expansion opportunities (SELECTIVE):**
+  - Add `/a2a` Bearer auth (10 lines, in blast radius)
+  - Add DEMO_MODE production guard (5 lines, in blast radius)
+**Taste decision:** Codex says freeze tools+harden first; Claude says demo scope is fine. User decides.
+
+
+---
+
+# /autoplan Design Review
+
+## Design Litmus Score: 4/10
+
+### Pass 1: Information Hierarchy
+**Issue:** Demo button DOM position is unstable. When `isConnected && !isLoading`, "Disconnect wallet" renders above the demo button, changing the visual stack: `primary → error → disconnect → demo`. But when not connected: `primary → error → demo`. The user's eye lands on different positions depending on connection state.
+**Fix:** Anchor demo button as the last child of the card, outside all conditionals. Always last.
+
+### Pass 2: Missing States (Critical)
+**Issues:**
+1. Demo button renders even when `isLoading=true` (wallet auth in-flight). User can click demo during live wallet connection → ghost redirect.
+2. No loading feedback on demo button click. `router.push()` is instant, navigation may take 200-500ms. User double-clicks.
+3. No `disabled` state.
+
+**Fix:** Add `{!isLoading && NEXT_PUBLIC_DEMO_WORKSPACE_URL && <button ...>}`. Add `useState(isDemoNavigating)` to show spinner on click.
+
+### Pass 3: User Journey Break
+**Issue:** User mid-wallet-auth clicks demo button → navigates away → `handleLogin()` resolves on unmounted component → `router.replace()` fires from nowhere (ghost redirect). The plan has no cancel/cleanup for this scenario.
+**Fix:** Add cleanup ref or abort controller. Or simply hide demo button during `isLoading`.
+
+### Pass 4: Specificity
+**Issues:**
+1. `router.push(url)` in Next.js App Router does NOT navigate to external absolute URLs — it does an SPA push. If `NEXT_PUBLIC_DEMO_WORKSPACE_URL` is an absolute URL, nothing happens. Use `window.location.href` for external, `router.push()` for internal paths.
+2. Korean "데모로 시작하기 →" in an otherwise English-only UI — no i18n rationale documented.
+3. Missing `type="button"` attribute — if ever placed inside a `<form>`, triggers form submit.
+
+### Pass 5: Accessibility
+**Score: 3/10.** Arrow glyph "→" has no `aria-label`. No `aria-busy` during navigation. No `focus-visible` class.
+
+### Auto-decided Design Fixes (write into plan):
+| Fix | Decision | Principle |
+|---|---|---|
+| Add `!isLoading` guard to demo button | AUTO: YES | P5 (explicit over clever) |
+| Add `type="button"` | AUTO: YES | P1 (completeness — prevents form submit) |
+| Use `window.location.href` for external URLs, `router.push` for internal | AUTO: YES | P5 |
+| Korean label | TASTE DECISION | User decides |
+
+
+---
+
+# /autoplan Eng Review
+
+## Architecture ASCII Diagram
+
+```
+CURRENT (535 lines, 1 file):
+notion/apps/mcp/src/index.ts
+├── apiCall()              [HTTP helper, line 17]
+├── TOOLS[15]              [tool definitions, line 49]
+├── Zod schemas[15]        [input validation, line 236]
+├── Server + handlers      [MCP protocol, line 294]
+└── main()                 [StdioServerTransport only, line 525]
+
+AFTER THIS PLAN (~800+ lines, SAME file):
+notion/apps/mcp/src/index.ts
+├── apiCall()              [unchanged]
+├── TOOLS[20]              [+5 tools]
+├── Zod schemas[20]        [+5 schemas]
+├── Server + handlers      [unchanged]
+├── honoApp = new Hono()   [NEW — HTTP server]
+│   ├── GET /health
+│   ├── GET /.well-known/agent.json
+│   ├── POST /mcp          [StreamableHTTPServerTransport]
+│   └── POST /a2a          [Claude SDK loop — complex, untested]
+└── main()                 [mode check added]
+
+RECOMMENDED SPLIT (30 min, ~30x compression with CC):
+notion/apps/mcp/src/
+├── index.ts               [~50 lines, entrypoint wiring]
+├── tools.ts               [TOOLS array + Zod + dispatch switch]
+├── a2a.ts                 [Claude SDK loop + /a2a handler]
+└── http.ts                [Hono routes + transports]
+```
+
+## Eng Section 1: Architecture Findings
+
+**Critical: Compositional vulnerability** — `/a2a` (no auth) + `DEMO_MODE=true` (no guard) = unauthenticated caller gets full Notion write access via demo identity. Not two isolated issues — one compositional attack. Fix: `/a2a` Bearer auth using `NOTION_API_KEY` (10 lines).
+
+**High: Tool schema drift** — `workspace_id` vs `workspaceId` vs `pageId` naming inconsistency already exists in `TOOLS` array (line 139-143 vs 89-90). Adding 5 more tools without normalization multiplies LLM tool-call mismatch failures.
+
+**High: monolith** — Three distinct responsibilities (MCP protocol, HTTP routing, LLM orchestration) in one file = change-collision hotspot, untestable.
+
+## Eng Section 2: Code Quality
+
+- `apiCall()` at line 17: no timeout — hangs indefinitely if Notion API is unresponsive
+- No module boundary between tool definitions and transport
+- `DEMO_MODE` upsert runs on every request — no caching of demo user
+
+## Eng Section 3: Test Coverage
+
+| Code path | Test type needed | Exists? |
+|---|---|---|
+| TOOLS dispatch (15→20) | Unit | ❌ |
+| apiCall() helper | Unit + mock | ❌ |
+| A2A loop happy path | Integration (Claude mock) | ❌ |
+| A2A loop error path | Unit | ❌ |
+| A2A loop max iterations | Unit | ❌ |
+| SSE streaming | E2E | ❌ |
+| DEMO_MODE middleware | Integration | ❌ |
+| Demo skip button | Component | ❌ |
+| /health endpoint | Integration | ❌ |
+
+**Zero of 9 paths covered.** Minimum viable: unit test for tool dispatch + Claude SDK mock for loop happy/error path.
+
+## Eng Section 4: Performance & Security
+
+| Issue | Severity | Fix |
+|---|---|---|
+| A2A loop: no timeout (could run forever) | High | `AbortController` + 60s wall-clock timeout |
+| A2A loop: no iteration cap | High | Max 10 tool calls per request |
+| SSE client disconnect: loop keeps running | Medium | Wire `req.signal` into Claude SDK call |
+| apiCall() no timeout | Medium | `AbortSignal.timeout(10000)` in fetch |
+| DEMO_MODE upsert per request | Medium | Module-level memoization after first upsert |
+| /a2a no Bearer auth | Critical | `NOTION_API_KEY` check on route |
+| DEMO_MODE=true production guard missing | Critical | Startup check: `NODE_ENV=production` throws |
+
+## Eng Completion Summary
+
+**Critical gaps: 2** — compositional vuln (/a2a + DEMO_MODE), zero test coverage on A2A loop
+**High: 4** — monolith, schema drift, loop timeout, no iterations cap
+**Medium: 3** — SSE disconnect, apiCall timeout, demo upsert per request
+
+**Test plan artifact written below (Section 3).**
+
+
+---
+
+# /autoplan DX Review [subagent-only]
+
+## DX Scorecard
+
+| Dimension | Score | Key Issue |
+|---|---|---|
+| 1. Getting started (TTHW) | 3/10 | No quickstart, no single command, 10+ min |
+| 2. API/CLI naming | 7/10 | MCP_MODE values guessable, but env summary had wrong value (fixed) |
+| 3. Error messages | 3/10 | Invalid ANTHROPIC_API_KEY → opaque 500, no actionable message |
+| 4. Documentation | 5/10 | Missing Claude Desktop config block, workspace ID unexplained |
+| 5. Escape hatches | 6/10 | Most vars overridable, but model hardcoded, no per-route DEMO override |
+| 6. Upgrade path | 8/10 | stdio users: add MCP_MODE=stdio (explicit), backward-compatible |
+| **Overall** | **5/10** | TTHW: 10+ min → target: 5 min |
+
+## Developer Journey
+
+| Stage | Current | Issue |
+|---|---|---|
+| 1. Install | `npm install` in mcp/ | Not documented |
+| 2. Configure | Set 5 env vars | Scattered across 3 sections, no ordering |
+| 3. Start API | `DEMO_MODE=true ...` | Not documented as prerequisite |
+| 4. Start MCP | `MCP_MODE=http npx tsx src/index.ts` | Buried in data flow section |
+| 5. Verify | `curl /health` | Not mentioned |
+| 6. Claude Desktop | Add `claude_desktop_config.json` | **MISSING ENTIRELY** |
+| 7. Test @mention | `@NotionWriter ...` | No end-to-end test steps |
+
+## Auto-decided DX Fixes (applied to spec)
+
+| Fix | Decision | Effort |
+|---|---|---|
+| `MCP_MODE=all` → `MCP_MODE=http` in env summary | AUTO: DONE | 2 min |
+| Catch Anthropic 401 → return actionable error | AUTO: ADD to scope | 1 hour |
+| Add MODEL_ID env var override | AUTO: ADD to scope | 30 min |
+| Add workspace ID explanation | AUTO: ADD to spec | 5 min |
+
+## Missing from spec (add before implementation):
+
+```bash
+# Quickstart (add to spec top)
+cd notion/apps/api && DEMO_MODE=true NOTION_API_KEY=demo-secret bun run dev
+cd notion/apps/mcp && NOTION_API_URL=http://localhost:3001 \
+  NOTION_API_KEY=demo-secret MCP_MODE=http \
+  ANTHROPIC_API_KEY=sk-ant-... npx tsx src/index.ts
+curl http://localhost:3002/health  # → {"status":"ok"}
+```
+
+```json
+// Missing: claude_desktop_config.json (stdio mode)
+{
+  "mcpServers": {
+    "notion": {
+      "command": "npx",
+      "args": ["tsx", "notion/apps/mcp/src/index.ts"],
+      "env": {
+        "NOTION_API_URL": "http://localhost:3001",
+        "NOTION_API_KEY": "your-key-here",
+        "MCP_MODE": "stdio"
+      }
+    }
+  }
+}
+```
+
+## TTHW Assessment
+- **Current:** 10+ minutes (need to read entire spec to reconstruct startup order)
+- **Target:** 5 minutes
+- **Gap:** Missing quickstart block, missing Claude Desktop config, MCP_MODE inconsistency (fixed)
+
+
+---
+
+## Cross-Phase Themes (autoplan synthesis)
+
+Issues raised independently by 3+ review phases — highest confidence signals.
+
+| # | Theme | Phases | Severity | Auto-decided? |
+|---|---|---|---|---|
+| 1 | **DEMO_MODE production safety** | CEO + Eng | Critical | YES: startup guard `if (NODE_ENV=production && DEMO_MODE)` |
+| 2 | **No auth on /a2a endpoint** | CEO + Eng | Critical | YES: Bearer token check using NOTION_API_KEY |
+| 3 | **Monolith growth (800+ lines)** | CEO + Eng | High | YES: split into `tools.ts` / `a2a.ts` / `http.ts` / `index.ts` |
+| 4 | **No test coverage** | CEO + Eng + DX | High | YES: 9-path test plan created (see test plan file) |
+| 5 | **TTHW > 10 min** | Design + DX | Medium | YES: quickstart block + Claude Desktop config added to spec |
+
+All 5 themes auto-decided (no taste involved). Applied to scope.
+
+
+---
+
+## Taste Decision Log (autoplan Phase 4)
+
+| # | Phase | Question | User Choice |
+|---|---|---|---|
+| T1 | CEO | 데모 범위 우선순위 | 현재 범위대로 진행 (Claude 추천) |
+| T2 | Design | 로그인 버튼 언어 | 영어로 통일 → "Try Demo →" (Codex 추천) |
+| T3 | Eng | 배포 리스크 분류 | Medium (Claude 추천) |
+
