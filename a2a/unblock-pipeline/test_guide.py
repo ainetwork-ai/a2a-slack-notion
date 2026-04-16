@@ -102,6 +102,14 @@ EXPECTED_REPORTER: dict[str, str] = {
     "project":    "unblock-april",
 }
 
+EXPECTED_MANAGER: dict[str, str] = {
+    "bitcoin":    "unblock-victoria",
+    "regulation": "unblock-lilly",
+    "ai":         "unblock-logan",
+    "altcoin":    "unblock-victoria",
+    "project":    "unblock-logan",
+}
+
 
 # ─────────────────────────────────────────────────────────────
 # A2A 호출
@@ -278,12 +286,16 @@ def main() -> int:
         print(f"\n⚠ 팀장 파싱 실패 → 랜덤 배정: {manager_id}")
     mgr = MANAGERS[manager_id]
 
-    expected = EXPECTED_REPORTER.get(topic)
-    match = "✓" if reporter_id == expected else "✗"
+    expected_rep = EXPECTED_REPORTER.get(topic)
+    expected_mgr = EXPECTED_MANAGER.get(topic)
+    rep_match = "✓" if reporter_id == expected_rep else "✗"
+    mgr_match = "✓" if manager_id == expected_mgr else "✗"
     print(f"\n▶ 기자 배정: {rep['kor']}({rep['en']}) — {reporter_id}")
-    if expected:
-        print(f"  기대: {expected}  {match}")
+    if expected_rep:
+        print(f"  기대: {expected_rep}  {rep_match}")
     print(f"▶ 팀장 배정: {mgr['kor']}({mgr['en']}) — {manager_id}")
+    if expected_mgr:
+        print(f"  기대: {expected_mgr}  {mgr_match}")
 
     # ── Step 2: 기자 시장 조사 ───────────────────────────────
     print("\n" + "─" * 60)
@@ -324,10 +336,13 @@ def main() -> int:
     print("=" * 60)
     print(f"  주제:      {topic}")
     print(f"  기자 배정:  {rep['kor']}({rep['en']}) — {reporter_id}", end="")
-    if expected:
-        print(f"  {match}", end="")
+    if expected_rep:
+        print(f"  {rep_match}", end="")
     print()
-    print(f"  팀장 배정:  {mgr['kor']}({mgr['en']}) — {manager_id}")
+    print(f"  팀장 배정:  {mgr['kor']}({mgr['en']}) — {manager_id}", end="")
+    if expected_mgr:
+        print(f"  {mgr_match}", end="")
+    print()
     print(f"  리포트 길이: {len(report.strip())}자  {'✓' if report.strip() else '✗'}")
     print(f"  가이드 길이: {len(guide.strip())}자  {'✓' if guide.strip() else '✗'}")
     print("=" * 60)
