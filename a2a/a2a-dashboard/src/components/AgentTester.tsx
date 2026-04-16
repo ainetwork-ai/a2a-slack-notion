@@ -16,6 +16,7 @@ import {
   FileText,
   MessageSquare,
   Search,
+  Copy,
 } from "lucide-react";
 
 // ───────────────────────────── constants ─────────────────────────────
@@ -153,6 +154,7 @@ export default function AgentTester() {
   const [searchQuery, setSearchQuery] = useState("");
   const [searching, setSearching] = useState(false);
   const [newsItems, setNewsItems] = useState<{ title: string; url: string; snippet: string }[]>([]);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const resultsEnd = useRef<HTMLDivElement>(null);
 
@@ -394,6 +396,23 @@ export default function AgentTester() {
                         </span>
                         <span className="text-[10px] text-zinc-500 truncate ml-auto">
                           {agent.nameKor}
+                        </span>
+                        <span
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const url = `${baseUrl.replace(/\/$/, "")}/api/agents/${agent.id}/.well-known/agent.json`;
+                            navigator.clipboard.writeText(url);
+                            setCopiedId(agent.id);
+                            setTimeout(() => setCopiedId(null), 1500);
+                          }}
+                          className="p-0.5 hover:bg-zinc-700 rounded transition-colors cursor-pointer shrink-0"
+                          title="Copy agent card URL"
+                        >
+                          {copiedId === agent.id ? (
+                            <CheckCircle2 className="w-3 h-3 text-green-400" />
+                          ) : (
+                            <Copy className="w-3 h-3 text-zinc-600 hover:text-zinc-400" />
+                          )}
                         </span>
                       </button>
                     );
