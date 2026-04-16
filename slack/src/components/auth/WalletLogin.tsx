@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { ConnectKitButton } from 'connectkit';
 import { useAccount, useSignMessage, useDisconnect } from 'wagmi';
 import { Button } from '@/components/ui/button';
@@ -16,21 +16,11 @@ export default function WalletLogin() {
   const [isLoading, setIsLoading] = useState(false);
   const [loadingStep, setLoadingStep] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [autoSignTriggered, setAutoSignTriggered] = useState(false);
 
   // Read invite token from URL
   const inviteToken = typeof window !== 'undefined'
     ? new URLSearchParams(window.location.search).get('invite')
     : null;
-
-  // When wallet connects, auto-start the sign flow
-  useEffect(() => {
-    if (isConnected && address && !autoSignTriggered && !isLoading) {
-      setAutoSignTriggered(true);
-      handleSign(address);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isConnected, address]);
 
   async function handleSign(walletAddress: string) {
     setIsLoading(true);
@@ -109,12 +99,9 @@ export default function WalletLogin() {
         && (err as { code: number }).code === 4001;
 
       if (isRejected) {
-        setError('Signature rejected. Click "Sign Again" to retry.');
-        // Keep wallet connected — don't force full reconnect on rejection
+        setError('Signature rejected. Click "Sign In" to try again.');
       } else {
         setError(msg);
-        disconnect();
-        setAutoSignTriggered(false);
       }
     } finally {
       setIsLoading(false);
@@ -152,6 +139,13 @@ export default function WalletLogin() {
             <Loader2 className="w-4 h-4 mr-2 animate-spin" />
             {loadingStep || 'Connecting...'}
           </Button>
+        ) : isConnected && address ? (
+          <Button
+            onClick={() => handleSign(address)}
+            className="w-full bg-[#f6851b] hover:bg-[#e2761b] text-white font-semibold py-2.5"
+          >
+            Sign In with {address.slice(0, 6)}...{address.slice(-4)}
+          </Button>
         ) : (
           <ConnectKitButton.Custom>
             {({ show }) => (
@@ -159,7 +153,7 @@ export default function WalletLogin() {
                 onClick={show}
                 className="w-full bg-[#f6851b] hover:bg-[#e2761b] text-white font-semibold py-2.5"
               >
-                {isConnected ? `Connected: ${address?.slice(0, 6)}...${address?.slice(-4)}` : 'Connect Wallet'}
+                Connect Wallet
               </Button>
             )}
           </ConnectKitButton.Custom>
@@ -168,20 +162,12 @@ export default function WalletLogin() {
         {error && (
           <div className="mt-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
             <p className="text-sm text-red-400">{error}</p>
-            {isConnected && error.includes('Sign Again') && (
-              <button
-                onClick={() => { setError(null); handleSign(address!); }}
-                className="mt-2 w-full text-center text-sm font-medium text-white bg-[#f6851b] hover:bg-[#e2761b] rounded-md py-1.5"
-              >
-                Sign Again
-              </button>
-            )}
           </div>
         )}
 
         {isConnected && !isLoading && (
           <button
-            onClick={() => { disconnect(); setAutoSignTriggered(false); }}
+            onClick={() => { disconnect(); setError(null); }}
             className="mt-3 w-full text-center text-xs text-slate-500 hover:text-slate-300"
           >
             Disconnect wallet
