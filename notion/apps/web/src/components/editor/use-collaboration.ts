@@ -47,6 +47,13 @@ export function useCollaboration({ pageId, userName, userColor }: UseCollaborati
     return { ydoc: doc, provider: prov };
   }, [pageId]);
 
+  // Fallback: mark editor as ready after 3s even if WebSocket never connects,
+  // so users can edit offline without being blocked by "Connecting..." forever.
+  useEffect(() => {
+    const fallback = setTimeout(() => setSynced(true), 3000);
+    return () => clearTimeout(fallback);
+  }, []);
+
   useEffect(() => {
     const handleSynced = () => {
       setSynced(true);

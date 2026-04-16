@@ -15,11 +15,18 @@ import TableHeader from '@tiptap/extension-table-header';
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
 import Mention from '@tiptap/extension-mention';
 import { ReactRenderer } from '@tiptap/react';
+import type { Editor } from '@tiptap/core';
 import type { SuggestionProps, SuggestionKeyDownProps } from '@tiptap/suggestion';
+import type { Range } from '@tiptap/core';
 import { common, createLowlight } from 'lowlight';
 import { BlockHandleExtension } from './block-handle';
+import { CalloutExtension } from './callout-extension';
+import { ToggleExtension } from './toggle-extension';
+import { ColumnsExtension, ColumnCellExtension } from './columns-extension';
 import { MentionList } from './mention-list';
 import type { MentionItem, MentionListRef } from './mention-list';
+import { AgentMentionTrigger } from './agent-mention-handler';
+import { SlashCommandExtension } from './slash-command-extension';
 
 const lowlight = createLowlight(common);
 
@@ -47,12 +54,22 @@ const fetchSuggestions = debounceAsync(
         (typeof window !== 'undefined'
           ? `${window.location.protocol}//${window.location.hostname}:3011`
           : 'http://localhost:3011');
-      const res = await fetch(
-        `${apiUrl}/api/v1/mentions/suggest?type=user&q=${encodeURIComponent(query)}&workspace_id=${encodeURIComponent(workspaceId)}`,
-        { credentials: 'include' },
-      );
-      if (!res.ok) return [];
-      return (await res.json()) as MentionItem[];
+
+      const [usersRes, agentsRes] = await Promise.all([
+        fetch(
+          `${apiUrl}/api/v1/mentions/suggest?type=user&q=${encodeURIComponent(query)}&workspace_id=${encodeURIComponent(workspaceId)}`,
+          { credentials: 'include' },
+        ),
+        fetch(
+          `${apiUrl}/api/v1/mentions/suggest?type=agent&q=${encodeURIComponent(query)}&workspace_id=${encodeURIComponent(workspaceId)}`,
+          { credentials: 'include' },
+        ),
+      ]);
+
+      const users = usersRes.ok ? ((await usersRes.json()) as MentionItem[]) : [];
+      const agents = agentsRes.ok ? ((await agentsRes.json()) as MentionItem[]) : [];
+
+      return [...users, ...agents];
     } catch {
       return [];
     }
@@ -62,10 +79,17 @@ const fetchSuggestions = debounceAsync(
 
 export interface EditorExtensionOptions {
   workspaceId?: string;
+  /** Getter for workspaceId — use this when workspaceId may be empty at editor mount time */
+  getWorkspaceId?: () => string;
+  pageId?: string;
+  onAgentInvoke?: (params: { agentId: string; prompt: string; pageId: string; workspaceId: string }) => void;
+  /** Set true when using with Collaboration extension — disables built-in History (Yjs handles it) */
+  collaboration?: boolean;
 }
 
 export function getEditorExtensions(options: EditorExtensionOptions = {}) {
-  const { workspaceId = '' } = options;
+  const { workspaceId = '', pageId = '', onAgentInvoke, collaboration = false } = options;
+  const resolveWorkspaceId = () => options.getWorkspaceId?.() ?? workspaceId;
 
   return [
     StarterKit.configure({
@@ -73,6 +97,7 @@ export function getEditorExtensions(options: EditorExtensionOptions = {}) {
       codeBlock: false, // replaced by CodeBlockLowlight
       link: false, // replaced by standalone Link extension
       underline: false, // replaced by standalone Underline extension
+      ...(collaboration ? { undoRedo: false } : {}), // Yjs handles undo/redo in collaborative mode (v3: UndoRedo, not History)
     }),
     CodeBlockLowlight.configure({ lowlight }),
     TaskList,
@@ -86,12 +111,18 @@ export function getEditorExtensions(options: EditorExtensionOptions = {}) {
     TextStyle,
     Color,
     Placeholder.configure({
-      placeholder: ({ node }) => {
+      includeChildren: true,
+      placeholder: ({ node, editor }) => {
         if (node.type.name === 'heading') {
-          const level = node.attrs['level'] as number;
-          return `Heading ${level}`;
+          return `Heading ${node.attrs['level'] as number}`;
         }
-        return "Type '/' for commands...";
+        if (node.type.name === 'paragraph') {
+          // First paragraph = only child of doc = doc has 1 child
+          if (editor.state?.doc?.childCount === 1) {
+            return "Press Enter to continue with an empty page, or pick a template";
+          }
+        }
+        return "Type '/' for commands";
       },
     }),
     Image.configure({
@@ -101,7 +132,20 @@ export function getEditorExtensions(options: EditorExtensionOptions = {}) {
     TableRow,
     TableCell,
     TableHeader,
-    Mention.configure({
+    Mention.extend({
+      addAttributes() {
+        return {
+          ...this.parent?.(),
+          isAgent: {
+            default: false,
+            parseHTML: (element) => element.getAttribute('data-is-agent') === 'true',
+            renderHTML: (attributes) => ({
+              'data-is-agent': attributes.isAgent ? 'true' : 'false',
+            }),
+          },
+        };
+      },
+    }).configure({
       HTMLAttributes: {
         class: 'bg-[var(--selection)] text-[var(--accent-blue)] rounded px-0.5 cursor-pointer',
       },
@@ -109,8 +153,21 @@ export function getEditorExtensions(options: EditorExtensionOptions = {}) {
         char: '@',
         allowSpaces: false,
         items: async ({ query }: { query: string }): Promise<MentionItem[]> => {
-          if (!workspaceId) return [];
-          return fetchSuggestions(query, workspaceId);
+          const wsId = resolveWorkspaceId();
+          if (!wsId) return [];
+          return fetchSuggestions(query, wsId);
+        },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        command({ editor, range, props }: { editor: Editor; range: Range; props: any }) {
+          const item = props as MentionItem;
+          editor
+            .chain()
+            .focus()
+            .insertContentAt(range, [
+              { type: 'mention', attrs: { id: item.id, label: item.name, isAgent: item.isAgent ?? false } },
+              { type: 'text', text: ' ' },
+            ])
+            .run();
         },
         render: () => {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -168,6 +225,16 @@ export function getEditorExtensions(options: EditorExtensionOptions = {}) {
         },
       },
     }),
+    AgentMentionTrigger.configure({
+      onInvoke: onAgentInvoke,
+      getPageId: () => pageId,
+      getWorkspaceId: resolveWorkspaceId,
+    }),
+    CalloutExtension,
+    ToggleExtension,
+    ColumnsExtension,
+    ColumnCellExtension,
     BlockHandleExtension,
+    SlashCommandExtension,
   ];
 }

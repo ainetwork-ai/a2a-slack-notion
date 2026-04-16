@@ -1,12 +1,17 @@
 'use client';
 
-import { useEditor, EditorContent } from '@tiptap/react';
+import { useEditor, EditorContent, type Editor } from '@tiptap/react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Collaboration from '@tiptap/extension-collaboration';
-import CollaborationCursor from '@tiptap/extension-collaboration-cursor';
+// CollaborationCursor@2 uses y-prosemirror while Collaboration@3 uses @tiptap/y-tiptap (different ySyncPluginKey)
+// — incompatible, crashes on Plugin.init. Remove until a v3-compatible cursor extension is available.
 import { getEditorExtensions } from './extensions';
 import { EditorBubbleMenu } from './bubble-menu';
-import { SlashCommandMenu } from './slash-command';
 import { useCollaboration, type ConnectionStatus, type ActiveUser } from './use-collaboration';
+import { BlockHandleOverlay } from './block-handle-overlay';
+import { BlockContextMenu } from './block-context-menu';
+import { BlockSelectionToolbar } from './block-selection-toolbar';
+import { BlockDragProvider } from './block-drag-overlay';
 
 interface CollaborativeEditorProps {
   pageId: string;
@@ -102,19 +107,108 @@ function UserAvatar({ user, index }: { user: ActiveUser; index: number }) {
   );
 }
 
+const AGENT_COLORS = ['#6366f1', '#ec4899', '#f59e0b', '#10b981', '#3b82f6', '#ef4444', '#8b5cf6'];
+
+interface StreamingAgent {
+  agentId: string;
+  name: string;
+  color: string;
+}
+
 export function CollaborativeEditor({ pageId, userName, editable = true, workspaceId }: CollaborativeEditorProps) {
-  const { ydoc, provider, synced, user, connectionStatus, activeUsers } = useCollaboration({ pageId, userName });
+  const { ydoc, synced, connectionStatus, activeUsers } = useCollaboration({ pageId, userName });
+
+  const editorRef = useRef<Editor | null>(null);
+  const workspaceIdRef = useRef(workspaceId ?? '');
+  const [streamingAgents, setStreamingAgents] = useState<StreamingAgent[]>([]);
+
+  useEffect(() => {
+    workspaceIdRef.current = workspaceId ?? '';
+  }, [workspaceId]);
+
+  const handleAgentInvoke = useCallback(async (params: { agentId: string; prompt: string; pageId: string; workspaceId: string }) => {
+    const apiUrl =
+      process.env['NEXT_PUBLIC_API_URL'] ??
+      `${window.location.protocol}//${window.location.hostname}:3011`;
+
+    try {
+      const response = await fetch(`${apiUrl}/api/v1/agents/invoke?stream=true`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          agentId: params.agentId,
+          prompt: params.prompt,
+          pageId: params.pageId,
+          workspaceId: params.workspaceId,
+        }),
+      });
+
+      if (!response.ok || !response.body) {
+        throw new Error(`Invoke failed: ${response.status}`);
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() ?? '';
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const raw = line.slice(6).trim();
+          if (!raw || raw === '[DONE]') continue;
+
+          try {
+            const chunk = JSON.parse(raw) as { type: string; content: string };
+
+            if (chunk.type === 'agent_start') {
+              const info = JSON.parse(chunk.content) as { agentId: string; name: string };
+              const color = AGENT_COLORS[info.agentId.charCodeAt(0) % AGENT_COLORS.length] ?? '#6366f1';
+              setStreamingAgents(prev => [...prev.filter(a => a.agentId !== info.agentId), { ...info, color }]);
+            } else if (chunk.type === 'agent_end') {
+              const info = JSON.parse(chunk.content) as { agentId: string };
+              setStreamingAgents(prev => prev.filter(a => a.agentId !== info.agentId));
+            } else if (chunk.content && editorRef.current) {
+              editorRef.current.commands.insertContent(chunk.content);
+            }
+          } catch {
+            // skip malformed
+          }
+        }
+      }
+    } catch (error) {
+      console.error('[Agent Invoke Error]', error);
+      setStreamingAgents([]);
+      try {
+        const res = await fetch(`${apiUrl}/api/v1/agents/invoke`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify(params),
+        });
+        const result = await res.json() as { content?: string };
+        if (result.content && editorRef.current) {
+          editorRef.current.commands.insertContent(result.content);
+        }
+      } catch (fallbackError) {
+        console.error('[Agent Invoke Fallback Error]', fallbackError);
+      }
+    }
+  }, []);
 
   const editor = useEditor({
     immediatelyRender: false,
     extensions: [
-      ...getEditorExtensions({ workspaceId }),
+      ...getEditorExtensions({ workspaceId, getWorkspaceId: () => workspaceIdRef.current, pageId, onAgentInvoke: handleAgentInvoke, collaboration: true }),
       Collaboration.configure({
         document: ydoc,
-      }),
-      CollaborationCursor.configure({
-        provider,
-        user: { name: user.name, color: user.color },
       }),
     ],
     editable,
@@ -125,9 +219,12 @@ export function CollaborativeEditor({ pageId, userName, editable = true, workspa
     },
   });
 
+  useEffect(() => { editorRef.current = editor; }, [editor]);
+
   if (!editor) return null;
 
   return (
+    <BlockDragProvider>
     <div className="relative notion-editor">
       {/* Editor header: connection status + active users */}
       <div
@@ -150,14 +247,55 @@ export function CollaborativeEditor({ pageId, userName, editable = true, workspa
         )}
       </div>
 
+      {streamingAgents.length > 0 && (
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
+          {streamingAgents.map(agent => (
+            <div
+              key={agent.agentId}
+              className="agent-typing-badge"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '3px 10px',
+                borderRadius: 20,
+                border: `1.5px solid ${agent.color}`,
+                background: `${agent.color}18`,
+                fontSize: 12,
+                color: agent.color,
+                fontWeight: 500,
+              }}
+            >
+              <span
+                style={{
+                  width: 7,
+                  height: 7,
+                  borderRadius: '50%',
+                  backgroundColor: agent.color,
+                  display: 'inline-block',
+                  flexShrink: 0,
+                  animation: 'collab-pulse 1.2s ease-in-out infinite',
+                }}
+              />
+              {agent.name} is writing
+              <span className="agent-typing-dots">
+                <span>.</span><span>.</span><span>.</span>
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
       {!synced && (
         <div className="absolute inset-0 flex items-center justify-center bg-[var(--bg-default)]/80 z-10">
           <span className="text-sm text-[var(--text-tertiary)]">Connecting...</span>
         </div>
       )}
       <EditorBubbleMenu editor={editor} />
-      <SlashCommandMenu editor={editor} />
       <EditorContent editor={editor} />
+      <BlockHandleOverlay />
+      <BlockContextMenu />
+      <BlockSelectionToolbar />
 
       <style jsx global>{`
         .notion-editor .tiptap { font-family: var(--font-sans); font-size: 16px; line-height: 1.5; color: var(--text-primary); }
@@ -183,6 +321,7 @@ export function CollaborativeEditor({ pageId, userName, editable = true, workspa
         .notion-editor .tiptap table td, .notion-editor .tiptap table th { border-bottom: 1px solid var(--divider); padding: 8px 12px; text-align: left; min-width: 100px; }
         .notion-editor .tiptap table th { font-weight: 600; background: var(--bg-sidebar); }
         .notion-editor .tiptap .is-empty::before { content: attr(data-placeholder); color: var(--text-tertiary); float: left; height: 0; pointer-events: none; }
+        .notion-editor .tiptap .is-empty:hover::before { color: var(--text-secondary); }
 
         /* Collaboration cursor styles */
         .collaboration-cursor__caret {
@@ -218,6 +357,19 @@ export function CollaborativeEditor({ pageId, userName, editable = true, workspa
           animation: collab-pulse 1.2s ease-in-out infinite;
         }
 
+        /* Agent typing dots animation */
+        .agent-typing-dots span {
+          opacity: 0;
+          animation: agent-dot-fade 1.4s ease-in-out infinite;
+        }
+        .agent-typing-dots span:nth-child(1) { animation-delay: 0s; }
+        .agent-typing-dots span:nth-child(2) { animation-delay: 0.2s; }
+        .agent-typing-dots span:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes agent-dot-fade {
+          0%, 60%, 100% { opacity: 0; }
+          30% { opacity: 1; }
+        }
+
         /* Avatar tooltip */
         .collab-avatar-wrapper {
           position: relative;
@@ -244,5 +396,6 @@ export function CollaborativeEditor({ pageId, userName, editable = true, workspa
         }
       `}</style>
     </div>
+    </BlockDragProvider>
   );
 }

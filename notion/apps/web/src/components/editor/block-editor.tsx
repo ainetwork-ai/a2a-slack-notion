@@ -3,10 +3,9 @@
 import { useEditor, EditorContent } from '@tiptap/react';
 import type { JSONContent } from '@tiptap/react';
 import type { Editor } from '@tiptap/core';
-import { useCallback, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { getEditorExtensions } from './extensions';
 import { EditorBubbleMenu } from './bubble-menu';
-import { SlashCommandMenu } from './slash-command';
 
 interface BlockEditorProps {
   content?: JSONContent;
@@ -17,6 +16,11 @@ interface BlockEditorProps {
 
 export function BlockEditor({ content, onUpdate, editable = true, workspaceId }: BlockEditorProps) {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const workspaceIdRef = useRef(workspaceId ?? '');
+
+  useEffect(() => {
+    workspaceIdRef.current = workspaceId ?? '';
+  }, [workspaceId]);
 
   const handleUpdate = useCallback(
     ({ editor }: { editor: Editor }) => {
@@ -30,7 +34,7 @@ export function BlockEditor({ content, onUpdate, editable = true, workspaceId }:
 
   const editor = useEditor({
     immediatelyRender: false,
-    extensions: getEditorExtensions({ workspaceId }),
+    extensions: getEditorExtensions({ workspaceId, getWorkspaceId: () => workspaceIdRef.current }),
     content: content ?? { type: 'doc', content: [{ type: 'paragraph' }] },
     editable,
     onUpdate: handleUpdate,
@@ -46,7 +50,6 @@ export function BlockEditor({ content, onUpdate, editable = true, workspaceId }:
   return (
     <div className="relative notion-editor">
       <EditorBubbleMenu editor={editor} />
-      <SlashCommandMenu editor={editor} />
       <EditorContent editor={editor} />
 
       <style jsx global>{`
