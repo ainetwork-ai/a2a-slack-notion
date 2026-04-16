@@ -4,11 +4,11 @@ import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
 
 const AGENT_MENTION_TRIGGER_KEY = new PluginKey('agentMentionTrigger');
 
-function findAgentMentions(node: ProseMirrorNode): Array<{ id: string; pos: number }> {
-  const mentions: Array<{ id: string; pos: number }> = [];
+function findAgentMentions(node: ProseMirrorNode): Array<{ id: string; pos: number; name: string }> {
+  const mentions: Array<{ id: string; pos: number; name: string }> = [];
   node.forEach((child, offset) => {
     if (child.type.name === 'mention' && child.attrs['id'] && child.attrs['isAgent'] === true) {
-      mentions.push({ id: child.attrs['id'] as string, pos: offset });
+      mentions.push({ id: child.attrs['id'] as string, pos: offset, name: (child.attrs['label'] as string) || '' });
     }
   });
   return mentions;
@@ -30,7 +30,7 @@ function extractTextAfterMention(node: ProseMirrorNode, mentionPos: number): str
 }
 
 export interface AgentMentionTriggerOptions {
-  onInvoke?: (params: { agentId: string; prompt: string; pageId: string; workspaceId: string }) => void;
+  onInvoke?: (params: { agentId: string; agentName: string; prompt: string; pageId: string; workspaceId: string }) => void;
   getPageId?: () => string;
   getWorkspaceId?: () => string;
 }
@@ -71,8 +71,7 @@ export const AgentMentionTrigger = Extension.create<AgentMentionTriggerOptions>(
               const mentionKey = `${mention.id}-${$from.before()}`;
               if (triggeredMentions.has(mentionKey)) continue;
 
-              const prompt = extractTextAfterMention(currentNode, mention.pos);
-              if (!prompt) continue;
+              const prompt = extractTextAfterMention(currentNode, mention.pos) || 'Please help with this document.';
 
               // Mark as triggered
               triggeredMentions.add(mentionKey);
@@ -81,6 +80,7 @@ export const AgentMentionTrigger = Extension.create<AgentMentionTriggerOptions>(
               if (extensionOptions.onInvoke) {
                 extensionOptions.onInvoke({
                   agentId: mention.id,
+                  agentName: mention.name,
                   prompt,
                   pageId: extensionOptions.getPageId?.() ?? '',
                   workspaceId: extensionOptions.getWorkspaceId?.() ?? '',
