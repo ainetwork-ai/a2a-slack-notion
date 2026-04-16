@@ -24,6 +24,13 @@ app.add_middleware(
 
 md_converter = MarkItDown()
 
+# x402 AIN gateway — optional, enabled when x402_ain_gateway is available
+try:
+    from x402_ain_gateway import ain_holder_middleware, create_payment_required_response
+    X402_ENABLED = True
+except ImportError:
+    X402_ENABLED = False
+
 
 class ConvertUrlRequest(BaseModel):
     url: str
@@ -145,12 +152,66 @@ def convert_local(file_path: str, page: int | None = None, search: str | None = 
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "service": "markitdown"}
+    return {"status": "ok", "service": "markitdown", "x402": X402_ENABLED}
+
+
+@app.get("/.well-known/agent-card.json")
+async def agent_card():
+    """A2A agent card for the MarkItDown service."""
+    base_url = os.getenv("PUBLIC_URL", "http://localhost:8300")
+    card = {
+        "name": "MarkItDown",
+        "description": "Convert PDF, DOCX, PPTX, images to Markdown with section anchors and search",
+        "version": "1.0.0",
+        "url": f"{base_url}/a2a",
+        "provider": {"organization": "Slack-A2A"},
+        "defaultInputModes": ["text/plain", "application/pdf", "image/*"],
+        "defaultOutputModes": ["text/plain", "text/markdown"],
+        "capabilities": {
+            "streaming": False,
+            "pushNotifications": False,
+            "extensions": [
+                {
+                    "uri": "urn:a2a:ext:x402-ain-holder",
+                    "description": "Requires AIN token balance on Base network",
+                    "required": True,
+                    "params": {
+                        "token": "0xd4423795fd904d9b87554940a95fb7016f172773",
+                        "network": "base",
+                        "type": "token-balance",
+                    },
+                }
+            ] if X402_ENABLED else [],
+        },
+        "skills": [
+            {
+                "id": "convert",
+                "name": "Document Convert",
+                "description": "Convert document to Markdown with page anchors for reference linking",
+                "tags": ["pdf", "docx", "pptx", "markdown", "convert"],
+            },
+            {
+                "id": "search",
+                "name": "Document Search",
+                "description": "Search for text within a document",
+                "tags": ["search", "find", "query"],
+            },
+            {
+                "id": "metadata",
+                "name": "Document Metadata",
+                "description": "Get document structure — title, page count, sections",
+                "tags": ["metadata", "info", "structure"],
+            },
+        ],
+    }
+    return card
 
 
 @app.post("/convert/url", response_model=ConvertResponse)
-async def convert_url(req: ConvertUrlRequest):
-    """Convert a file from URL to Markdown."""
+async def convert_url(req: ConvertUrlRequest, request: Request):
+    """Convert a file from URL to Markdown. x402 gated if enabled."""
+    if X402_ENABLED:
+        await ain_holder_middleware(request)
     tmp_path = None
     try:
         tmp_path = await download_file(req.url)
@@ -166,11 +227,14 @@ async def convert_url(req: ConvertUrlRequest):
 
 @app.post("/convert/file", response_model=ConvertResponse)
 async def convert_file(
+    request: Request,
     file: UploadFile = File(...),
     page: int | None = None,
     search: str | None = None,
 ):
-    """Convert an uploaded file to Markdown."""
+    """Convert an uploaded file to Markdown. x402 gated if enabled."""
+    if X402_ENABLED:
+        await ain_holder_middleware(request)
     tmp_path = None
     try:
         suffix = Path(file.filename or "doc").suffix or ".pdf"
@@ -188,8 +252,10 @@ async def convert_file(
 
 
 @app.post("/metadata", response_model=MetadataResponse)
-async def get_metadata(req: ConvertUrlRequest):
-    """Get document metadata without full conversion."""
+async def get_metadata(req: ConvertUrlRequest, request: Request):
+    """Get document metadata. x402 gated if enabled."""
+    if X402_ENABLED:
+        await ain_holder_middleware(request)
     tmp_path = None
     try:
         tmp_path = await download_file(req.url)
@@ -211,8 +277,10 @@ async def get_metadata(req: ConvertUrlRequest):
 
 
 @app.post("/search")
-async def search_document(req: SearchRequest):
-    """Search within a document."""
+async def search_document(req: SearchRequest, request: Request):
+    """Search within a document. x402 gated if enabled."""
+    if X402_ENABLED:
+        await ain_holder_middleware(request)
     tmp_path = None
     try:
         tmp_path = await download_file(req.url)

@@ -2,17 +2,24 @@
 
 const MARKITDOWN_URL = process.env.MARKITDOWN_URL || "http://localhost:8300";
 
+function getHeaders(walletAddress?: string): Record<string, string> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (walletAddress) headers["X-Wallet-Address"] = walletAddress;
+  return headers;
+}
+
 export async function convert(params: {
   url: string;
   page?: number;
   search?: string;
+  walletAddress?: string;
 }): Promise<string> {
   if (!params.url) return "File URL is required.";
 
   try {
     const res = await fetch(`${MARKITDOWN_URL}/convert/url`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: getHeaders(params.walletAddress),
       body: JSON.stringify({
         url: params.url,
         page: params.page ? Number(params.page) : undefined,
@@ -55,13 +62,13 @@ export async function convert(params: {
   }
 }
 
-export async function metadata(params: { url: string }): Promise<string> {
+export async function metadata(params: { url: string; walletAddress?: string }): Promise<string> {
   if (!params.url) return "File URL is required.";
 
   try {
     const res = await fetch(`${MARKITDOWN_URL}/metadata`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: getHeaders(params.walletAddress),
       body: JSON.stringify({ url: params.url }),
     });
 
@@ -86,13 +93,14 @@ export async function metadata(params: { url: string }): Promise<string> {
 export async function search(params: {
   url: string;
   query: string;
+  walletAddress?: string;
 }): Promise<string> {
   if (!params.url || !params.query) return "url and query are required.";
 
   try {
     const res = await fetch(`${MARKITDOWN_URL}/search`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: getHeaders(params.walletAddress),
       body: JSON.stringify({ url: params.url, query: params.query }),
     });
 
