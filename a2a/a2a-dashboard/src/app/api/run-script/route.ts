@@ -15,6 +15,7 @@ interface ScriptInfo {
   file: string;
   kind: Kind;
   description: string;
+  hasEvents?: boolean;
 }
 
 function readTsScripts(): ScriptInfo[] {
@@ -48,6 +49,7 @@ function readPyScripts(): ScriptInfo[] {
         file: f,
         kind: "py",
         description: docMatch ? docMatch[1].trim() : "",
+        hasEvents: content.includes("json-events"),
       };
     });
 }

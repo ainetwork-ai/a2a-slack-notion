@@ -21,6 +21,7 @@ interface ScriptInfo {
   file: string;
   kind: Kind;
   description: string;
+  hasEvents?: boolean;
 }
 
 interface LogEntry {
@@ -102,12 +103,12 @@ export default function ScriptRunner() {
   }, []);
 
   useEffect(() => {
-    if (selected?.kind === "py") {
+    if (selected?.hasEvents) {
       cardsEnd.current?.scrollIntoView({ behavior: "smooth" });
     } else {
       logsEnd.current?.scrollIntoView({ behavior: "smooth" });
     }
-  }, [logs, callOrder, callsByKey, stepSummaries, selected?.kind]);
+  }, [logs, callOrder, callsByKey, stepSummaries, selected?.hasEvents]);
 
   async function fetchScripts() {
     try {
@@ -290,6 +291,7 @@ export default function ScriptRunner() {
   }
 
   const kind = selected?.kind ?? "ts";
+  const useCardView = selected?.hasEvents === true;
   const elapsedMs =
     pipelineInfo.started_at
       ? (pipelineInfo.ended_at ?? new Date()).getTime() -
@@ -370,7 +372,7 @@ export default function ScriptRunner() {
               ) : (
                 <Play className="w-4 h-4" />
               )}
-              {running ? "Running..." : kind === "py" ? "Test Pipeline" : "Run Script"}
+              {running ? "Running..." : useCardView ? "Test Pipeline" : "Run Script"}
             </button>
 
             {exitCode !== null && (
@@ -396,7 +398,7 @@ export default function ScriptRunner() {
               </span>
             )}
 
-            {running && kind === "py" && (
+            {running && useCardView && (
               <span className="text-sm text-zinc-500 ml-auto">
                 {formatDuration(elapsedMs)}
               </span>
@@ -419,7 +421,7 @@ export default function ScriptRunner() {
         </div>
 
         {/* Output pane */}
-        {kind === "py" ? (
+        {useCardView ? (
           <PipelineView
             info={pipelineInfo}
             callOrder={callOrder}
