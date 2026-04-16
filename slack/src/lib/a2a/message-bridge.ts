@@ -314,12 +314,18 @@ async function runAgent(
       const [serverId, toolName] = tc.tool.split(":");
       if (serverId && toolName) {
         const result = await executeTool(serverId, toolName, tc.params);
-        results.push(`[TOOL_RESULT: ${tc.tool}]\n${result.content}\n[/TOOL_RESULT]`);
+        // Cap tool result size to prevent context overflow
+        const MAX_RESULT = 1500;
+        const truncated = result.content.length > MAX_RESULT
+          ? result.content.slice(0, MAX_RESULT) + `\n[... ${result.content.length - MAX_RESULT} more chars truncated]`
+          : result.content;
+        results.push(`[TOOL_RESULT: ${tc.tool}]\n${truncated}\n[/TOOL_RESULT]`);
       }
     }
 
-    // Feed results back
-    llmMessages.push({ role: "assistant", content: response });
+    // Feed results back — shorten the previous assistant response too to save context
+    const priorShort = response.length > 500 ? response.slice(0, 500) + "..." : response;
+    llmMessages.push({ role: "assistant", content: priorShort });
     llmMessages.push({
       role: "user",
       content: results.join("\n\n") + "\n\nUse the tool results above to answer. Do not output [TOOL_CALL] again unless you need more data.",
