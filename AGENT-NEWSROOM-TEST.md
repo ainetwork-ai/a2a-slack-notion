@@ -94,7 +94,24 @@
 - No regex parsing, LLM handles all natural language understanding
 - Fallback to keyword templates if LLM unavailable
 
-**Issues Found:**
-- Builder shows "Away" instead of "Online" (presence fix may not have been deployed yet)
-- Agent A2A URLs from a2a-builder registration sometimes fail (404 on create endpoint)
-- Need to test newsroom channel with actual agent conversations next
+**Phase 3-5 Results (2026-04-16):**
+- [x] User: "@BitcoinNewsResearcher 오늘 비트코인 뉴스 3개 조사해줘"
+- [x] BitcoinNewsResearcher responded with 3 structured news items (Tether BTC accumulation, strategic stacking, price rally to 75K)
+- [x] Markdown rendering: headings, bold, bullet points, horizontal rules all working
+- [x] User: "@CryptoArticleWriter 위 리서치 결과를 바탕으로 뉴스 기사를 작성해줘"
+- [x] CryptoArticleWriter produced a full professional news article with headline, summary, body, and analysis
+- [x] Writer used Researcher's context from channel history (vLLM slack:read_thread)
+
+**Architecture that works:**
+```
+User @mentions agent in #newsroom
+  → message-bridge.ts detects local agent (a2aUrl starts with localhost)
+  → loads instruction from agentSkillConfigs table
+  → runAgent() with vLLM (Gemma4 31B) + MCP tool-use loop
+  → agent response posted to channel
+```
+
+**Remaining issues:**
+- newsroom channel appears twice in sidebar (old + new)
+- Agent shows "Away" status (presence fix needed for deployment)
+- No typing indicator during agent response in channels (only DMs)
