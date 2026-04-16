@@ -66,6 +66,25 @@ export async function sendToAgent(params: {
   let content: string;
   let metadata: Record<string, unknown>;
 
+  // Broadcast typing indicator while agent is working — auto-cleared after 90s
+  // or when the agent's response is saved
+  const { typingStatus } = await import("@/lib/db/schema");
+  const typingExpiry = new Date(Date.now() + 90_000);
+  try {
+    if (params.channelId || params.conversationId) {
+      await db
+        .insert(typingStatus)
+        .values({
+          userId: agent.id,
+          channelId: params.channelId || null,
+          conversationId: params.conversationId || null,
+          expiresAt: typingExpiry,
+        });
+    }
+  } catch {
+    // ignore — typing indicator is best-effort
+  }
+
   // Local dynamic agent (a2aUrl points to our own /api/a2a/ endpoint) → use runAgent directly
   const appUrl = (process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3004").replace(/\/$/, "");
   const isLocalAgent = agent.a2aUrl?.startsWith(appUrl + "/api/a2a/") || agent.a2aUrl?.startsWith("http://localhost");
@@ -127,6 +146,11 @@ export async function sendToAgent(params: {
       metadata: { ...metadata, chainDepth: incomingChainDepth + 1 },
     })
     .returning();
+
+  // Clear typing indicator now that response is saved
+  try {
+    await db.delete(typingStatus).where(eq(typingStatus.userId, agent.id));
+  } catch { /* ignore */ }
 
   // Autonomous orchestration: trigger auto-engage on agent's response
   // Other agents in the channel decide if they should jump in based on their engagementLevel
