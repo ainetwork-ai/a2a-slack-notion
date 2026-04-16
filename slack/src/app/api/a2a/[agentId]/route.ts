@@ -181,28 +181,22 @@ export async function POST(
   }
 
   const card = (agent.agentCardJson ?? {}) as AgentCardJson;
-  let systemPrompt =
-    card.systemPrompt ?? `You are ${agent.displayName}, a helpful assistant.`;
+  let systemPrompt = `You are ${agent.displayName}.`;
 
-  // If a skillId was provided, look up the skill config and append its instruction
-  if (skillId) {
-    const [skillConfig] = await db
-      .select()
-      .from(agentSkillConfigs)
-      .where(
-        and(
-          eq(agentSkillConfigs.agentId, agentId),
-          eq(agentSkillConfigs.skillId, skillId)
-        )
-      )
-      .limit(1);
+  // Look up skill config: use provided skillId, or fall back to first available skill
+  const skillQuery = skillId
+    ? db.select().from(agentSkillConfigs).where(and(eq(agentSkillConfigs.agentId, agent.id), eq(agentSkillConfigs.skillId, skillId))).limit(1)
+    : db.select().from(agentSkillConfigs).where(eq(agentSkillConfigs.agentId, agent.id)).limit(1);
 
-    if (skillConfig) {
-      systemPrompt = `${systemPrompt}\n\n## Skill: ${skillId}\n${skillConfig.instruction}`;
-      if (skillConfig.mcpTools && skillConfig.mcpTools.length > 0) {
-        systemPrompt += `\n\nAvailable tools for this skill: ${skillConfig.mcpTools.join(", ")}`;
-      }
+  const [skillConfig] = await skillQuery;
+
+  if (skillConfig) {
+    systemPrompt = skillConfig.instruction;
+    if (skillConfig.mcpTools && (skillConfig.mcpTools as string[]).length > 0) {
+      systemPrompt += `\n\nAvailable tools: ${(skillConfig.mcpTools as string[]).join(", ")}`;
     }
+  } else if (card.systemPrompt) {
+    systemPrompt = card.systemPrompt;
   }
 
   let responseText: string;
