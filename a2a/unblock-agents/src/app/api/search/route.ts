@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
         .map((r) => `[${r.title}](${r.url})\n${r.snippet}`)
         .join('\n\n');
       return NextResponse.json(
-        { ok: true, results: formatted, count: items.length },
+        { ok: true, results: formatted, items, count: items.length },
         { headers: CORS_HEADERS },
       );
     }

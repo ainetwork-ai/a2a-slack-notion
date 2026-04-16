@@ -149,9 +149,10 @@ export default function AgentTester() {
   const [results, setResults] = useState<TestResult[]>([]);
   const [expanded, setExpanded] = useState<Record<string, Record<string, boolean>>>({});
 
-  // Web search preview
+  // News search for auto-fill
+  const [searchQuery, setSearchQuery] = useState("");
   const [searching, setSearching] = useState(false);
-  const [searchResults, setSearchResults] = useState<string | null>(null);
+  const [newsItems, setNewsItems] = useState<{ title: string; url: string; snippet: string }[]>([]);
 
   const resultsEnd = useRef<HTMLDivElement>(null);
 
@@ -193,7 +194,8 @@ export default function AgentTester() {
     setSelectedSkill("");
     setVariableValues({});
     setUserMessage("");
-    setSearchResults(null);
+    setNewsItems([]);
+    setSearchQuery("");
   }, [selectedId]);
 
   // When skill changes, pre-fill autoToday variables
@@ -212,25 +214,29 @@ export default function AgentTester() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedSkill]);
 
-  async function runWebSearch() {
-    const source = variableValues["BASIC_ARTICLE_SOURCE"]?.trim();
-    if (!source || searching) return;
+  async function searchNews() {
+    if (!searchQuery.trim() || searching) return;
     setSearching(true);
-    setSearchResults(null);
+    setNewsItems([]);
     try {
       const res = await fetch("/api/agent-search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ baseUrl, source, mode: "report" }),
+        body: JSON.stringify({ baseUrl, source: searchQuery.trim(), mode: "single" }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      setSearchResults(data.results || "(no results)");
-    } catch (e) {
-      setSearchResults(`Error: ${e instanceof Error ? e.message : "search failed"}`);
+      setNewsItems(data.items ?? []);
+    } catch {
+      setNewsItems([]);
     } finally {
       setSearching(false);
     }
+  }
+
+  function selectNewsItem(item: { title: string; url: string; snippet: string }) {
+    const formatted = `[${item.title}](${item.url})\n${item.snippet}`;
+    setVariableValues((prev) => ({ ...prev, BASIC_ARTICLE_SOURCE: formatted }));
   }
 
   const selectedAgent = AGENTS.find((a) => a.id === selectedId) ?? null;
@@ -451,14 +457,56 @@ export default function AgentTester() {
                   }`}
                 >
                   <Zap className="w-3 h-3 inline mr-1" />
-                  {s.name || s.id}
+                  {s.id}
                 </button>
               ))}
             </div>
 
+            {/* News search (report skill — auto-fill BASIC_ARTICLE_SOURCE) */}
+            {selectedSkill === "report" && (
+              <div className="border border-amber-900/40 rounded-lg p-3 bg-amber-950/20 mb-3 shrink-0 space-y-2">
+                <div className="text-[10px] font-medium text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <Search className="w-3 h-3" />
+                  News Search — 실제 뉴스로 원문 자동 채우기
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && searchNews()}
+                    placeholder="검색 키워드 (예: bitcoin ETF, 이더리움 업그레이드)"
+                    className="flex-1 px-2 py-1.5 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-200 focus:outline-none focus:border-amber-600 placeholder:text-zinc-600"
+                  />
+                  <button
+                    onClick={searchNews}
+                    disabled={searching || !searchQuery.trim()}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 hover:bg-amber-500 disabled:bg-zinc-800 disabled:text-zinc-600 rounded-lg text-xs font-medium transition-colors"
+                  >
+                    {searching ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
+                    {searching ? "..." : "Search"}
+                  </button>
+                </div>
+                {newsItems.length > 0 && (
+                  <div className="space-y-1 max-h-48 overflow-y-auto">
+                    {newsItems.map((item, i) => (
+                      <button
+                        key={i}
+                        onClick={() => selectNewsItem(item)}
+                        className="w-full text-left p-2 rounded bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-amber-700 transition-colors"
+                      >
+                        <div className="text-xs font-medium text-zinc-200 line-clamp-1">{item.title}</div>
+                        <div className="text-[10px] text-zinc-500 line-clamp-2 mt-0.5">{item.snippet}</div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Variables */}
             {selectedSkill && SKILL_VARIABLES[selectedSkill] && SKILL_VARIABLES[selectedSkill].length > 0 && (
-              <div className="border border-zinc-800 rounded-lg p-3 bg-zinc-950 mb-3 shrink-0 space-y-2">
+              <div className="border border-zinc-800 rounded-lg p-3 bg-zinc-950 mb-3 shrink-0 space-y-2 max-h-[35vh] overflow-y-auto">
                 <div className="text-[10px] font-medium text-zinc-500 uppercase tracking-wider">Variables</div>
                 {SKILL_VARIABLES[selectedSkill].map((v) => (
                   <div key={v.key}>
@@ -473,35 +521,6 @@ export default function AgentTester() {
                     />
                   </div>
                 ))}
-              </div>
-            )}
-
-            {/* Web Search button (report skill only) */}
-            {selectedSkill === "report" && (
-              <div className="mb-3 shrink-0">
-                <button
-                  onClick={runWebSearch}
-                  disabled={searching || !variableValues["BASIC_ARTICLE_SOURCE"]?.trim()}
-                  className="flex items-center gap-2 px-3 py-1.5 bg-amber-600 hover:bg-amber-500 disabled:bg-zinc-800 disabled:text-zinc-600 rounded-lg text-xs font-medium transition-colors"
-                >
-                  {searching ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  ) : (
-                    <Search className="w-3.5 h-3.5" />
-                  )}
-                  {searching ? "Searching..." : "Web Search Preview"}
-                </button>
-                {searchResults !== null && (
-                  <div className="mt-2 border border-zinc-800 rounded-lg bg-zinc-950 overflow-hidden">
-                    <div className="px-3 py-1.5 bg-zinc-900 border-b border-zinc-800 text-[10px] font-medium text-zinc-500 flex items-center gap-1.5">
-                      <Search className="w-3 h-3" />
-                      Tavily Search Results (LLM 쿼리 생성 + 3회 검색 + 중복 제거)
-                    </div>
-                    <pre className="p-3 text-[11px] font-mono text-zinc-400 whitespace-pre-wrap break-words max-h-60 overflow-y-auto">
-                      {searchResults}
-                    </pre>
-                  </div>
-                )}
               </div>
             )}
 
