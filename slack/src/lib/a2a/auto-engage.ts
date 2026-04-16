@@ -25,8 +25,9 @@ export async function checkAutoEngagement(params: {
   messageContent: string;
   senderId: string;
   recentMessages?: string[];
+  _chainDepth?: number;
 }) {
-  const { channelId, messageContent, senderId, recentMessages = [] } = params;
+  const { channelId, messageContent, senderId, recentMessages = [], _chainDepth = 0 } = params;
 
   // Query agent members in channel with engagementLevel > 0
   const agentMembers = await db
@@ -130,12 +131,14 @@ export async function checkAutoEngagement(params: {
       );
 
     // Send message to agent (fire-and-forget within this loop)
+    // Pass chain depth so agent-to-agent orchestration has a safety cap
     sendToAgent({
       agentId: member.userId,
       text: messageContent,
       channelId,
       skillId: suggestedSkillId,
-    }).catch(() => {
+      _chainDepth,
+    } as Parameters<typeof sendToAgent>[0]).catch(() => {
       // Ignore errors — agent may be unavailable
     });
   }

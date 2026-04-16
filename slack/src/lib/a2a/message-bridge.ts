@@ -112,6 +112,10 @@ export async function sendToAgent(params: {
     metadata = { agentName, error: true };
   }
 
+  // Track chain depth to prevent infinite agent-to-agent engagement loops
+  const incomingChainDepth = (params as unknown as { _chainDepth?: number })._chainDepth || 0;
+  const MAX_CHAIN_DEPTH = 8;
+
   const [agentMessage] = await db
     .insert(messages)
     .values({
@@ -120,9 +124,24 @@ export async function sendToAgent(params: {
       userId: agent.id,
       content,
       contentType: "agent-response",
-      metadata,
+      metadata: { ...metadata, chainDepth: incomingChainDepth + 1 },
     })
     .returning();
+
+  // Autonomous orchestration: trigger auto-engage on agent's response
+  // Other agents in the channel decide if they should jump in based on their engagementLevel
+  // Cooldown, daily limits, and chain depth cap prevent runaway loops
+  if (params.channelId && incomingChainDepth < MAX_CHAIN_DEPTH) {
+    const { checkAutoEngagement } = await import("./auto-engage");
+    checkAutoEngagement({
+      channelId: params.channelId,
+      messageContent: content,
+      senderId: agent.id,
+      _chainDepth: incomingChainDepth + 1,
+    } as Parameters<typeof checkAutoEngagement>[0]).catch(() => {
+      // ignore — let the chain continue if one agent fails
+    });
+  }
 
   return agentMessage;
 }
