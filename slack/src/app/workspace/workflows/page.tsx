@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Zap, Plus, Play, Trash2, Pencil, CheckCircle, XCircle, Clock, ToggleLeft, ToggleRight, Loader2, LayoutTemplate } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import WorkflowEditorModal from '@/components/modals/WorkflowEditorModal';
+import WorkflowBuilder from '@/components/workflow/WorkflowBuilder';
 import WorkflowTemplates from '@/components/modals/WorkflowTemplates';
 import { useWorkspaceStore } from '@/lib/stores/workspace-store';
 import { cn } from '@/lib/utils';
@@ -305,28 +305,26 @@ export default function WorkflowsPage() {
         onCreated={fetchWorkflows}
       />
 
-      <WorkflowEditorModal
-        open={editorOpen}
-        onOpenChange={(open) => {
-          setEditorOpen(open);
-          if (!open) setEditingWorkflow(null);
-        }}
-        workspaceId={activeWorkspaceId}
-        onSaved={fetchWorkflows}
-        initial={
-          editingWorkflow
-            ? {
-                id: editingWorkflow.id,
-                name: editingWorkflow.name,
-                description: editingWorkflow.description ?? undefined,
-                triggerType: editingWorkflow.triggerType,
-                triggerConfig: editingWorkflow.triggerConfig,
-                steps: editingWorkflow.steps as import('@/lib/workflow/types').WorkflowStep[],
-                enabled: editingWorkflow.enabled,
-              }
-            : undefined
-        }
-      />
+      {editorOpen && (
+        <WorkflowBuilder
+          workspaceId={activeWorkspaceId}
+          onClose={() => { setEditorOpen(false); setEditingWorkflow(null); }}
+          onSaved={fetchWorkflows}
+          initial={
+            editingWorkflow
+              ? {
+                  id: editingWorkflow.id,
+                  name: editingWorkflow.name,
+                  description: editingWorkflow.description ?? undefined,
+                  triggerType: editingWorkflow.triggerType,
+                  triggerConfig: editingWorkflow.triggerConfig,
+                  steps: editingWorkflow.steps as import('@/lib/workflow/types').WorkflowStep[],
+                  enabled: editingWorkflow.enabled,
+                }
+              : undefined
+          }
+        />
+      )}
     </div>
   );
 }
