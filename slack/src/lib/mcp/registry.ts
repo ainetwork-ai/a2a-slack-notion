@@ -80,6 +80,38 @@ export const MCP_SERVERS: McpServer[] = [
     ],
   },
   {
+    id: "document",
+    name: "Document Parser",
+    description: "Convert PDF, DOCX, PPTX to Markdown — parse, search, and extract content",
+    icon: "📄",
+    tools: [
+      {
+        name: "convert",
+        description: "Convert a document (PDF, DOCX, PPTX) to Markdown with page anchors",
+        parameters: {
+          url: { type: "string", description: "File URL to convert", required: true },
+          page: { type: "number", description: "Extract specific page only" },
+          search: { type: "string", description: "Search within the document while converting" },
+        },
+      },
+      {
+        name: "metadata",
+        description: "Get document metadata — title, page count, sections",
+        parameters: {
+          url: { type: "string", description: "File URL", required: true },
+        },
+      },
+      {
+        name: "search",
+        description: "Search for text within a document",
+        parameters: {
+          url: { type: "string", description: "File URL", required: true },
+          query: { type: "string", description: "Search query", required: true },
+        },
+      },
+    ],
+  },
+  {
     id: "slack",
     name: "Slack Workspace",
     description: "Search messages, read threads, and get channel info from this workspace",

@@ -30,6 +30,7 @@ interface MessagePointer {
   messageId?: string;
   senderName?: string;
   agentId?: string;
+  fileUrls?: string[];
 }
 
 export async function sendToAgent(params: {
@@ -40,6 +41,7 @@ export async function sendToAgent(params: {
   skillId?: string;
   messageId?: string;
   senderName?: string;
+  fileUrls?: string[];
 }) {
   const [agent] = await db
     .select()
@@ -58,6 +60,7 @@ export async function sendToAgent(params: {
     messageId: params.messageId,
     senderName: params.senderName,
     agentId: params.agentId,
+    fileUrls: params.fileUrls,
   };
 
   let content: string;
@@ -179,13 +182,25 @@ async function runAgent(
   if (pointer.messageId) pointerParts.push(`messageId: ${pointer.messageId}`);
   if (pointer.senderName) pointerParts.push(`sender: ${pointer.senderName}`);
   if (pointer.agentId) pointerParts.push(`your agentId: ${pointer.agentId}`);
+  if (pointer.fileUrls?.length) {
+    pointerParts.push(`attached files:\n${pointer.fileUrls.map((u, i) => `  ${i + 1}. ${u}`).join("\n")}`);
+  }
 
   if (pointerParts.length > 0) {
+    const contextNotes = [
+      `Use slack:read_thread to read previous messages if you need conversation context.`,
+      `Use slack:memory_read to recall what you've learned from past conversations.`,
+      `Use slack:memory_write to remember important facts for future conversations.`,
+    ];
+    if (pointer.fileUrls?.length) {
+      contextNotes.push(
+        `Files are attached. Use document:convert with the file URL to read the content as Markdown.`,
+        `Use document:search to find specific content in the document.`,
+        `Use document:metadata to get document structure (title, sections, page count).`
+      );
+    }
     systemParts.push(
-      `## Current Context\n\n${pointerParts.join("\n")}\n\n` +
-        `Use slack:read_thread to read previous messages if you need conversation context.\n` +
-        `Use slack:memory_read to recall what you've learned from past conversations.\n` +
-        `Use slack:memory_write to remember important facts for future conversations.`
+      `## Current Context\n\n${pointerParts.join("\n")}\n\n${contextNotes.join("\n")}`
     );
   }
 
