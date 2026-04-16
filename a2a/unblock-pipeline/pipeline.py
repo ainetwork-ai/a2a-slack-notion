@@ -37,6 +37,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import random
 import re
 import sys
 import time
@@ -304,8 +305,8 @@ def run_pipeline(base_url: str, source_text: str, today: str | None = None) -> P
     step1.checks.append(("반말 할당 어투(자네/맡기네/~게)", bool(re.search(r"(자네|맡기네|맡긴다|담당해|맡겨)", text)), ""))
     out.steps.append(step1)
     if not reporter_id:
-        print("\n[경고] 기자 이름을 자동 파싱 실패. 기본값 unblock-max 로 진행.")
-        reporter_id = "unblock-max"
+        reporter_id = random.choice(list(REPORTERS.keys()))
+        print(f"\n[경고] 기자 이름을 자동 파싱 실패. 랜덤 배정: {reporter_id}")
         out.reporter_id = reporter_id
     manager_id = pick_manager_for_reporter(reporter_id)
     out.manager_id = manager_id
