@@ -91,7 +91,7 @@ export async function POST(req: NextRequest) {
       const [defaultWs] = await db
         .select({ id: workspaces.id })
         .from(workspaces)
-        .where(eq(workspaces.slug, "slack-a2a"))
+        .where(eq(workspaces.name, "Slack-A2A"))
         .limit(1);
 
       if (defaultWs) {

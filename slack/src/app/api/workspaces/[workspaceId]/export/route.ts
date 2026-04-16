@@ -178,7 +178,6 @@ export async function GET(
     workspace: {
       id: workspace.id,
       name: workspace.name,
-      slug: workspace.slug,
       description: workspace.description,
       createdAt: workspace.createdAt,
     },

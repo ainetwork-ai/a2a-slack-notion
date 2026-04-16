@@ -13,8 +13,7 @@ import {
 
 export const workspaces = pgTable("workspaces", {
   id: uuid("id").primaryKey().defaultRandom(),
-  name: text("name").notNull(),
-  slug: text("slug").unique().notNull(),
+  name: text("name").unique().notNull(),
   iconText: text("icon_text").default("WS").notNull(),
   iconUrl: text("icon_url"),
   description: text("description"),

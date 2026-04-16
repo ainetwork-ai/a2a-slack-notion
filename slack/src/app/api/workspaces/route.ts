@@ -12,7 +12,6 @@ export async function GET() {
     .select({
       id: workspaces.id,
       name: workspaces.name,
-      slug: workspaces.slug,
       iconText: workspaces.iconText,
       description: workspaces.description,
       createdAt: workspaces.createdAt,
@@ -30,24 +29,19 @@ export async function POST(request: NextRequest) {
   if ("error" in auth) return auth.error;
 
   const body = await request.json();
-  const { name, slug, iconText } = body as {
+  const { name, iconText } = body as {
     name?: string;
-    slug?: string;
     iconText?: string;
   };
 
   if (!name || typeof name !== "string") {
     return NextResponse.json({ error: "Workspace name is required" }, { status: 400 });
   }
-  if (!slug || typeof slug !== "string") {
-    return NextResponse.json({ error: "Workspace slug is required" }, { status: 400 });
-  }
 
   const [workspace] = await db
     .insert(workspaces)
     .values({
       name: name.trim(),
-      slug: slug.trim().toLowerCase(),
       iconText: iconText?.trim().slice(0, 3) || name.slice(0, 2).toUpperCase(),
       createdBy: auth.user.id,
     })
