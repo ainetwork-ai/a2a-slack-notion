@@ -236,7 +236,17 @@ export default function AgentTester() {
 
   function selectNewsItem(item: { title: string; url: string; snippet: string }) {
     const formatted = `[${item.title}](${item.url})\n${item.snippet}`;
-    setVariableValues((prev) => ({ ...prev, BASIC_ARTICLE_SOURCE: formatted }));
+    setVariableValues((prev) => ({
+      ...prev,
+      BASIC_ARTICLE_SOURCE: formatted,
+      // report 스킬: 편집장 지시 + 메시지도 자동 채우기
+      ...(selectedSkill === "report" && {
+        CHIEF_COMMENT: `위 기사를 바탕으로 시장 조사 및 리서치를 진행해주세요. 핵심 사건과 시장 영향을 분석해줘.`,
+      }),
+    }));
+    if (selectedSkill === "report") {
+      setUserMessage("편집장 지시에 따라 시장 조사/리서치 보고를 작성해줘.");
+    }
   }
 
   const selectedAgent = AGENTS.find((a) => a.id === selectedId) ?? null;
