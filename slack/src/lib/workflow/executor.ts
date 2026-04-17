@@ -835,18 +835,14 @@ async function executeStep(
         canvasAgentId = member?.userId;
       }
 
-      // Always create a new canvas (never overwrite existing ones)
-      const [created] = await db
-        .insert(canvases)
-        .values({
-          channelId: channel.id,
-          workspaceId,
-          title,
-          content,
-          createdBy: canvasAgentId!,
-          pipelineStatus: "draft",
-        })
-        .returning();
+      // Always create a new canvas (never overwrite existing ones).
+      // Use raw SQL to avoid ORM schema mismatch (e.g. missing page_id column).
+      const { sql: rawSql } = await import("drizzle-orm");
+      const [created] = await db.execute(rawSql`
+        INSERT INTO canvases (id, channel_id, workspace_id, title, content, created_by, pipeline_status, created_at, updated_at)
+        VALUES (gen_random_uuid(), ${channel.id}, ${workspaceId}, ${title}, ${content}, ${canvasAgentId!}, 'draft', now(), now())
+        RETURNING id
+      `) as unknown as [{ id: string }];
 
       return created.id;
     }
