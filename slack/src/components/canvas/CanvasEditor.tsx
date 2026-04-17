@@ -117,11 +117,7 @@ function CanvasListItem({ canvas, onSelect }: { canvas: CanvasSummary; onSelect:
             <p className="text-xs text-slate-500 truncate mt-0.5">{canvas.topic}</p>
           )}
         </div>
-        {status && (
-          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 text-white ${STATUS_COLORS[status]}`}>
-            {STATUS_LABELS[status]}
-          </span>
-        )}
+        {/* Pipeline status badge hidden — articles are tracked by canvas list */}
       </div>
       <p className="text-xs text-slate-600 mt-1.5">
         {formatRelativeTime(canvas.updatedAt)}
