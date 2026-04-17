@@ -2,7 +2,7 @@
 
 > Not a chatbot. Not an API call. A teammate — that joins channels, reads threads, uses tools, writes docs, and shows up in your workflow just like anyone else.
 
-![Login](docs/screenshots/01-login.png)
+![Agents and humans collaborating in a channel](docs/screenshots/00-hero.png)
 
 ---
 
@@ -113,22 +113,28 @@ checkAutoEngagement()
 
 ### Scenario Overview
 
+A war correspondent's source contacts the newsroom from a conflict zone. Every step — from source intake to publication — is either agent-assisted or cryptographically attested.
+
 ```
-#newsroom channel
-      │
-      ├── 🤖 Editor-in-Chief   (Build Agent — orchestrates the newsroom)
-      │         │  assigns coverage
-      │         ▼
-      ├── 🤖 Reporter Agent    (external A2A — researches & writes)
-      │         │  draft delivered
-      │         ▼
-      ├── 🤖 Fact-Checker      (runs inside TEE — verifies claims)
-      │         │  signed attestation
-      │         ▼
-      ├── 🤖 Publisher Agent   (writes to Canvas, posts to channel)
-      │         │  Slack Connect
-      │         ▼
-      └── 📰 Published Article → shared to external workspaces
+😰 Frightened source (Strait of Hormuz)
+      │  opens intake page, speaks to AI journalist
+      ▼
+🔐 Source Intake Agent    (NEAR AI Cloud TEE — Intel TDX + NVIDIA H200)
+      │  TLS terminates inside enclave · attestation badge per response
+      │  subpoena-proof by construction
+      │  structured brief → #war-desk channel
+      ▼
+🤖 Editor-in-Chief        (Build Agent — orchestrates the newsroom)
+      │  assigns coverage, routes to reporters
+      ▼
+🤖 Reporter Agents        (external A2A — research & corroborate)
+      │  MCP tools: web search, on-chain data, document parser
+      │  draft → Canvas
+      ▼
+🤖 Publisher Agent        (publishes to Canvas, posts to channel)
+      │  Slack Connect
+      ▼
+📰 Published Article      → shared to external workspaces
 ```
 
 ### Step 1: Set Up the Newsroom Channel
@@ -157,26 +163,45 @@ Reporter agents connected via external A2A URLs use MCP tools — web search, on
 
 ![Step 3 - Reporter Working](docs/screenshots/05-reporter.png)
 
-### Step 4: Fact-Checker Runs in TEE
+### Step 4: Source Interview Runs in TEE — War Desk Source Shield
 
-The draft is routed to the Fact-Checker Agent, which runs inside a **Trusted Execution Environment (TEE)**. The verification result carries a cryptographic attestation, recorded on the AIN blockchain — proving the check ran unmodified and the result wasn't tampered with.
+This is where the scenario earns its weight.
+
+A frightened source near the Strait of Hormuz wants to report a hostage situation. They open a chat with an AI journalist on the newsroom's intake page. Everything they say — names, locations, operational details — could get someone killed if it leaked.
+
+The source intake runs on **NEAR AI Cloud** (Intel TDX + NVIDIA H200 Confidential Compute). TLS terminates *inside* the model enclave. The plaintext of their words never exists outside the chip — not in logs, not in vendor storage, not anywhere.
 
 ![Step 4 - TEE Verification](docs/screenshots/06-tee-verify.png)
 
 ```
-🔐 TEE Attestation Report
-  Agent:           fact-checker-v2
-  Verified claims: 12 / 14
-  Failed claims:   2  (flagged for revision)
-  Signature:       0x4f3a...c12b
-  AIN block:       #28471923
+🔐 TEE Attestation — War Desk Source Shield
+  Provider:        NEAR AI Cloud (direct completions)
+  Hardware:        Intel TDX + NVIDIA H200 CC
+  intel_tdx:       PASS
+  nvidia_nras:     PASS
+  report_data:     bound · nonce + signing key verified
+  response_sig:    PASS
+  Signing address: 0x4f3a...c12b
 ```
+
+Every response carries this badge. The source — or anyone they trust — can re-verify against Intel and NVIDIA's public attestation services. **No vendor's word is required.**
+
+MCP enforces the policy at runtime: if the request is missing a `purpose_id`, or if a TEE-required route is attempted over a standard provider path, the call is denied and no model output is generated. The system is fail-closed.
 
 #### Why TEE?
 
-When an agent produces output, you have no way to verify it actually ran the code it claimed to. The model could be swapped, the prompt could be altered, the result could be fabricated. TEE solves this by running the agent inside a hardware-isolated enclave (e.g. Intel TDX, AWS Nitro) that produces a **remote attestation** — a signed proof that a specific, unmodified program ran and produced a specific output. No one — not even the operator — can tamper with what happened inside.
+The killer line:
 
-This matters most at org boundaries. When a reporter from one company sends a draft to a fact-checker at another company, the receiving team needs to trust the attestation, not the sender. TEE makes that possible without sharing secrets or trusting infrastructure.
+> *"Most newsroom intake forms ask you to trust the newsroom. This one doesn't ask you to trust anyone. The hardware proves it."*
+
+| Risk | Standard cloud LLM | NEAR AI Cloud TEE |
+|------|-------------------|-------------------|
+| Provider reads the conversation | ✅ Yes (abuse monitoring, 30-day retention) | ❌ No — TLS ends inside the chip |
+| Operator RAM-dumps the process | ✅ Possible | ❌ Memory is hardware-encrypted |
+| Subpoena to the AI vendor produces logs | ✅ Yes | ❌ Vendor has nothing readable to hand over |
+| Source must trust vendor's privacy claims | ✅ Trust-me model | ❌ Cryptographic proof per response |
+
+Subpoena defense by construction: the newsroom can be served with a gag order demanding source records. With a standard cloud LLM, those records exist in the vendor's logs. With TEE, *the plaintext never existed outside the enclave*. This is the strongest legal posture short of not running the service at all.
 
 ### Step 5: Article Published to Canvas
 
