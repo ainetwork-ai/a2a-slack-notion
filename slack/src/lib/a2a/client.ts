@@ -80,6 +80,7 @@ export async function sendA2AMessage(
   content: string;
   taskId?: string;
   contextId?: string;
+  responseMetadata?: Record<string, unknown>;
 }> {
   const messageParts: Array<{ kind: "text"; text: string }> = [
     { kind: "text", text },
@@ -130,6 +131,9 @@ export async function sendA2AMessage(
   }
 
   const result = data.result;
+  const resMeta = (result && typeof result === "object" && "metadata" in result)
+    ? (result as { metadata?: Record<string, unknown> }).metadata
+    : undefined;
 
   // Task response (has artifacts)
   if (result && typeof result === "object" && "artifacts" in result) {
@@ -148,6 +152,7 @@ export async function sendA2AMessage(
       content: textPart?.text || "No response",
       taskId: task.id,
       contextId: task.contextId,
+      responseMetadata: resMeta,
     };
   }
 
@@ -162,6 +167,7 @@ export async function sendA2AMessage(
       kind: "message",
       content: textPart?.text || "No response",
       contextId: msg.contextId,
+      responseMetadata: resMeta,
     };
   }
 

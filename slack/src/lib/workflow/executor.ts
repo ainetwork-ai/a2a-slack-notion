@@ -621,6 +621,12 @@ async function executeStep(
         channelId: trigger?.channelId,
       });
 
+      // If the agent returned structured metadata (e.g. verdict from confirm skill),
+      // return an object with both content and metadata so the workflow can use it.
+      const a2aMeta = (agentMessage.metadata as Record<string, unknown>)?.a2aResponseMeta as Record<string, unknown> | undefined;
+      if (a2aMeta && Object.keys(a2aMeta).length > 0) {
+        return { content: agentMessage.content, ...a2aMeta };
+      }
       return agentMessage.content;
     }
 

@@ -153,6 +153,7 @@ export async function sendToAgent(params: {
         a2aTaskId: response.taskId,
         a2aContextId: response.contextId,
         agentName,
+        ...(response.responseMetadata && { a2aResponseMeta: response.responseMetadata }),
       };
     } catch {
       content = "I'm currently unavailable. Please try again later.";
