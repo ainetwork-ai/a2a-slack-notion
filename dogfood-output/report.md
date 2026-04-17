@@ -247,3 +247,40 @@ None of the above could be exercised because a canvas could not be created in th
 - `screenshots/` — step-by-step repro screenshots for ISSUE-001.
 - `videos/` — empty (recording unavailable; ffmpeg not installed in the dogfood environment).
 - `auth-state.json` — not saved (ephemeral key, not worth persisting).
+
+---
+
+## 2026-04-17 — Notion block editor wiring (re-verification)
+
+**Result: ✅ PASS — Notion-integrated canvas creation and block editor features verified end-to-end on local dev (`http://localhost:3004`).**
+
+### What was changed
+
+1. `slack/src/app/api/channels/[channelId]/canvas/route.ts` (POST)
+   - Creates a root Notion `blocks` row (`type='page'`, self-referential `page_id`) in a transaction, then links `canvases.page_id` to it.
+   - Exposes `pageId` in returned columns.
+2. `slack/src/app/api/channels/[channelId]/canvases/route.ts` (GET list)
+   - Returns `pageId` for each canvas row so the client can switch into block-tree mode.
+3. `slack/src/components/canvas/CanvasEditor.tsx`
+   - When the opened canvas has `pageId`, renders `<NotionPage pageId mode="panel" />` (block tree editor) instead of the markdown textarea. Legacy canvases with null `pageId` still fall back to the textarea.
+
+### Repro / verification
+
+1. Navigate to `canvas-test` channel.
+2. Click **Canvas** button in the channel header → panel opens with list.
+3. Click **+ New canvas** → panel immediately shows block editor for `#canvas-test canvas 4`.
+4. Type `/` → command menu appears (Text, Heading 1, Heading 2, Heading 3, Bullet List …).
+   - See `screenshots/canvas-slash-menu-works.png`.
+5. Select **Heading 1** → text "Important Heading" renders as H1.
+6. Press Enter → new block.
+7. Type `/`, navigate to **Bullet List**, Enter → type "Bullet item one", Enter → "Bullet item two". Both render as a bulleted list.
+   - See `screenshots/canvas-notion-rendered.png`.
+
+### Evidence
+
+- `screenshots/canvas-slash-menu-works.png` — slash menu open over the editor
+- `screenshots/canvas-notion-rendered.png` — H1 + bulleted list rendered correctly inside canvas panel
+
+### Conclusion
+
+All three original issues (ISSUE-001/002/003) are resolved on local dev, and the Notion block editor is wired into the channel canvas panel. Slash commands, headings and bulleted lists all function inside a newly-created canvas, confirming the POST endpoint now bootstraps a linked Notion page and the UI switches into block-tree mode automatically when a canvas has a `pageId`.

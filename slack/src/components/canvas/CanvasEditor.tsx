@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { X, Eye, Edit3, Loader2, FileText, ChevronLeft, Plus, Trash2, Search } from 'lucide-react';
 import { useToast } from '@/components/ui/toast-provider';
 import { CanvasMarkdown } from '@/lib/canvas/CanvasMarkdown';
+import NotionPage from '@/components/notion/NotionPage';
 
 type PipelineStatus = 'draft' | 'edited' | 'fact-checked' | 'published' | null;
 
@@ -16,6 +17,7 @@ interface CanvasSummary {
   updatedAt: string;
   createdAt: string;
   updatedByName: string | null;
+  pageId?: string | null;
 }
 
 interface Canvas extends CanvasSummary {
@@ -873,21 +875,28 @@ export default function CanvasEditor({ channelId, onClose }: CanvasEditorProps) 
             </div>
 
             {/* Content */}
-            <div className="flex-1 overflow-auto px-3.5 pb-3.5">
-              {mode === 'edit' ? (
-                <textarea
-                  value={content}
-                  onChange={e => { setContent(e.target.value); scheduleSave(title, e.target.value, topic); }}
-                  onBlur={handleBlur}
-                  className="w-full h-full min-h-[200px] bg-white/5 border border-white/10 rounded p-2.5 text-[15px] text-slate-200 font-mono leading-relaxed focus:outline-none focus:border-white/20 resize-none placeholder-slate-600"
-                  placeholder="Write markdown here…"
-                />
-              ) : (
-                <div className="prose prose-invert prose-base max-w-none text-slate-200 text-[15px] leading-relaxed">
-                  <CanvasMarkdown content={content || '_No content yet._'} />
-                </div>
-              )}
-            </div>
+            {canvas.pageId ? (
+              // Notion block-tree editor: slash commands, rich text, headings, bullets, etc.
+              <div className="flex-1 min-h-0 overflow-hidden">
+                <NotionPage pageId={canvas.pageId} mode="panel" />
+              </div>
+            ) : (
+              <div className="flex-1 overflow-auto px-3.5 pb-3.5">
+                {mode === 'edit' ? (
+                  <textarea
+                    value={content}
+                    onChange={e => { setContent(e.target.value); scheduleSave(title, e.target.value, topic); }}
+                    onBlur={handleBlur}
+                    className="w-full h-full min-h-[200px] bg-white/5 border border-white/10 rounded p-2.5 text-[15px] text-slate-200 font-mono leading-relaxed focus:outline-none focus:border-white/20 resize-none placeholder-slate-600"
+                    placeholder="Write markdown here…"
+                  />
+                ) : (
+                  <div className="prose prose-invert prose-base max-w-none text-slate-200 text-[15px] leading-relaxed">
+                    <CanvasMarkdown content={content || '_No content yet._'} />
+                  </div>
+                )}
+              </div>
+            )}
           </>
         ) : (
           // ── List view ────────────────────────────────────────────────────────
