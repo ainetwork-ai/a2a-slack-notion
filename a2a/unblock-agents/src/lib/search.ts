@@ -86,8 +86,8 @@ export async function searchForReport(source: string): Promise<string> {
 
   // Step 1: generate 3 queries from the source.
   const queryPrompt =
-    `다음 기사 자료를 바탕으로, 이 주제를 더 조사하는 데 도움이 될 구체적인 웹 검색 쿼리 3개를 생성하세요. ` +
-    `번호나 추가 텍스트 없이 한 줄에 하나씩 쿼리만 반환하세요.\n\n<자료>\n${source}`;
+    `Based on the following article source, generate 3 specific web search queries that would help investigate this topic further. ` +
+    `Return only the queries, one per line, without numbering or additional text.\n\n<Source>\n${source}`;
 
   let queries: string[] = [];
   try {
@@ -109,11 +109,11 @@ export async function searchForReport(source: string): Promise<string> {
   // first timeRange that returns results.
   const TIME_RANGES: Array<string | undefined> = ['day', 'week', 'month', undefined];
   const TIME_RANGE_LABELS: Record<string, string> = {
-    day: '최근 1일 이내',
-    week: '최근 1주 이내',
-    month: '최근 1개월 이내',
+    day: 'within last 24 hours',
+    week: 'within last week',
+    month: 'within last month',
   };
-  const NO_RANGE_LABEL = '기간 미상';
+  const NO_RANGE_LABEL = 'date unknown';
 
   interface TaggedResult extends SearchResult {
     timeRangeLabel: string;

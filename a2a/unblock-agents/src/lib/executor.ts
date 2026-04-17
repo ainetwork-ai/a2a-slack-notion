@@ -28,7 +28,7 @@ export class UnblockExecutor implements AgentExecutor {
   /**
    * Substitute `^VAR^` placeholders in a pipeline prompt with values the
    * caller supplied in `metadata.variables`. Any placeholder the caller
-   * did not provide is replaced with a visible "(제공되지 않음)" marker so
+   * did not provide is replaced with a visible "(not provided)" marker so
    * the LLM treats it as a missing field rather than a literal token.
    *
    * Keys in `variables` match the placeholder name without the carets —
@@ -50,7 +50,7 @@ export class UnblockExecutor implements AgentExecutor {
     }
     // Scrub any ^VAR^ the caller didn't provide so the LLM doesn't echo
     // the literal placeholder back into its response.
-    out = out.replace(/\^[A-Z_]+\^/g, '(제공되지 않음)');
+    out = out.replace(/\^[A-Z_]+\^/g, '(not provided)');
     return out;
   }
 
@@ -91,8 +91,8 @@ export class UnblockExecutor implements AgentExecutor {
     const skillPrompt = this.substituteVariables(raw, vars);
     const authoritativeDate =
       `⚠ CURRENT DATE (authoritative, KST): ${todayValue}\n` +
-      `위 날짜는 서버 시계 기준이며 반드시 그대로 사용하세요. ` +
-      `학습 데이터 시점으로 "보정"하지 마세요. 이 날짜가 미래처럼 느껴져도 실제 오늘입니다.`;
+      `This date is from the server clock and must be used as-is. ` +
+      `Do NOT "correct" it to your training data cutoff. Even if this date feels like the future, it is today.`;
 
     // Append Tavily search results as a `<Web Search Results>` block at
     // the end, matching the exact section name the Notion pipeline
@@ -163,7 +163,7 @@ export class UnblockExecutor implements AgentExecutor {
     try {
       const responseText = await callLLM([
         { role: 'system', content: systemPrompt },
-        { role: 'user', content: userText || '안녕하세요.' },
+        { role: 'user', content: userText || 'Hello.' },
       ]);
 
       const replyMeta: Record<string, unknown> = {};
@@ -175,7 +175,7 @@ export class UnblockExecutor implements AgentExecutor {
         const verdictResponse = await callLLM([
           {
             role: 'user',
-            content: `다음은 편집국장이 기자의 기사에 대해 내린 판정입니다. 이 판정이 "승인"인지 "반려"인지 판단해서, true 또는 false 한 단어로만 답하세요. 승인이면 true, 반려이면 false.\n\n"""${responseText}"""`,
+            content: `The following is an editor-in-chief's verdict on a reporter's article. Determine whether this verdict is an "approval" or a "rejection", and respond with only one word: true or false. Approval = true, Rejection = false.\n\n"""${responseText}"""`,
           },
         ]);
         replyMeta.approved = verdictResponse.trim().toLowerCase() === 'true';
