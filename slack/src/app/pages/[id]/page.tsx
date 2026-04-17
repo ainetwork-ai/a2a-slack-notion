@@ -1,4 +1,4 @@
-import NotionPage from '@/components/notion/NotionPage';
+import PageFullClient from './PageFullClient';
 
 export default async function FullPageRoute({
   params,
@@ -6,9 +6,5 @@ export default async function FullPageRoute({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  return (
-    <div className="flex h-screen w-screen bg-[#1a1d21]">
-      <NotionPage pageId={id} mode="full" />
-    </div>
-  );
+  return <PageFullClient pageId={id} />;
 }
