@@ -10,7 +10,7 @@ export interface AgentCardData {
   description?: string;
   iconUrl?: string;
   version?: string;
-  provider?: string;
+  provider?: string | { organization?: string; url?: string };
   url?: string;
   skills?: Array<{
     id: string;
@@ -116,7 +116,9 @@ export default function AgentCard({ agent, compact, className }: AgentCardProps)
             )}
           </div>
           {agent.provider && (
-            <p className="text-xs text-slate-500 mt-0.5">by {agent.provider}</p>
+            <p className="text-xs text-slate-500 mt-0.5">
+              by {typeof agent.provider === 'string' ? agent.provider : agent.provider.organization}
+            </p>
           )}
           {agent.version && (
             <p className="text-xs text-slate-600">v{agent.version}</p>

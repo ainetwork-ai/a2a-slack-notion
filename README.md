@@ -62,9 +62,6 @@ Say one reporter establishes a confidential source inside Iran. Normally that so
 - *[WikiLeaks Afghan War Diary, 2010](https://www.cbsnews.com/news/wikileaks-reportedly-outs-100s-of-afghan-informants/)* — hundreds of Afghan informants were named in the leak; the Taliban publicly stated "we know how to punish them."
 - *[Jamal Khashoggi, 2018](https://www.washingtonpost.com/nation/interactive/2021/hanan-elatr-phone-pegasus/)* — Pegasus spyware on an associate's phone exposed Khashoggi's private comms to Saudi intelligence; he was murdered in the Istanbul consulate months later.
 - *[Reality Winner / The Intercept, 2017](https://theintercept.com/2017/06/06/how-reality-winner-the-alleged-nsa-leaker-got-caught/)* — printer microdots in a document shared across orgs led the FBI to the source within days.
-- *[NYT v. OpenAI ChatGPT preservation order, 2025](https://news.bloomberglaw.com/ip-law/openai-must-turn-over-20-million-chatgpt-logs-judge-affirms)* — a federal judge ordered OpenAI to retain **all ChatGPT logs indefinitely**, including deleted conversations. If a source had spoken to a standard cloud LLM, their words would now be discoverable.
-- *[Samsung / ChatGPT leak, 2023](https://www.bleepingcomputer.com/news/security/samsung-fab-workers-leak-confidential-data-while-using-chatgpt/)* — employees pasted confidential code into ChatGPT; the data sits on OpenAI's servers, unrecoverable.
-- *[OpenAI Redis bug, March 2023](https://openai.com/index/march-20-chatgpt-outage/)* — other users could briefly see each other's conversation titles and billing info. Breaches happen.
 
 A subpoena reaches vendor logs. An insider with production access can read the data. A misconfigured library can leak the conversation to another customer. Each of these failure modes has already killed or jailed people.
 
