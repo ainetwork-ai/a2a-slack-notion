@@ -39,6 +39,7 @@
   --z-slash-menu: 70;
 
   /* Motion */
+  --duration-hover: 20ms;
   --duration-micro: 100ms;
   --duration-short: 150ms;
   --duration-medium: 200ms;
@@ -184,7 +185,7 @@ button, input, select, textarea {
 }
 
 .slash-command-menu {
-  animation: slash-fade-in 100ms ease-out;
+  animation: menu-fade-in var(--duration-short) ease-out;
 }
 
 @keyframes spin {
@@ -216,7 +217,8 @@ button, input, select, textarea {
   background: none;
   border: none;
   padding: 0;
-  transition: background-color 100ms ease, color 100ms ease;
+  transition: background-color var(--duration-hover) ease,
+              color var(--duration-hover) ease;
 }
 
 .block-handle-btn:hover {
@@ -248,6 +250,26 @@ button, input, select, textarea {
 @keyframes menu-fade-in {
   from { opacity: 0; transform: translateY(-4px); }
   to   { opacity: 1; transform: translateY(0); }
+}
+
+.animate-dropdown-in {
+  animation: menu-fade-in var(--duration-short) ease-out forwards;
+}
+
+@keyframes menu-fade-out {
+  from { opacity: 1; transform: translateY(0); }
+  to   { opacity: 0; transform: translateY(-4px); }
+}
+.animate-dropdown-out {
+  animation: menu-fade-out 100ms ease-in forwards;
+}
+
+@keyframes modal-slide-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-modal-in {
+  animation: modal-slide-up var(--duration-medium) ease-out forwards;
 }
 
 /* Block selection highlight */
@@ -335,4 +357,50 @@ button, input, select, textarea {
 @keyframes pulse-highlight {
   0%, 100% { background-color: rgb(147 197 253 / 0.4); }
   50% { background-color: rgb(147 197 253 / 0.7); }
+}
+
+/* =============================================
+   Notion UI Utilities
+   ============================================= */
+
+@layer utilities {
+  .notion-hover {
+    border-radius: 3px;
+    transition: background-color var(--duration-hover) ease,
+                color var(--duration-hover) ease;
+  }
+  .notion-hover:hover {
+    background-color: var(--bg-hover);
+  }
+  .notion-hover:active {
+    background-color: var(--bg-active);
+  }
+
+  .notion-menu {
+    background: var(--bg-default);
+    border-radius: 6px;
+    box-shadow: var(--shadow-menu);
+    padding: 6px;
+    min-width: 180px;
+  }
+
+  .notion-focus-ring:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px var(--accent-blue);
+  }
+
+  .notion-divider-line {
+    height: 1px;
+    background: var(--divider);
+    margin: 4px 0;
+  }
+
+  .notion-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
+    transition: scrollbar-color 200ms ease;
+  }
+  .notion-scrollbar:hover {
+    scrollbar-color: var(--text-tertiary) transparent;
+  }
 }
