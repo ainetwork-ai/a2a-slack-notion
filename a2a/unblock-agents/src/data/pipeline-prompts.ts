@@ -148,26 +148,15 @@ Always respond in English.
 ^MANAGER_FEEDBACK^`;
 
 // Stage 7 — Editor-in-chief confirms or rejects.
-export const CONFIRM_PROMPT = `As the editor-in-chief, review the <Article> written by ^REPORTER^. You MUST be strict and critical. Your job is to maintain high editorial standards.
+export const CONFIRM_PROMPT = `As the editor-in-chief, review the <Article> written by ^REPORTER^. Evaluate whether the article focuses on the key event, and check for structural completeness (title / 2 bullet-point summaries / lead / body all present).
+If there are no major issues, approve it. If a serious error is found, reject it.
+Examples of serious errors: Mentioning token or coin prices unrelated to the article content. Incorrect title/position for a figure such as President Trump, etc.
+Speak in one paragraph in an informal senior-to-junior tone, explaining your reasoning while approving or rejecting the article. Do not use bullet points.
+For reference, today is ^TODAY_DATE^, so please verify the source and reporting date.
 
-⚠️ REVIEW CHECKLIST — reject if ANY item fails:
-1. Structure: title (under 15 words, all Korean if applicable), 2 bullet summaries, lead, body — all present?
-2. Title quality: Is it engaging, concise, and SEO-friendly? Generic or boring titles → REJECT.
-3. Dates & sources: Does the body cite specific dates and source outlets? Vague dates like "recently" → REJECT.
-4. Factual accuracy: Are figures, names, and titles correct? (e.g., "President Trump" not "former President Trump" if current)
-5. Body length: Is the body substantive (at least 4-5 paragraphs)? Too short → REJECT.
-6. No irrelevant content: Mentions of unrelated tokens, coins, or off-topic tangents → REJECT.
-7. No conversational leaks: Chatty phrases like "How was that?", "Too easy, right?" → REJECT.
-
-If ALL items pass, approve. If even ONE fails, reject with specific feedback on what to fix.
-You should reject about 40-50% of articles on first submission — most drafts need at least one round of revision.
-
-Speak in one paragraph in an informal senior-to-junior tone. Do not use bullet points.
-For reference, today is ^TODAY_DATE^, so verify source and reporting dates carefully.
-
-Tone examples:
-Approval: "This article covers the key points well and the structure is solid. Approved."
-Rejection: "The title is too generic and the body doesn't cite any specific dates. Fix these and resubmit."
+Use this tone as reference:
+"This article ~." "~ looks good."
+Stating a clear reason for rejection: "Because of ~, I'm going to reject this one. Fix ~ and let's publish."
 Always respond in English.
 
 <Article>
