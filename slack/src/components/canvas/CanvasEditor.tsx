@@ -1,10 +1,12 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { X, Eye, Edit3, Loader2, FileText, ChevronLeft, Plus, Trash2, Search } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { X, Eye, Edit3, Loader2, FileText, ChevronLeft, Plus, Trash2, Search, Maximize2 } from 'lucide-react';
 import { useToast } from '@/components/ui/toast-provider';
 import { CanvasMarkdown } from '@/lib/canvas/CanvasMarkdown';
 import NotionCanvasFrame from '@/components/canvas/NotionCanvasFrame';
+import { seamlessNavigate } from '@/lib/notion/transitions';
 
 type PipelineStatus = 'draft' | 'edited' | 'fact-checked' | 'published' | null;
 
@@ -165,6 +167,7 @@ function parseCanvasList(data: unknown): { canvases: CanvasSummary[]; nextCursor
 
 export default function CanvasEditor({ channelId, onClose }: CanvasEditorProps) {
   const { showToast } = useToast();
+  const router = useRouter();
   const [canvasList, setCanvasList] = useState<CanvasSummary[]>([]);
   const [nextCursor, setNextCursor] = useState<string | undefined>(undefined);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -185,6 +188,10 @@ export default function CanvasEditor({ channelId, onClose }: CanvasEditorProps) 
   const [confirmDelete, setConfirmDelete] = useState(false);
   // Subtask #6: conflict banner state — populated when server returns 409
   const [conflict, setConflict] = useState<Canvas | null>(null);
+  // F4 + F7: when iframe fails (or user opts out via "Switch to markdown"),
+  // force the legacy markdown branch for this canvas in this session.
+  // Reset on openCanvas so a fresh canvas starts with the iframe again.
+  const [forceMarkdown, setForceMarkdown] = useState(false);
   // Subtask #4: interactive pipeline state
   const [pipelineBusy, setPipelineBusy] = useState(false);
   const [myChannelRole, setMyChannelRole] = useState<string | null>(null);
@@ -326,6 +333,9 @@ export default function CanvasEditor({ channelId, onClose }: CanvasEditorProps) 
         setSaveError(false);
         setLastSavedAt(null);
         setConflict(null);
+        // F4: ensure a fresh canvas opens with the iframe (not stuck on markdown
+        // fallback from a previous canvas in this session).
+        setForceMarkdown(false);
         baseUpdatedAtRef.current = data.updatedAt ?? null;
       })
       .catch(() => {
@@ -347,6 +357,15 @@ export default function CanvasEditor({ channelId, onClose }: CanvasEditorProps) 
     // Refresh list (autoOpen=false so we don't re-trigger single-canvas auto-open)
     loadList({ q: debouncedQuery });
   }
+
+  // ── F4: panel → full-page expand via View Transitions ────────────────────────
+  // Only meaningful when canvas.pageId is set (Notion-block canvases). Wraps
+  // router.push in seamlessNavigate so the persistent iframe morphs from the
+  // 320 px sidebar into the centered full-page column in one flight.
+  const handleExpand = useCallback(() => {
+    if (!canvas?.pageId) return;
+    seamlessNavigate(() => router.push(`/pages/${canvas.pageId}`));
+  }, [canvas?.pageId, router]);
 
   // ── Fix #5: show "Saved ✓" label for 2 s after a successful save ─────────────
   function markSaved() {
@@ -721,6 +740,16 @@ export default function CanvasEditor({ channelId, onClose }: CanvasEditorProps) 
         <div className="flex items-center gap-1 shrink-0">
           {canvas && (
             <>
+              {/* F4: Expand to full page — only for Notion-block canvases */}
+              {canvas.pageId && !forceMarkdown && (
+                <button
+                  onClick={handleExpand}
+                  title="Open full page"
+                  className="p-1.5 rounded text-slate-400 hover:text-white hover:bg-white/5 transition-colors"
+                >
+                  <Maximize2 className="w-4 h-4" />
+                </button>
+              )}
               <button
                 onClick={() => setMode('edit')}
                 title="Edit (Cmd+E)"
@@ -875,11 +904,16 @@ export default function CanvasEditor({ channelId, onClose }: CanvasEditorProps) 
             </div>
 
             {/* Content */}
-            {canvas.pageId ? (
+            {canvas.pageId && !forceMarkdown ? (
               // Notion block-tree editor rendered inside a persistent same-origin iframe.
               // View Transitions morph via `notion-frame-${pageId}` name.
               <div className="flex-1 min-h-0 overflow-hidden">
-                <NotionCanvasFrame pageId={canvas.pageId} mode="panel" />
+                <NotionCanvasFrame
+                  pageId={canvas.pageId}
+                  mode="panel"
+                  onExpand={handleExpand}
+                  onSwitchToMarkdown={() => setForceMarkdown(true)}
+                />
               </div>
             ) : (
               <div className="flex-1 overflow-auto px-3.5 pb-3.5">
