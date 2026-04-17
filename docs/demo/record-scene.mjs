@@ -23,7 +23,7 @@ const SCENES_DIR = path.join(__dirname, "scenes");
 const SLACK = "http://localhost:3004";
 const TEE = "https://war-desk-source-shield.vercel.app";
 const PRIVATE_KEY = "b796e8971f2c5c909a2178fb3fc1970f317adb1e9237d950d8fcdd5f5e1d7e42";
-const CANVAS_URL = `${SLACK}/workspace/channel/unblockmedia-test-1?canvas=20e6ae67-9dde-495b-bcf8-a2457538110a`;
+const CANVAS_URL = `${SLACK}/workspace/channel/unblockmedia-test-1?canvas=1`;
 
 const SCENE_DURATIONS = {
   newsroom: 8,
@@ -134,16 +134,27 @@ async function scene_tee_answer(page) {
 }
 
 async function scene_canvas(page) {
-  await page.goto(CANVAS_URL, { waitUntil: "domcontentloaded" });
+  await page.goto(`${SLACK}/workspace/channel/unblockmedia-test-1`, { waitUntil: "domcontentloaded" });
+  await page.waitForSelector(".message-area", { timeout: 15000 });
   await hideOverlay(page);
-  await page.waitForSelector("text=#unblockmedia-test-1", { timeout: 10000 }).catch(() => {});
-  await page.evaluate(() => {
-    const row = Array.from(document.querySelectorAll("*")).find(
-      (el) => el.textContent?.trim() === "buidlhack — Research",
-    );
-    row?.click();
+  // Click the Canvas button in the channel header to open the canvas panel
+  await page.locator('button[title="Canvas"]').first().click({ force: true }).catch(() => {});
+  await sleep(2500);
+  const clicked = await page.evaluate(() => {
+    const vw = window.innerWidth;
+    const buttons = Array.from(document.querySelectorAll('button'));
+    const inRight = buttons.filter((b) => {
+      const r = b.getBoundingClientRect();
+      return r.left > vw * 0.55 && r.width > 150 && r.height > 30;
+    });
+    const pref = inRight.find((b) => /Research/i.test(b.textContent ?? ''))
+      ?? inRight.find((b) => /ago|just now/i.test(b.textContent ?? ''))
+      ?? inRight[0];
+    if (pref) { pref.click(); return pref.textContent?.trim().slice(0, 80) ?? ''; }
+    return null;
   });
-  await page.waitForSelector("text=Market Research", { timeout: 15000 }).catch(() => {});
+  console.log('[canvas] clicked row:', clicked);
+  await sleep(2500);
 }
 
 const HANDLERS = {
