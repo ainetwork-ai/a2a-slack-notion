@@ -404,3 +404,59 @@ button, input, select, textarea {
     scrollbar-color: var(--text-tertiary) transparent;
   }
 }
+
+/* =============================================
+   Notion Editor Typography
+   ============================================= */
+
+@layer components {
+  /* Placeholder */
+  .notion-editor .tiptap p.is-editor-empty:first-child::before,
+  .notion-editor .tiptap .is-empty::before {
+    color: var(--text-placeholder);
+    content: attr(data-placeholder);
+    float: left;
+    height: 0;
+    pointer-events: none;
+  }
+
+  /* Inline code */
+  .notion-editor .tiptap code:not(pre code) {
+    background: rgba(135, 131, 120, 0.15);
+    border-radius: 3px;
+    padding: 0.2em 0.4em;
+    font-size: 0.875em;
+    font-family: var(--font-mono);
+    color: var(--color-red);
+  }
+
+  /* Link */
+  .notion-editor .tiptap a {
+    color: var(--accent-blue);
+    text-decoration: none;
+    cursor: pointer;
+  }
+  .notion-editor .tiptap a:hover {
+    text-decoration: underline;
+  }
+
+  /* Bold — Notion uses 600 not 700 */
+  .notion-editor .tiptap strong {
+    font-weight: 600;
+  }
+
+  /* Code block */
+  .notion-editor .tiptap pre {
+    background: rgba(135, 131, 120, 0.15);
+    border-radius: 6px;
+    padding: 12px 16px;
+    overflow-x: auto;
+  }
+  .notion-editor .tiptap pre code {
+    background: none;
+    padding: 0;
+    border-radius: 0;
+    color: var(--text-primary);
+    font-size: 14px;
+  }
+}
