@@ -34,7 +34,7 @@ export default function Home() {
         }
         router.replace('/onboarding');
       } catch {
-        router.replace('/onboarding');
+        router.replace('/login');
       }
     })();
   }, []);

@@ -82,7 +82,7 @@ describe('T6: Demo skip button', () => {
     vi.mocked(useAccount).mockReturnValue({
       address: '0x1234567890abcdef',
       isConnected: true,
-    } as ReturnType<typeof useAccount>)
+    } as unknown as ReturnType<typeof useAccount>)
 
     // Make fetch hang so isLoading stays true
     global.fetch = vi.fn(() => new Promise(() => {})) as unknown as typeof fetch
