@@ -77,7 +77,7 @@ interface PipelineInfo {
   ended_at?: Date;
 }
 
-const DEFAULT_BASE_URL = "https://a2a-slack-notion.vercel.app";
+const DEFAULT_BASE_URL = "https://a2a-agents.vercel.app";
 
 export default function ScriptRunner() {
   const [scripts, setScripts] = useState<ScriptInfo[]>([]);

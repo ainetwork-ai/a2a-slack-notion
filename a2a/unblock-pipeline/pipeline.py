@@ -3,7 +3,7 @@
 Unblock Media 편집 파이프라인 러너 + 검증기.
 
 Vercel에 배포된 unblock-agents A2A 서버(기본
-https://a2a-slack-notion.vercel.app)의 10개 에이전트를 호출해 0~8단계를
+https://a2a-agents.vercel.app)의 10개 에이전트를 호출해 0~8단계를
 순서대로 실행하고, 각 단계 산출물이 다음 단계가 요구하는 형태를 갖추었는지
 자동 검증한다.
 
@@ -85,7 +85,7 @@ REPORTER_TO_MANAGER: dict[str, str] = {
 EDITOR_IN_CHIEF = "unblock-damien"
 DESIGNER = "unblock-olive"
 
-DEFAULT_BASE_URL = "https://a2a-slack-notion.vercel.app"
+DEFAULT_BASE_URL = "https://a2a-agents.vercel.app"
 
 ALL_AGENT_IDS: list[str] = (
     list(REPORTERS.keys()) + list(MANAGERS.keys()) + [EDITOR_IN_CHIEF, DESIGNER]

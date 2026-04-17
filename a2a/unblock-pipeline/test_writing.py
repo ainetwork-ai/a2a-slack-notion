@@ -51,7 +51,7 @@ MANAGERS: dict[str, dict[str, str]] = {
 }
 
 EDITOR_IN_CHIEF = "unblock-damien"
-DEFAULT_BASE_URL = "https://a2a-slack-notion.vercel.app"
+DEFAULT_BASE_URL = "https://a2a-agents.vercel.app"
 
 # ─────────────────────────────────────────────────────────────
 # 주제별 샘플 기사

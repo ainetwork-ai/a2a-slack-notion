@@ -1,0 +1,29 @@
+[
+  {
+    "url": "https://a2a-builder.ainetwork.ai/api/agents/max-test-1776171314093",
+    "card": {
+      "name": "Max-test",
+      "description": "언블록미디어 기자 맥스 테스트 에이전트 생성",
+      "protocolVersion": "0.3.0",
+      "version": "0.1.0",
+      "url": "https://a2a-builder.ainetwork.ai/api/agents/max-test-1776171314093",
+      "capabilities": {},
+      "defaultInputModes": [
+        "text"
+      ],
+      "defaultOutputModes": [
+        "text"
+      ],
+      "skills": [
+        {
+          "id": "skill-1776177278889",
+          "name": "report",
+          "description": "",
+          "tags": []
+        }
+      ]
+    },
+    "fetchedAt": "2026-04-14T14:31:37.249Z",
+    "updatedAt": "2026-04-14T14:45:11.720Z"
+  }
+]

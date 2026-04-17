@@ -21,7 +21,7 @@ import {
 
 // ───────────────────────────── constants ─────────────────────────────
 
-const DEFAULT_BASE_URL = "https://a2a-slack-notion.vercel.app";
+const DEFAULT_BASE_URL = "https://a2a-agents.vercel.app";
 
 interface AgentDef {
   id: string;
