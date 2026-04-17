@@ -170,6 +170,13 @@ export class UnblockExecutor implements AgentExecutor {
       if (skillId) replyMeta.skillId = skillId;
       if (debug) replyMeta.systemPrompt = systemPrompt;
 
+      // For confirm skill: analyze response and include structured verdict in metadata.
+      // Returns boolean `approved` so workflow loop's `until` check works directly.
+      if (skillId === 'confirm') {
+        const hasReject = /반려/.test(responseText);
+        replyMeta.approved = !hasReject;
+      }
+
       const reply: Message = {
         kind: 'message',
         messageId: uuidv4(),
