@@ -81,17 +81,14 @@ function resolveVarPath(vars: Record<string, unknown>, path: string): unknown {
 }
 
 function parseVerdictResponse(text: string): { approved: boolean } {
-  const hasApprove = /승인|발행/.test(text);
+  // Only "승인" counts as approval. "발행" is excluded because Damien
+  // often says "수정하고 발행하자" (fix and then publish) in rejections.
+  const hasApprove = /승인/.test(text);
   const hasReject = /반려/.test(text);
 
-  if (hasApprove && hasReject) {
-    // Both present — last occurrence wins
-    const lastApprove = Math.max(text.lastIndexOf("승인"), text.lastIndexOf("발행"));
-    const lastReject = text.lastIndexOf("반려");
-    return { approved: lastApprove > lastReject };
-  }
   if (hasReject) return { approved: false };
-  // Default to approved (승인 found, or neither — avoid infinite loops)
+  if (hasApprove) return { approved: true };
+  // Neither found — default to approved to avoid infinite loops
   return { approved: true };
 }
 
