@@ -1,0 +1,11 @@
+packages:
+  - "slack"
+  - "notion/apps/*"
+  - "notion/packages/*"
+
+onlyBuiltDependencies:
+  - "@tailwindcss/oxide"
+  - "bcrypt"
+  - "canvas"
+  - "esbuild"
+  - "sharp"

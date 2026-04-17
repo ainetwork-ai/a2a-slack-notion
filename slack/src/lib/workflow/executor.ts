@@ -850,6 +850,56 @@ async function executeStep(
       return canvas.id;
     }
 
+    case "notion_create_page": {
+      const { handleNotionCreatePage } = await import("./step-handlers/notion-create-page");
+      const triggeredBy = (vars.triggeredBy as string | undefined) ?? "";
+      const result = await handleNotionCreatePage({
+        workspaceId: substituteVariables(step.workspaceId, vars),
+        title: substituteVariables(step.title, vars),
+        parentPageId: step.parentPageId ? substituteVariables(step.parentPageId, vars) : undefined,
+        blockMarkdown: step.blockMarkdown ? substituteVariables(step.blockMarkdown, vars) : undefined,
+        createdBy: triggeredBy,
+      });
+      if (!result.ok) throw new Error(`notion_create_page failed: ${result.error}`);
+      return result;
+    }
+
+    case "notion_append_block": {
+      const { handleNotionAppendBlock } = await import("./step-handlers/notion-append-block");
+      const triggeredBy = (vars.triggeredBy as string | undefined) ?? "";
+      const result = await handleNotionAppendBlock({
+        pageId: substituteVariables(step.pageId, vars),
+        blockType: substituteVariables(step.blockType, vars),
+        content: substituteVariables(step.content, vars),
+        properties: step.properties,
+        createdBy: triggeredBy,
+      });
+      if (!result.ok) throw new Error(`notion_append_block failed: ${result.error}`);
+      return result;
+    }
+
+    case "notion_advance_status": {
+      const { handleNotionAdvanceStatus } = await import("./step-handlers/notion-advance-status");
+      const result = await handleNotionAdvanceStatus({
+        canvasId: substituteVariables(step.canvasId, vars),
+        nextStatus: substituteVariables(step.nextStatus, vars),
+      });
+      if (!result.ok) throw new Error(`notion_advance_status failed: ${result.error}`);
+      return result;
+    }
+
+    case "notion_notify": {
+      const { handleNotionNotify } = await import("./step-handlers/notion-notify");
+      const result = await handleNotionNotify({
+        pageId: substituteVariables(step.pageId, vars),
+        userIds: substituteVariables(step.userIds, vars),
+        title: substituteVariables(step.title, vars),
+        body: step.body ? substituteVariables(step.body, vars) : undefined,
+      });
+      if (!result.ok) throw new Error(`notion_notify failed: ${result.error}`);
+      return result;
+    }
+
     case "form":
     case "approval":
       // These are handled in executeSteps via executePausableStep

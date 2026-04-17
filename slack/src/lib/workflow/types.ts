@@ -80,6 +80,40 @@ export type WorkflowStep =
       steps: WorkflowStep[];
       maxIterations?: number;
       onMaxReached?: "continue" | "fail";
+    }
+  | {
+      /** Create a Notion-style page block inside the blocks table.
+       *  Returns { pageId } via saveAs. */
+      type: "notion_create_page";
+      workspaceId: string;
+      title: string;
+      parentPageId?: string;
+      blockMarkdown?: string;
+      saveAs?: string;
+    }
+  | {
+      /** Append a child block to an existing page.
+       *  Returns { blockId } via saveAs. */
+      type: "notion_append_block";
+      pageId: string;
+      blockType: string;
+      content: string;
+      properties?: Record<string, unknown>;
+      saveAs?: string;
+    }
+  | {
+      /** Advance a canvas pipeline status (e.g. draft → edited). */
+      type: "notion_advance_status";
+      canvasId: string;
+      nextStatus: "draft" | "edited" | "fact-checked" | "published";
+    }
+  | {
+      /** Send Notion-style notifications to one or more users. */
+      type: "notion_notify";
+      pageId: string;
+      userIds: string;
+      title: string;
+      body?: string;
     };
 
 export type WorkflowTrigger =

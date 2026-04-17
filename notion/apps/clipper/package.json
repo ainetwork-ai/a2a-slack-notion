@@ -1,0 +1,18 @@
+{
+  "name": "@notion/clipper",
+  "version": "0.1.0",
+  "description": "Browser extension (Manifest V3) that clips web pages into a slack-a2a Notion workspace.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite build --watch --mode development",
+    "build": "vite build",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.287",
+    "typescript": "^6.0.2",
+    "vite": "^6.0.7"
+  }
+}
