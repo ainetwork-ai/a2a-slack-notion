@@ -113,7 +113,7 @@ checkAutoEngagement()
 
 ### Scenario Overview
 
-A war correspondent's source contacts the newsroom from a conflict zone. Every step — from source intake to publication — is either agent-assisted or cryptographically attested.
+A source near the Strait of Hormuz has information about a hostage situation. They reach out to the newsroom. Every step — from that first message to publication — is either agent-assisted or cryptographically attested.
 
 ```
 😰 Frightened source (Strait of Hormuz)
@@ -121,8 +121,12 @@ A war correspondent's source contacts the newsroom from a conflict zone. Every s
       ▼
 🔐 Source Intake Agent    (NEAR AI Cloud TEE — Intel TDX + NVIDIA H200)
       │  TLS terminates inside enclave · attestation badge per response
-      │  subpoena-proof by construction
-      │  structured brief → #war-desk channel
+      │  subpoena-proof: plaintext never exists outside the chip
+      ▼
+📡 Slack Connect          ← NEAR Bounty ★
+      │  TEE-attested brief posted to #war-desk
+      │  partner newsrooms in other orgs see it instantly
+      │  attestation travels with the brief — no one has to trust anyone
       ▼
 🤖 Editor-in-Chief        (Build Agent — orchestrates the newsroom)
       │  assigns coverage, routes to reporters
@@ -131,10 +135,7 @@ A war correspondent's source contacts the newsroom from a conflict zone. Every s
       │  MCP tools: web search, on-chain data, document parser
       │  draft → Canvas
       ▼
-🤖 Publisher Agent        (publishes to Canvas, posts to channel)
-      │  Slack Connect
-      ▼
-📰 Published Article      → shared to external workspaces
+📰 Published Article      → Canvas in #war-desk channel
 ```
 
 ### Step 1: Set Up the Newsroom Channel
@@ -209,13 +210,21 @@ Once the fact-check passes, the Publisher Agent writes the final article to a Ca
 
 ![Step 5 - Published Article](docs/screenshots/07-canvas-article.png)
 
-### Step 6: Shared via Slack Connect [![NEAR Bounty](https://img.shields.io/badge/NEAR-Bounty-00C08B?logo=near&logoColor=white)](https://near.org)
+### Step 5: Brief Posted to #war-desk via Slack Connect [![NEAR Bounty](https://img.shields.io/badge/NEAR-Bounty-00C08B?logo=near&logoColor=white)](https://near.org)
 
-The TEE-attested article is shared to external workspaces via **Slack Connect** — a cross-organization channel where partner teams can read, comment, and collaborate without leaving their own workspace. The attestation travels with the article: readers can verify on-chain that the content was produced and fact-checked by the declared agents, under TEE guarantees.
+Once the source intake completes, the structured brief — containing `public_safe_brief`, `hold_back_items`, `verification_checklist`, and `source_exposure_risk_score` — is posted into `#war-desk` via **Slack Connect**.
 
-This is our answer to the NEAR bounty for **verifiable cross-org agent collaboration**: agents from different organizations work together, and every step of that collaboration is cryptographically auditable.
+Slack Connect means the channel is shared across organizational boundaries. Partner newsrooms (AP, Reuters, a local outlet on the ground) are in the same channel without being on the same infrastructure. The TEE attestation badge travels with the brief: every org can verify independently that the source's words were processed inside a NEAR AI Cloud enclave and never touched plaintext storage.
 
-![Step 6 - Slack Connect](docs/screenshots/08-slack-connect.png)
+No org has to trust the other. The hardware proves it.
+
+![Step 5 - Slack Connect](docs/screenshots/08-slack-connect.png)
+
+### Step 6: Reporters Pick Up and Run the Story
+
+Editors and reporter agents in `#war-desk` — across multiple orgs — see the attested brief and begin corroborating. Reporter agents use MCP tools (web search, on-chain data, document parser) to gather supporting evidence. The final article is written to a Canvas in the channel.
+
+![Step 6 - Published Article](docs/screenshots/07-canvas-article.png)
 
 ### Full Flow
 
