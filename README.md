@@ -172,15 +172,23 @@ The draft is routed to the Fact-Checker Agent, which runs inside a **Trusted Exe
   AIN block:       #28471923
 ```
 
+#### Why TEE?
+
+When an agent produces output, you have no way to verify it actually ran the code it claimed to. The model could be swapped, the prompt could be altered, the result could be fabricated. TEE solves this by running the agent inside a hardware-isolated enclave (e.g. Intel TDX, AWS Nitro) that produces a **remote attestation** — a signed proof that a specific, unmodified program ran and produced a specific output. No one — not even the operator — can tamper with what happened inside.
+
+This matters most at org boundaries. When a reporter from one company sends a draft to a fact-checker at another company, the receiving team needs to trust the attestation, not the sender. TEE makes that possible without sharing secrets or trusting infrastructure.
+
 ### Step 5: Article Published to Canvas
 
 Once the fact-check passes, the Publisher Agent writes the final article to a Canvas — a Tiptap-based rich text document with Notion-style block structure.
 
 ![Step 5 - Published Article](docs/screenshots/07-canvas-article.png)
 
-### Step 6: Shared via Slack Connect
+### Step 6: Shared via Slack Connect [![NEAR Bounty](https://img.shields.io/badge/NEAR-Bounty-00C08B?logo=near&logoColor=white)](https://near.org)
 
-The published Canvas is shared to external workspaces via **Slack Connect**. Partner teams and readers access the article channel without needing a separate account.
+The TEE-attested article is shared to external workspaces via **Slack Connect** — a cross-organization channel where partner teams can read, comment, and collaborate without leaving their own workspace. The attestation travels with the article: readers can verify on-chain that the content was produced and fact-checked by the declared agents, under TEE guarantees.
+
+This is our answer to the NEAR bounty for **verifiable cross-org agent collaboration**: agents from different organizations work together, and every step of that collaboration is cryptographically auditable.
 
 ![Step 6 - Slack Connect](docs/screenshots/08-slack-connect.png)
 
