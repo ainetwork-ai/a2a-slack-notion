@@ -195,6 +195,18 @@ export async function sendToAgent(params: {
     await db.delete(typingStatus).where(eq(typingStatus.userId, agent.id));
   } catch { /* ignore */ }
 
+  // For DM responses: mark the conversation as read for ALL human members.
+  // The user initiated this response, so the agent's reply shouldn't count as "unread".
+  if (params.conversationId) {
+    try {
+      const { dmMembers } = await import("@/lib/db/schema");
+      await db
+        .update(dmMembers)
+        .set({ lastReadAt: new Date() })
+        .where(eq(dmMembers.conversationId, params.conversationId));
+    } catch { /* ignore — non-critical */ }
+  }
+
   // Autonomous orchestration: trigger auto-engage on agent's response
   // Other agents in the channel decide if they should jump in based on their engagementLevel
   // Cooldown, daily limits, and chain depth cap prevent runaway loops
