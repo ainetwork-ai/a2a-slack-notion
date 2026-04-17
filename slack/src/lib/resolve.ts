@@ -101,7 +101,15 @@ export async function resolveUserParam(param: string) {
     .from(users)
     .where(eq(users.a2aId, value))
     .limit(1);
-  return row ?? null;
+  if (row) return row;
+
+  // Fallback: look up by ainAddress for agents created before a2aId was stored
+  const [rowByAin] = await db
+    .select()
+    .from(users)
+    .where(eq(users.ainAddress, value))
+    .limit(1);
+  return rowByAin ?? null;
 }
 
 /**

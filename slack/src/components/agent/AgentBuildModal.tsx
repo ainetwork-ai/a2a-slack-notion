@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useSWRConfig } from 'swr';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -213,6 +214,7 @@ function AgentForm({ draft, mcpServers, onChange }: AgentFormProps) {
 
 export default function AgentBuildModal() {
   const { agentBuildOpen, setAgentBuildOpen, agentEditId, setAgentEditId } = useAppStore();
+  const { mutate } = useSWRConfig();
   const isEdit = !!agentEditId;
   const isOpen = agentBuildOpen || isEdit;
 
@@ -346,6 +348,16 @@ export default function AgentBuildModal() {
   }
 
   function handleClose() {
+    // Refresh agent lists everywhere — sidebar, registry, management page
+    mutate('/api/agents');
+    mutate(
+      (key) => typeof key === 'string' && key.startsWith('/api/agents/registry'),
+      undefined,
+      { revalidate: true }
+    );
+    if (agentEditId) {
+      mutate(`/api/agents/${agentEditId}`);
+    }
     setAgentBuildOpen(false);
     setAgentEditId(null);
     setDrafts([newDraft()]);

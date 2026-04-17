@@ -1,27 +1,31 @@
 /**
- * Well-known agent card endpoint.
+ * Well-known agent card endpoint (A2A spec-compliant, per @a2a-js/sdk).
  *
- * GET /api/a2a/[agentId]/.well-known/agent.json
+ * GET /api/a2a/[agentId]/.well-known/agent.json   (legacy path)
  *
- * A2A spec requires agents to expose their card at /.well-known/agent.json
- * relative to their base URL. This route serves that path.
+ * Looks the agent up by a2aId (human-readable slug) and lifts the stored card
+ * to the full AgentCard shape defined by @a2a-js/sdk. Missing fields are filled
+ * with safe defaults so every response is a valid A2A Agent Card.
  */
 
 import { db } from "@/lib/db";
 import { users } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
+import type { AgentCard } from "@a2a-js/sdk";
 
-interface AgentCardJson {
+interface StoredCard {
   name?: string;
   description?: string;
-  systemPrompt?: string;
   version?: string;
-  capabilities?: Record<string, unknown>;
-  skills?: unknown[];
+  protocolVersion?: string;
+  capabilities?: AgentCard["capabilities"];
+  skills?: Array<Record<string, unknown>>;
   defaultInputModes?: string[];
   defaultOutputModes?: string[];
-  provider?: unknown;
+  provider?: AgentCard["provider"];
+  iconUrl?: string;
+  documentationUrl?: string;
   [key: string]: unknown;
 }
 
@@ -46,18 +50,32 @@ export async function GET(
     return NextResponse.json({ error: "Agent not found" }, { status: 404 });
   }
 
-  const card = (agent.agentCardJson ?? {}) as AgentCardJson;
+  const card = (agent.agentCardJson ?? {}) as StoredCard;
 
-  // Base URL is /api/a2a/[agentId] — strip the /.well-known/agent.json suffix
-  const agentBaseUrl = request.url
-    .replace(/\/\.well-known\/agent\.json.*$/, "");
+  // Base URL is /api/a2a/[agentId] — strip the /.well-known/* suffix
+  const agentBaseUrl = request.url.replace(/\/\.well-known\/.*$/, "");
 
-  const agentCard = {
+  const skillsRaw = Array.isArray(card.skills) ? card.skills : [];
+  const skills = (skillsRaw.length > 0
+    ? skillsRaw
+    : [{ id: "default", name: "Chat", description: card.description, tags: ["chat"] }]
+  ).map((s) => ({
+    id:
+      (s.id as string) ||
+      String(s.name || "skill").toLowerCase().replace(/[^a-z0-9]+/g, "-"),
+    name: (s.name as string) || "Unnamed skill",
+    description: (s.description as string) || "",
+    tags: Array.isArray(s.tags) ? (s.tags as string[]) : [],
+    examples: Array.isArray(s.examples) ? (s.examples as string[]) : [],
+  }));
+
+  const agentCard: AgentCard = {
     name: card.name ?? agent.displayName,
     description: card.description ?? `${agent.displayName} agent`,
-    version: card.version ?? "1.0.0",
     url: agentBaseUrl,
-    provider: card.provider ?? { organization: "Slack-A2A" },
+    protocolVersion: card.protocolVersion ?? "0.3.0",
+    version: card.version ?? "1.0.0",
+    provider: card.provider ?? { organization: "Slack-A2A", url: new URL(request.url).origin },
     capabilities: card.capabilities ?? {
       streaming: false,
       pushNotifications: false,
@@ -65,14 +83,9 @@ export async function GET(
     },
     defaultInputModes: card.defaultInputModes ?? ["text/plain"],
     defaultOutputModes: card.defaultOutputModes ?? ["text/plain"],
-    skills: card.skills ?? [
-      {
-        id: "default",
-        name: "Chat",
-        description: card.description ?? `Talk to ${agent.displayName}`,
-        tags: ["chat"],
-      },
-    ],
+    skills,
+    ...(card.iconUrl ? { iconUrl: card.iconUrl } : {}),
+    ...(card.documentationUrl ? { documentationUrl: card.documentationUrl } : {}),
   };
 
   return NextResponse.json(agentCard, {

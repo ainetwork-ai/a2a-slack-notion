@@ -28,6 +28,8 @@ export async function inviteAgent(a2aUrl: string, options: InviteAgentOptions = 
   }
 
   const ainAddress = `agent-${card.name.toLowerCase().replace(/\s+/g, "-")}-${Date.now()}`;
+  const nameSlug = card.name.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const a2aId = nameSlug || undefined;
 
   const [agent] = await db
     .insert(users)
@@ -37,6 +39,7 @@ export async function inviteAgent(a2aUrl: string, options: InviteAgentOptions = 
       avatarUrl: card.iconUrl || null,
       isAgent: true,
       a2aUrl,
+      a2aId: a2aId ?? null,
       agentCardJson: card as unknown as Record<string, unknown>,
       status: "online",
       agentInvitedBy: options.invitedBy ?? null,
