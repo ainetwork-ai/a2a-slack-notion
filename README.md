@@ -257,56 +257,7 @@ For agents you don't have yet, DM the built-in **Builder** agent. Describe the r
 
 ### Step 1c: Wire up the newsroom workflow
 
-Workflow Builder composes the invited + built agents into a pipeline: *assign → draft → edit → revise → approve → publish*. Any step can be an agent skill, a write-to-canvas, a loop-until-condition, or a human approval.
-
-![Step 1c - Workflows list](docs/screenshots/11-workflows.png)
-
-The workflows page lists every pipeline in the workspace with its trigger, step count, and a live run history — `completed` / `failed` / `running` / `pending` counts so you can see at a glance which pipelines are healthy.
-
-#### The key idea: chain A2A skills together
-
-The headline step type is **⚡ Invoke an agent skill**. Every agent — whether invited via A2A URL or built in-workspace — exposes its skills through the standard `agent-card.json`. Workflow Builder reads those cards and lets you pick a skill directly from a dropdown, map its inputs, and pipe its output into the next step. A workflow is just a DAG of A2A skill calls with some glue (canvas writes, approvals, conditions) in between.
-
-![Step 1c - Workflow Editor](docs/screenshots/12-workflow-editor.png)
-
-Step palette (the `Add a step` picker):
-
-| Category | Steps |
-|----------|-------|
-| **Agents** | ⚡ Invoke an agent skill · 🤖 Ask an agent (legacy) |
-| **Canvas** | 📄 Write to a channel canvas |
-| **Messages** | 💬 Send a message · 📥 Collect input from a form · ↩️ Post to channel |
-| **People** | 👤 DM a user · ➕ Add to channel · ✅ Request approval |
-| **Logic** | 🔀 If/else condition · ⏱️ Wait for time |
-| **Channels** | 📝 Create channel |
-
-Example chain — the newsroom pipeline in the screenshot:
-
-```
-Trigger: /news <topic>           (slash-command from any channel)
-   │
-   ▼
-⚡ Invoke  @unblock-techa · research-topic       → $techDraft
-⚡ Invoke  @unblock-mark · market-angle          → $marketAngle
-⚡ Invoke  @unblock-roy · onchain-evidence       → $onchainData
-   │  (previous outputs are now variables — reference with {{$techDraft}} etc.)
-   ▼
-⚡ Invoke  @unblock-max · merge-and-edit
-            inputs: { tech: $techDraft, markets: $marketAngle, chain: $onchainData }
-            → $editedDraft
-   │
-   ▼
-⚡ Invoke  @unblock-victoria · fact-check · input: $editedDraft
-   │
-   ▼
-🔀 If fact-check passed
-   ├─ yes → ⚡ @unblock-olive · publish → 📄 Write canvas → ↩️ Post to #war-desk
-   └─ no  → ✅ Request approval from editor → loop back to merge-and-edit
-```
-
-Each `Invoke an agent skill` call is a JSON-RPC 2.0 message to the agent's A2A endpoint. Outputs from earlier steps become workflow variables (`{{$varName}}`) you reference in later steps' inputs — that's how cross-agent chaining works without shared infrastructure. Agents from different organizations, hosted wherever, plug into the same pipeline because they all speak A2A.
-
-Triggers cover the common entry points: `manual`, `schedule` (cron), `channel_message` (regex on a channel), `mention` (@agent), `slash_command` (e.g. `/news`), `shortcut` (lightning-button in the composer).
+See the [Workflow Builder section above](#workflow-builder--chain-a2a-skills-into-a-pipeline) for the screenshots and the chained A2A skill invocations that compose *assign → draft → edit → revise → approve → publish*.
 
 ### Step 2: Set Up the Newsroom Channel
 
