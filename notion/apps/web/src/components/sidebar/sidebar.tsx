@@ -131,7 +131,7 @@ export function Sidebar({ workspaceId, activePageId }: SidebarProps) {
     <button
       onClick={() => setMobileOpen(true)}
       aria-label="Open sidebar"
-      className="md:hidden fixed top-2 left-2 z-[var(--z-sticky)] p-1.5 rounded-[var(--radius-sm)] hover:bg-[var(--bg-hover)] transition-colors duration-[var(--duration-micro)] focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--accent-blue)]"
+      className="notion-hover md:hidden fixed top-2 left-2 z-[var(--z-sticky)] p-1.5 rounded-[var(--radius-sm)] focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--accent-blue)]"
     >
       <Menu size={16} className="text-[var(--text-tertiary)]" />
     </button>
@@ -145,7 +145,7 @@ export function Sidebar({ workspaceId, activePageId }: SidebarProps) {
         <button
           onClick={toggleSidebar}
           aria-label="Expand sidebar"
-          className="hidden md:block fixed top-2 left-2 z-[var(--z-sticky)] p-1.5 rounded-[var(--radius-sm)] hover:bg-[var(--bg-hover)] transition-colors duration-[var(--duration-micro)] focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--accent-blue)]"
+          className="notion-hover hidden md:block fixed top-2 left-2 z-[var(--z-sticky)] p-1.5 rounded-[var(--radius-sm)] focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--accent-blue)]"
         >
           <ChevronsLeft size={16} className="rotate-180 text-[var(--text-tertiary)]" />
         </button>
@@ -160,7 +160,7 @@ export function Sidebar({ workspaceId, activePageId }: SidebarProps) {
         <button
           onClick={() => setMobileOpen(true)}
           aria-label="Open sidebar"
-          className="md:hidden fixed top-2 left-2 z-[var(--z-sticky)] p-1.5 rounded-[var(--radius-sm)] hover:bg-[var(--bg-hover)] transition-colors duration-[var(--duration-micro)] focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--accent-blue)]"
+          className="notion-hover md:hidden fixed top-2 left-2 z-[var(--z-sticky)] p-1.5 rounded-[var(--radius-sm)] focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--accent-blue)]"
         >
           <Menu size={16} className="text-[var(--text-tertiary)]" />
         </button>
@@ -170,13 +170,13 @@ export function Sidebar({ workspaceId, activePageId }: SidebarProps) {
       <aside
         role="navigation"
         aria-label="Workspace sidebar"
-        className="hidden md:flex flex-col bg-[var(--bg-sidebar)] border-r border-[var(--divider)] shrink-0 h-screen overflow-hidden"
+        className="hidden md:flex flex-col bg-[var(--bg-sidebar)] border-r border-[var(--divider)] shrink-0 h-screen overflow-hidden transition-[width] duration-200 ease-in-out"
         style={{ width: `${sidebarWidth}px` }}
       >
         {/* Workspace header */}
         <div className="flex items-center justify-between h-[44px] px-3">
           <button
-            className="flex items-center gap-1.5 text-sm font-semibold text-[var(--text-primary)] hover:bg-[var(--bg-hover)] rounded-[var(--radius-sm)] px-1.5 py-1 truncate focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--accent-blue)]"
+            className="notion-hover flex items-center gap-1.5 text-sm font-semibold text-[var(--text-primary)] rounded-[var(--radius-sm)] px-1.5 py-1 truncate focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--accent-blue)]"
             aria-label={`Workspace: ${currentWorkspace?.name ?? 'Workspace'}`}
           >
             {currentWorkspace?.icon && <span aria-hidden="true">{currentWorkspace.icon}</span>}
@@ -185,7 +185,7 @@ export function Sidebar({ workspaceId, activePageId }: SidebarProps) {
           <button
             onClick={toggleSidebar}
             aria-label="Collapse sidebar"
-            className="p-1 rounded-[var(--radius-sm)] hover:bg-[var(--bg-hover)] transition-colors duration-[var(--duration-micro)] focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--accent-blue)]"
+            className="notion-hover p-1 rounded-[var(--radius-sm)] focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--accent-blue)]"
           >
             <ChevronsLeft size={16} className="text-[var(--text-tertiary)]" />
           </button>
@@ -196,7 +196,7 @@ export function Sidebar({ workspaceId, activePageId }: SidebarProps) {
           <button
             onClick={() => setSearchOpen(true)}
             aria-label="Search pages (Cmd+K)"
-            className="flex items-center gap-2 w-full h-[28px] px-2 text-sm text-[var(--text-tertiary)] rounded-[var(--radius-sm)] hover:bg-[var(--bg-hover)] transition-colors duration-[var(--duration-micro)] focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--accent-blue)]"
+            className="notion-hover flex items-center gap-2 w-full h-[28px] px-2 text-sm text-[var(--text-tertiary)] rounded-[var(--radius-sm)] focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--accent-blue)]"
           >
             <Search size={14} aria-hidden="true" />
             <span>Search</span>
@@ -238,8 +238,7 @@ export function Sidebar({ workspaceId, activePageId }: SidebarProps) {
                   }}
                   aria-current={r.pageId === activePageId ? 'page' : undefined}
                   className={cn(
-                    'flex items-center h-[28px] px-3 rounded-[var(--radius-sm)] cursor-pointer text-sm',
-                    'hover:bg-[var(--bg-hover)] transition-colors duration-[var(--duration-micro)]',
+                    'notion-hover flex items-center h-[28px] px-3 rounded-[var(--radius-sm)] cursor-pointer text-sm',
                     'focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--accent-blue)]',
                     r.pageId === activePageId && 'bg-[var(--bg-active)]',
                   )}
@@ -293,7 +292,7 @@ export function Sidebar({ workspaceId, activePageId }: SidebarProps) {
           <button
             onClick={handleOpenTrash}
             aria-label="Open trash"
-            className="flex items-center gap-2 w-full h-[28px] px-2 text-sm text-[var(--text-tertiary)] rounded-[var(--radius-sm)] hover:bg-[var(--bg-hover)] transition-colors duration-[var(--duration-micro)] focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--accent-blue)]"
+            className="notion-hover flex items-center gap-2 w-full h-[28px] px-2 text-sm text-[var(--text-tertiary)] rounded-[var(--radius-sm)] focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--accent-blue)]"
           >
             <Trash2 size={14} aria-hidden="true" />
             <span>Trash</span>
@@ -304,7 +303,7 @@ export function Sidebar({ workspaceId, activePageId }: SidebarProps) {
         <div className="px-2 py-2 border-t border-[var(--divider)]">
           <button
             onClick={handleNewPage}
-            className="flex items-center gap-2 w-full h-[28px] px-2 text-sm text-[var(--text-tertiary)] rounded-[var(--radius-sm)] hover:bg-[var(--bg-hover)] transition-colors duration-[var(--duration-micro)] focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--accent-blue)]"
+            className="notion-hover flex items-center gap-2 w-full h-[28px] px-2 text-sm text-[var(--text-tertiary)] rounded-[var(--radius-sm)] focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--accent-blue)]"
           >
             <Plus size={14} aria-hidden="true" />
             <span>New page</span>
@@ -335,7 +334,7 @@ export function Sidebar({ workspaceId, activePageId }: SidebarProps) {
                 <button
                   onClick={() => setTrashOpen(false)}
                   aria-label="Close trash panel"
-                  className="p-1 rounded-[var(--radius-sm)] hover:bg-[var(--bg-hover)] transition-colors duration-[var(--duration-micro)] focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--accent-blue)]"
+                  className="notion-hover p-1 rounded-[var(--radius-sm)] focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--accent-blue)]"
                 >
                   <X size={14} className="text-[var(--text-tertiary)]" aria-hidden="true" />
                 </button>
@@ -358,7 +357,7 @@ export function Sidebar({ workspaceId, activePageId }: SidebarProps) {
                   trashedPages.map((page) => (
                     <div
                       key={page.id}
-                      className="flex items-center gap-2 px-3 py-2 hover:bg-[var(--bg-hover)] group"
+                      className="notion-hover flex items-center gap-2 px-3 py-2 group"
                     >
                       <span className="text-base shrink-0" aria-hidden="true">{page.icon ?? '📄'}</span>
                       <div className="flex-1 min-w-0">
@@ -420,7 +419,7 @@ export function Sidebar({ workspaceId, activePageId }: SidebarProps) {
             {/* Workspace header */}
             <div className="flex items-center justify-between h-[44px] px-3">
               <button
-                className="flex items-center gap-1.5 text-sm font-semibold text-[var(--text-primary)] hover:bg-[var(--bg-hover)] rounded-[var(--radius-sm)] px-1.5 py-1 truncate focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--accent-blue)]"
+                className="notion-hover flex items-center gap-1.5 text-sm font-semibold text-[var(--text-primary)] rounded-[var(--radius-sm)] px-1.5 py-1 truncate focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--accent-blue)]"
                 aria-label={`Workspace: ${currentWorkspace?.name ?? 'Workspace'}`}
               >
                 {currentWorkspace?.icon && <span aria-hidden="true">{currentWorkspace.icon}</span>}
@@ -429,7 +428,7 @@ export function Sidebar({ workspaceId, activePageId }: SidebarProps) {
               <button
                 onClick={handleMobileClose}
                 aria-label="Close sidebar"
-                className="p-1 rounded-[var(--radius-sm)] hover:bg-[var(--bg-hover)] transition-colors duration-[var(--duration-micro)] focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--accent-blue)]"
+                className="notion-hover p-1 rounded-[var(--radius-sm)] focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--accent-blue)]"
               >
                 <X size={16} className="text-[var(--text-tertiary)]" />
               </button>
@@ -443,7 +442,7 @@ export function Sidebar({ workspaceId, activePageId }: SidebarProps) {
                   handleMobileClose();
                 }}
                 aria-label="Search pages (Cmd+K)"
-                className="flex items-center gap-2 w-full h-[28px] px-2 text-sm text-[var(--text-tertiary)] rounded-[var(--radius-sm)] hover:bg-[var(--bg-hover)] transition-colors duration-[var(--duration-micro)] focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--accent-blue)]"
+                className="notion-hover flex items-center gap-2 w-full h-[28px] px-2 text-sm text-[var(--text-tertiary)] rounded-[var(--radius-sm)] focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--accent-blue)]"
               >
                 <Search size={14} aria-hidden="true" />
                 <span>Search</span>
@@ -486,8 +485,7 @@ export function Sidebar({ workspaceId, activePageId }: SidebarProps) {
                       }}
                       aria-current={r.pageId === activePageId ? 'page' : undefined}
                       className={cn(
-                        'flex items-center h-[28px] px-3 rounded-[var(--radius-sm)] cursor-pointer text-sm',
-                        'hover:bg-[var(--bg-hover)] transition-colors duration-[var(--duration-micro)]',
+                        'notion-hover flex items-center h-[28px] px-3 rounded-[var(--radius-sm)] cursor-pointer text-sm',
                         'focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--accent-blue)]',
                         r.pageId === activePageId && 'bg-[var(--bg-active)]',
                       )}
@@ -542,7 +540,7 @@ export function Sidebar({ workspaceId, activePageId }: SidebarProps) {
               <button
                 onClick={handleOpenTrash}
                 aria-label="Open trash"
-                className="flex items-center gap-2 w-full h-[28px] px-2 text-sm text-[var(--text-tertiary)] rounded-[var(--radius-sm)] hover:bg-[var(--bg-hover)] transition-colors duration-[var(--duration-micro)] focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--accent-blue)]"
+                className="notion-hover flex items-center gap-2 w-full h-[28px] px-2 text-sm text-[var(--text-tertiary)] rounded-[var(--radius-sm)] focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--accent-blue)]"
               >
                 <Trash2 size={14} aria-hidden="true" />
                 <span>Trash</span>
@@ -553,7 +551,7 @@ export function Sidebar({ workspaceId, activePageId }: SidebarProps) {
             <div className="px-2 py-2 border-t border-[var(--divider)]">
               <button
                 onClick={handleNewPage}
-                className="flex items-center gap-2 w-full h-[28px] px-2 text-sm text-[var(--text-tertiary)] rounded-[var(--radius-sm)] hover:bg-[var(--bg-hover)] transition-colors duration-[var(--duration-micro)] focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--accent-blue)]"
+                className="notion-hover flex items-center gap-2 w-full h-[28px] px-2 text-sm text-[var(--text-tertiary)] rounded-[var(--radius-sm)] focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--accent-blue)]"
               >
                 <Plus size={14} aria-hidden="true" />
                 <span>New page</span>

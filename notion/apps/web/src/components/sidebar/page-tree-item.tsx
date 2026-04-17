@@ -61,8 +61,7 @@ export function PageTreeItem({ page, depth, workspaceId, activePageId, onNavigat
         tabIndex={0}
         aria-current={isActive ? 'page' : undefined}
         className={cn(
-          'group flex items-center h-[28px] px-2 rounded-[var(--radius-sm)] cursor-pointer text-sm',
-          'hover:bg-[var(--bg-hover)] transition-colors duration-[var(--duration-micro)]',
+          'notion-hover group flex items-center h-[28px] px-2 rounded-[var(--radius-sm)] cursor-pointer text-sm',
           'focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--accent-blue)]',
           isActive && 'bg-[var(--bg-active)]',
         )}
@@ -97,7 +96,7 @@ export function PageTreeItem({ page, depth, workspaceId, activePageId, onNavigat
             size={14}
             aria-hidden="true"
             className={cn(
-              'text-[var(--text-tertiary)] transition-transform duration-[var(--duration-short)]',
+              'text-[var(--text-tertiary)] transition-transform duration-100 ease-in',
               page.expanded && 'rotate-90',
             )}
           />
@@ -117,7 +116,7 @@ export function PageTreeItem({ page, depth, workspaceId, activePageId, onNavigat
         <button
           onClick={handleCreate}
           aria-label={`Add page under ${page.title || 'Untitled'}`}
-          className="opacity-0 group-hover:opacity-100 flex items-center justify-center w-5 h-5 rounded-[var(--radius-sm)] hover:bg-[var(--bg-active)] shrink-0 focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--accent-blue)] focus-visible:opacity-100"
+          className="opacity-0 group-hover:opacity-100 transition-opacity duration-[20ms] flex items-center justify-center w-5 h-5 rounded-[var(--radius-sm)] hover:bg-[var(--bg-active)] shrink-0 focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--accent-blue)] focus-visible:opacity-100"
         >
           <Plus size={14} className="text-[var(--text-tertiary)]" aria-hidden="true" />
         </button>
