@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Paperclip, Send, Bold, Italic, Strikethrough, Code, List, Quote, Smile, AtSign, Clock, Eye, EyeOff, Link, ListOrdered, CodeSquare, Zap } from 'lucide-react';
+import { Paperclip, Send, Bold, Italic, Strikethrough, Code, List, Quote, Smile, AtSign, Clock, Eye, EyeOff, Link, ListOrdered, CodeSquare, Zap, ChevronDown, Bot } from 'lucide-react';
 import { useTyping } from '@/lib/realtime/use-typing';
 import { cn } from '@/lib/utils';
 import { replaceShortcodes, emojiMap } from '@/lib/emoji-map';
@@ -28,6 +28,8 @@ interface MentionSuggestion {
   avatarUrl?: string;
   statusMessage?: string;
   isOnline?: boolean;
+  isAgent?: boolean;
+  agentCategory?: string;
 }
 
 // Build emoji suggestions list from the emoji map
@@ -278,6 +280,8 @@ export default function MessageInput({
         avatarUrl: u.avatarUrl as string | undefined,
         statusMessage: u.statusMessage as string | undefined,
         isOnline: u.isOnline as boolean | undefined,
+        isAgent: Boolean(u.isAgent),
+        agentCategory: u.agentCategory as string | undefined,
       })));
     } catch {
       setMentionSuggestions([]);
@@ -677,16 +681,27 @@ export default function MessageInput({
     }, 0);
   }
 
-  const toolbarButtons = [
-    { icon: Bold, label: 'Bold', action: () => applyFormat('*') },
-    { icon: Italic, label: 'Italic', action: () => applyFormat('_') },
-    { icon: Strikethrough, label: 'Strikethrough', action: () => applyFormat('~') },
-    { icon: Code, label: 'Code', action: () => applyFormat('`') },
-    { icon: CodeSquare, label: 'Code block', action: applyCodeBlock },
-    { icon: Link, label: 'Link', action: applyLink },
-    { icon: List, label: 'Bulleted list', action: () => applyFormat('', '• ') },
-    { icon: ListOrdered, label: 'Numbered list', action: () => applyFormat('', '1. ') },
-    { icon: Quote, label: 'Quote', action: () => applyFormat('', '> ') },
+  // Slack order: bold/italic/strike | link | bullet/numbered list | code/codeblock | quote
+  const toolbarGroups = [
+    [
+      { icon: Bold, label: 'Bold', action: () => applyFormat('*') },
+      { icon: Italic, label: 'Italic', action: () => applyFormat('_') },
+      { icon: Strikethrough, label: 'Strikethrough', action: () => applyFormat('~') },
+    ],
+    [
+      { icon: Link, label: 'Link', action: applyLink },
+    ],
+    [
+      { icon: List, label: 'Bulleted list', action: () => applyFormat('', '• ') },
+      { icon: ListOrdered, label: 'Numbered list', action: () => applyFormat('', '1. ') },
+    ],
+    [
+      { icon: Code, label: 'Code', action: () => applyFormat('`') },
+      { icon: CodeSquare, label: 'Code block', action: applyCodeBlock },
+    ],
+    [
+      { icon: Quote, label: 'Quote', action: () => applyFormat('', '> ') },
+    ],
   ];
 
   const hasContent = !!(content.trim() || pendingFile);
@@ -768,18 +783,24 @@ export default function MessageInput({
       )}
 
       {slashSuggestions.length > 0 && (
-        <div className="absolute bottom-full left-4 right-4 mb-1 bg-[#222529] border border-white/10 rounded-lg shadow-xl overflow-hidden z-50">
+        <div className="absolute bottom-full left-4 right-4 mb-1 bg-[#222529] border border-white/10 rounded-lg shadow-xl overflow-hidden z-50 max-h-72 overflow-y-auto">
+          <div className="px-3 py-1.5 text-[10px] text-slate-500 font-semibold uppercase tracking-wider border-b border-white/5 flex items-center justify-between">
+            <span>Slash commands</span>
+            <span className="text-slate-600 normal-case tracking-normal">↑↓ select · ⏎ use · esc</span>
+          </div>
           {slashSuggestions.map((cmd, i) => (
             <button
               key={cmd.name}
               onClick={() => insertSlashCommand(cmd)}
               className={cn(
-                'w-full flex items-center gap-3 px-3 py-2 text-sm text-left transition-colors',
-                i === slashIndex ? 'bg-[#4a154b]/50 text-white' : 'text-slate-300 hover:bg-white/5'
+                'w-full flex flex-col gap-0.5 px-3 py-2 text-left transition-colors border-l-2',
+                i === slashIndex
+                  ? 'bg-[#4a154b]/50 text-white border-[#4a154b]'
+                  : 'text-slate-300 hover:bg-white/5 border-transparent'
               )}
             >
-              <span className="font-mono font-semibold text-white/90">{cmd.name}</span>
-              <span className="text-slate-400 text-xs">{cmd.description}</span>
+              <span className="font-mono font-semibold text-sm text-white/95">{cmd.name}</span>
+              <span className="text-slate-400 text-xs line-clamp-2">{cmd.description}</span>
             </button>
           ))}
         </div>
@@ -827,17 +848,32 @@ export default function MessageInput({
                 <div className="relative shrink-0">
                   <Avatar className="w-7 h-7">
                     {user.avatarUrl && <AvatarImage src={user.avatarUrl} alt={user.displayName} />}
-                    <AvatarFallback className="text-[10px] bg-[#4a154b] text-white">{initials}</AvatarFallback>
+                    <AvatarFallback className={cn('text-[10px]', user.isAgent ? 'bg-[#1d9bd1]/30 text-[#1d9bd1]' : 'bg-[#4a154b] text-white')}>
+                      {initials}
+                    </AvatarFallback>
                   </Avatar>
-                  <span className={cn(
-                    'absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-[#222529]',
-                    user.isOnline ? 'bg-[#2eb67d]' : 'bg-slate-600'
-                  )} />
+                  {user.isAgent ? (
+                    <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-[#1d9bd1] border-2 border-[#222529] flex items-center justify-center">
+                      <Bot className="w-2 h-2 text-white" />
+                    </span>
+                  ) : (
+                    <span className={cn(
+                      'absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-[#222529]',
+                      user.isOnline ? 'bg-[#2eb67d]' : 'bg-slate-600'
+                    )} />
+                  )}
                 </div>
-                <div className="min-w-0">
-                  <span className="font-medium block truncate">@{user.displayName}</span>
-                  {user.statusMessage && (
-                    <span className="text-xs text-slate-500 truncate block">{user.statusMessage}</span>
+                <div className="min-w-0 flex-1">
+                  <span className="font-medium flex items-center gap-1.5 truncate">
+                    <span className="truncate">@{user.displayName}</span>
+                    {user.isAgent && (
+                      <span className="text-[9px] px-1 py-0 rounded bg-[#1d9bd1]/20 text-[#1d9bd1] border border-[#1d9bd1]/30 font-semibold shrink-0">BOT</span>
+                    )}
+                  </span>
+                  {(user.isAgent ? (user.agentCategory || user.statusMessage) : user.statusMessage) && (
+                    <span className="text-xs text-slate-500 truncate block">
+                      {user.isAgent ? (user.agentCategory || user.statusMessage) : user.statusMessage}
+                    </span>
                   )}
                 </div>
               </button>
@@ -893,19 +929,24 @@ export default function MessageInput({
 
         {/* Bottom row: formatting buttons + spacer + action buttons */}
         <div className="flex items-center px-2 pb-2 pt-1">
-          {/* Formatting buttons */}
-          {toolbarButtons.map(({ icon: Icon, label, action }) => (
-            <button
-              key={label}
-              onMouseDown={e => {
-                e.preventDefault(); // prevent textarea blur
-                action();
-              }}
-              title={label}
-              className="w-7 h-7 flex items-center justify-center rounded text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
-            >
-              <Icon className="w-3.5 h-3.5" />
-            </button>
+          {/* Formatting buttons — Slack-style grouped with vertical separators */}
+          {toolbarGroups.map((group, gi) => (
+            <div key={gi} className="flex items-center">
+              {gi > 0 && <span className="mx-1 h-4 w-px bg-white/10" aria-hidden />}
+              {group.map(({ icon: Icon, label, action }) => (
+                <button
+                  key={label}
+                  onMouseDown={e => {
+                    e.preventDefault();
+                    action();
+                  }}
+                  title={label}
+                  className="w-7 h-7 flex items-center justify-center rounded text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
+                >
+                  <Icon className="w-3.5 h-3.5" />
+                </button>
+              ))}
+            </div>
           ))}
 
           {/* Spacer */}
@@ -991,18 +1032,62 @@ export default function MessageInput({
             </div>
           )}
 
-          {/* Schedule button */}
-          <div className="relative">
+          {/* Preview toggle button — only shown when formatting chars present */}
+          {hasFormatting && (
             <button
-              title="Schedule message"
-              onClick={() => setScheduleOpen(!scheduleOpen)}
+              type="button"
+              onMouseDown={e => { e.preventDefault(); setPreviewVisible(v => !v); }}
+              title={previewVisible ? 'Hide preview' : 'Show formatting preview'}
+              aria-label={previewVisible ? 'Hide formatting preview' : 'Show formatting preview'}
+              aria-pressed={previewVisible}
               className="w-7 h-7 flex items-center justify-center rounded text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
             >
-              <Clock className="w-4 h-4" />
+              {previewVisible ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
             </button>
+          )}
+
+          {/* Send button — split with schedule chevron */}
+          <div className={cn(
+            'relative flex items-stretch ml-0.5 rounded-md overflow-hidden transition-colors',
+            hasContent ? 'bg-[#007a5a] hover:bg-[#148567]' : 'bg-transparent'
+          )}>
+            <button
+              onClick={handleSend}
+              disabled={!hasContent || isSending || disabled}
+              aria-label="Send message"
+              title={hasContent ? 'Send now' : 'Type something to send'}
+              className={cn(
+                'flex items-center justify-center w-7 h-7 transition-colors',
+                hasContent ? 'text-white' : 'text-slate-600 cursor-default'
+              )}
+            >
+              <Send className="w-3.5 h-3.5" />
+            </button>
+            {hasContent && (channelId || conversationId) && (
+              <>
+                <span className="w-px self-stretch my-1 bg-white/20" aria-hidden />
+                <button
+                  onClick={() => setScheduleOpen(v => !v)}
+                  disabled={isSending || disabled}
+                  aria-label="Schedule message"
+                  aria-haspopup="menu"
+                  aria-expanded={scheduleOpen}
+                  title="Schedule for later"
+                  className="flex items-center justify-center w-5 h-7 text-white hover:bg-black/20 transition-colors"
+                >
+                  <ChevronDown className="w-3 h-3" />
+                </button>
+              </>
+            )}
             {scheduleOpen && (
-              <div className="absolute bottom-full right-0 mb-2 w-52 bg-[#222529] border border-white/10 rounded-lg shadow-xl overflow-hidden z-50">
-                <p className="px-3 py-1.5 text-[11px] text-slate-500 font-semibold uppercase">Schedule send</p>
+              <div
+                role="menu"
+                className="absolute bottom-full right-0 mb-2 w-52 bg-[#222529] border border-white/10 rounded-lg shadow-xl overflow-hidden z-50"
+              >
+                <div className="px-3 py-1.5 text-[11px] text-slate-500 font-semibold uppercase tracking-wider flex items-center gap-1.5 border-b border-white/5">
+                  <Clock className="w-3 h-3" />
+                  Schedule send
+                </div>
                 {(() => {
                   const now = new Date();
                   const tomorrow9am = new Date(now);
@@ -1017,6 +1102,7 @@ export default function MessageInput({
                 })().map(opt => (
                   <button
                     key={opt.label}
+                    role="menuitem"
                     className="w-full text-left px-3 py-2 text-sm text-slate-300 hover:bg-white/10 hover:text-white transition-colors"
                     onClick={async () => {
                       const msg = content.trim();
@@ -1056,36 +1142,6 @@ export default function MessageInput({
               </div>
             )}
           </div>
-
-          {/* Preview toggle button — only shown when formatting chars present */}
-          {hasFormatting && (
-            <button
-              type="button"
-              onMouseDown={e => { e.preventDefault(); setPreviewVisible(v => !v); }}
-              title={previewVisible ? 'Hide preview' : 'Show formatting preview'}
-              aria-label={previewVisible ? 'Hide formatting preview' : 'Show formatting preview'}
-              aria-pressed={previewVisible}
-              className="w-7 h-7 flex items-center justify-center rounded text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
-            >
-              {previewVisible ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-            </button>
-          )}
-
-          {/* Send button — always visible */}
-          <Button
-            size="icon"
-            onClick={handleSend}
-            disabled={!hasContent || isSending || disabled}
-            aria-label="Send message"
-            className={cn(
-              'w-7 h-7 shrink-0 transition-colors ml-0.5',
-              hasContent
-                ? 'bg-[#007a5a] hover:bg-[#148567] text-white'
-                : 'bg-transparent text-slate-600 cursor-default'
-            )}
-          >
-            <Send className="w-3.5 h-3.5" />
-          </Button>
         </div>
       </div>
 
