@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
 
   try {
     if (mode === 'single') {
-      const items = await webSearch(source);
+      const { results: items } = await webSearch(source);
       const formatted = items
         .map((r) => `[${r.title}](${r.url})\n${r.snippet}`)
         .join('\n\n');
