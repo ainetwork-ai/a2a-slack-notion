@@ -1,11 +1,13 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { Zap, Plus, Play, Trash2, Pencil, CheckCircle, XCircle, Clock, ToggleLeft, ToggleRight, Loader2, LayoutTemplate } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import WorkflowBuilder from '@/components/workflow/WorkflowBuilder';
 import WorkflowTemplates from '@/components/modals/WorkflowTemplates';
 import { useWorkspaceStore } from '@/lib/stores/workspace-store';
+import { useToast } from '@/components/ui/toast-provider';
 import { cn } from '@/lib/utils';
 
 interface Workflow {
@@ -54,8 +56,21 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
+function triggerDescriptor(wf: Workflow): string {
+  const base = TRIGGER_LABELS[wf.triggerType] ?? wf.triggerType;
+  const cfg = (wf.triggerConfig || {}) as Record<string, string | undefined>;
+  if (wf.triggerType === 'shortcut' && cfg.label) return `${base}: ${cfg.label}`;
+  if (wf.triggerType === 'slash_command' && cfg.command) return `${base}: /${cfg.command}`;
+  if (wf.triggerType === 'schedule' && cfg.cron) return `${base}: ${cfg.cron}`;
+  if (wf.triggerType === 'channel_message' && cfg.channel) return `${base}: #${cfg.channel}`;
+  if (wf.triggerType === 'mention' && cfg.agent) return `${base}: @${cfg.agent}`;
+  return base;
+}
+
 export default function WorkflowsPage() {
   const { activeWorkspaceName } = useWorkspaceStore();
+  const router = useRouter();
+  const { showToast } = useToast();
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
   const [runs, setRuns] = useState<Record<string, WorkflowRun[]>>({});
   const [loading, setLoading] = useState(true);
@@ -105,9 +120,20 @@ export default function WorkflowsPage() {
     try {
       const res = await fetch(`/api/workflows/${id}/run`, { method: 'POST' });
       if (res.ok) {
-        setTimeout(() => fetchRuns(id), 500);
-        if (expandedId !== id) setExpandedId(id);
+        const data = (await res.json()) as { runId?: string };
+        showToast('Workflow started', 'success');
+        if (data.runId) {
+          router.push(`/workspace/workflows/${id}/runs/${data.runId}`);
+        } else {
+          setTimeout(() => fetchRuns(id), 500);
+          if (expandedId !== id) setExpandedId(id);
+        }
+      } else {
+        const data = await res.json().catch(() => ({}));
+        showToast(data.error ?? 'Failed to start workflow', 'error');
       }
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to start workflow', 'error');
     } finally {
       setRunningId(null);
     }
@@ -216,16 +242,26 @@ export default function WorkflowsPage() {
                 {/* Info */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className="font-medium text-white text-sm truncate">{wf.name}</span>
-                    <span className="text-xs text-slate-400 bg-white/5 px-1.5 py-0.5 rounded shrink-0">
-                      {TRIGGER_LABELS[wf.triggerType] ?? wf.triggerType}
+                    <span
+                      className="font-medium text-white text-sm truncate"
+                      title={wf.name}
+                    >
+                      {wf.name}
+                    </span>
+                    <span
+                      className="text-xs text-slate-400 bg-white/5 px-1.5 py-0.5 rounded shrink-0 max-w-[220px] truncate"
+                      title={triggerDescriptor(wf)}
+                    >
+                      {triggerDescriptor(wf)}
                     </span>
                     <span className="text-xs text-slate-500 shrink-0">
                       {wf.steps.length} step{wf.steps.length !== 1 ? 's' : ''}
                     </span>
                   </div>
                   {wf.description && (
-                    <p className="text-xs text-slate-400 truncate mt-0.5">{wf.description}</p>
+                    <p className="text-xs text-slate-400 truncate mt-0.5" title={wf.description}>
+                      {wf.description}
+                    </p>
                   )}
                 </div>
 
@@ -244,20 +280,18 @@ export default function WorkflowsPage() {
                   >
                     <Pencil className="w-3.5 h-3.5" />
                   </button>
-                  {wf.triggerType === 'manual' && (
-                    <button
-                      onClick={() => handleRun(wf.id)}
-                      disabled={runningId === wf.id}
-                      className="text-green-400 hover:text-green-300 p-1.5 rounded hover:bg-white/5 disabled:opacity-50"
-                      title="Run now"
-                    >
-                      {runningId === wf.id ? (
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      ) : (
-                        <Play className="w-3.5 h-3.5" />
-                      )}
-                    </button>
-                  )}
+                  <button
+                    onClick={() => handleRun(wf.id)}
+                    disabled={runningId === wf.id}
+                    className="text-green-400 hover:text-green-300 p-1.5 rounded hover:bg-white/5 disabled:opacity-50"
+                    title={wf.triggerType === 'manual' ? 'Run now' : 'Test run (bypasses trigger)'}
+                  >
+                    {runningId === wf.id ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Play className="w-3.5 h-3.5" />
+                    )}
+                  </button>
                   <button
                     onClick={() => handleDelete(wf.id)}
                     className="text-red-400 hover:text-red-300 p-1.5 rounded hover:bg-white/5"
