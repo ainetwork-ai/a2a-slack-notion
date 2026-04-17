@@ -156,15 +156,14 @@ export function SearchModal({ workspaceId, open, onClose }: SearchModalProps) {
       role="dialog"
       aria-modal="true"
       aria-label="Search pages"
-      className="fixed inset-0 z-[var(--z-modal,10000)] flex items-start justify-center md:pt-[12vh]"
+      className="fixed inset-0 z-[var(--z-modal,10000)] flex items-start justify-center md:pt-[12vh] bg-black/40"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
-      style={{ background: 'rgba(0,0,0,0.4)' }}
     >
       {/* Modal panel — full-screen on mobile, floating on md+ */}
       <div
-        className="w-full h-full md:h-auto md:max-w-[600px] md:mx-4 md:rounded-[var(--radius-lg,10px)] bg-[var(--bg-default)] shadow-[var(--shadow-modal,0_24px_64px_rgba(0,0,0,0.3))] overflow-hidden flex flex-col"
+        className="w-full h-full md:h-auto md:max-w-[600px] md:mx-4 md:rounded-[8px] bg-[var(--bg-default)] shadow-[var(--shadow-modal)] animate-modal-in overflow-hidden flex flex-col"
         style={{ maxHeight: 'min(70vh, 100%)' }}
       >
         {/* Search input row */}
@@ -176,6 +175,7 @@ export function SearchModal({ workspaceId, open, onClose }: SearchModalProps) {
             placeholder="Search pages..."
             value={query}
             onChange={(e) => setQuery(e.target.value)}
+            autoFocus
             className="flex-1 bg-transparent text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] text-[15px] outline-none"
           />
           {query && (
@@ -219,7 +219,7 @@ export function SearchModal({ workspaceId, open, onClose }: SearchModalProps) {
                     <button
                       onClick={() => navigateToResult(result)}
                       className={cn(
-                        'flex items-center gap-3 w-full px-3 py-2 rounded-[var(--radius-sm)] text-left transition-colors duration-[var(--duration-micro)]',
+                        'notion-hover flex items-center gap-3 w-full px-3 py-2 rounded-[var(--radius-sm)] text-left transition-colors duration-[var(--duration-micro)]',
                         i === selectedIndex ? 'bg-[var(--bg-active)]' : 'hover:bg-[var(--bg-hover)]',
                       )}
                     >
