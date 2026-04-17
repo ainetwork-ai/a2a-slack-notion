@@ -183,47 +183,46 @@ export function EditorBubbleMenu({ editor }: EditorBubbleMenuProps) {
   ];
 
   return (
-    <BubbleMenu
-      editor={editor}
-      className="relative flex items-center gap-0.5 rounded-[var(--radius-md)] bg-[var(--bg-default)] p-1 shadow-[var(--shadow-menu)]"
-    >
-      {items.map((item) => (
-        <button
-          key={item.title}
-          onClick={item.action}
-          className={cn(
-            'flex items-center justify-center w-7 h-7 rounded-[var(--radius-sm)] transition-colors duration-[var(--duration-micro)]',
-            item.isActive()
-              ? 'bg-[var(--bg-active)] text-[var(--text-primary)]'
-              : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]',
+    <BubbleMenu editor={editor}>
+      <div className="notion-menu animate-dropdown-in relative flex items-center gap-0.5 p-1">
+        {items.map((item) => (
+          <button
+            key={item.title}
+            onClick={item.action}
+            className={cn(
+              'notion-hover flex h-7 w-7 items-center justify-center rounded-[var(--radius-sm)]',
+              item.isActive()
+                ? 'bg-[var(--bg-active)] text-[var(--accent-blue)]'
+                : 'text-[var(--text-secondary)]',
+            )}
+            title={item.title}
+          >
+            <item.icon size={15} />
+          </button>
+        ))}
+
+        {/* Divider */}
+        <div className="w-px h-4 bg-[var(--divider)] mx-0.5" />
+
+        {/* Color picker button */}
+        <div className="relative">
+          <button
+            onClick={() => setColorPickerOpen((prev) => !prev)}
+            className={cn(
+              'notion-hover flex h-7 w-7 items-center justify-center rounded-[var(--radius-sm)]',
+              colorPickerOpen
+                ? 'bg-[var(--bg-active)] text-[var(--accent-blue)]'
+                : 'text-[var(--text-secondary)]',
+            )}
+            title="Colors"
+          >
+            <Palette size={15} />
+          </button>
+
+          {colorPickerOpen && (
+            <ColorPicker editor={editor} onClose={() => setColorPickerOpen(false)} />
           )}
-          title={item.title}
-        >
-          <item.icon size={15} />
-        </button>
-      ))}
-
-      {/* Divider */}
-      <div className="w-px h-4 bg-[var(--divider)] mx-0.5" />
-
-      {/* Color picker button */}
-      <div className="relative">
-        <button
-          onClick={() => setColorPickerOpen((prev) => !prev)}
-          className={cn(
-            'flex items-center justify-center w-7 h-7 rounded-[var(--radius-sm)] transition-colors duration-[var(--duration-micro)]',
-            colorPickerOpen
-              ? 'bg-[var(--bg-active)] text-[var(--text-primary)]'
-              : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]',
-          )}
-          title="Colors"
-        >
-          <Palette size={15} />
-        </button>
-
-        {colorPickerOpen && (
-          <ColorPicker editor={editor} onClose={() => setColorPickerOpen(false)} />
-        )}
+        </div>
       </div>
     </BubbleMenu>
   );
