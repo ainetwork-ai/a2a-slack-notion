@@ -18,6 +18,8 @@ interface MessageListProps {
   isThreadView?: boolean;
   lastReadAt?: string | null;
   channelId?: string;
+  /** Called when user is at the bottom and new messages are visible. */
+  onMessagesViewed?: () => void;
 }
 
 function DateSeparator({ date }: { date: Date }) {
@@ -59,6 +61,7 @@ export default function MessageList({
   isThreadView,
   lastReadAt,
   channelId,
+  onMessagesViewed,
 }: MessageListProps) {
   const { user } = useAuth();
   const scrollAreaRef = useRef<HTMLDivElement>(null);
@@ -103,6 +106,8 @@ export default function MessageList({
           const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
           if (distanceFromBottom <= 100) {
             el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+            // User is at bottom → they see the new message → mark as read
+            onMessagesViewed?.();
           } else {
             setShowJumpButton(true);
           }
@@ -124,6 +129,7 @@ export default function MessageList({
       const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
       if (distanceFromBottom <= 150) {
         setShowJumpButton(false);
+        onMessagesViewed?.();
       }
     },
     [hasMore, onLoadMore]
