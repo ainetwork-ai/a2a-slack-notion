@@ -360,9 +360,10 @@ export async function dispatchTool(
 
       case 'search': {
         const input = SearchInput.parse(args);
-        const qs = new URLSearchParams({ query: input.query });
-        if (input.workspace_id) qs.set('workspace_id', input.workspace_id);
-        result = await apiCall('GET', `/search?${qs}`);
+        result = await apiCall('POST', '/search', {
+          query: input.query,
+          workspaceId: input.workspace_id,
+        });
         break;
       }
 

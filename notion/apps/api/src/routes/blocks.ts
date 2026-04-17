@@ -67,7 +67,12 @@ blocks.get('/', async (c) => {
     orderBy: { createdAt: 'asc' },
   });
 
-  return c.json({ object: 'list', results });
+  // Exclude the page block itself from children results
+  const filteredResults = pageId
+    ? results.filter((b) => b.id !== pageId)
+    : results;
+
+  return c.json({ object: 'list', results: filteredResults });
 });
 
 // POST / — create a block
@@ -129,6 +134,18 @@ blocks.post('/', async (c) => {
       await prisma.block.update({
         where: { id: parentId },
         data: { childrenOrder: [...parent.childrenOrder, block.id] },
+      });
+    }
+  } else {
+    // No parentId — append to the page block's childrenOrder
+    const pageBlock = await prisma.block.findUnique({
+      where: { id: pageId },
+      select: { childrenOrder: true },
+    });
+    if (pageBlock) {
+      await prisma.block.update({
+        where: { id: pageId },
+        data: { childrenOrder: [...pageBlock.childrenOrder, block.id] },
       });
     }
   }
