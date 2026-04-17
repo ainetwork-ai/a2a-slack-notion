@@ -80,6 +80,57 @@ function resolveVarPath(vars: Record<string, unknown>, path: string): unknown {
     );
 }
 
+/**
+ * Evaluate a condition expression against workflow vars.
+ * Supports:
+ *   - Simple var path: "verdict.approved" → truthy check
+ *   - Modulo: "_iteration % 3 === 0"
+ *   - Comparison: "_iteration > 5"
+ *   - Negation: "!verdict.approved"
+ */
+function evaluateCondition(expr: string, vars: Record<string, unknown>): boolean {
+  const trimmed = expr.trim();
+
+  // Negation: "!path"
+  if (trimmed.startsWith("!")) {
+    return !evaluateCondition(trimmed.slice(1), vars);
+  }
+
+  // Expression with operator: "a % b === c", "a > b", "a === b"
+  const exprMatch = trimmed.match(/^([\w.]+)\s*(===|!==|>=|<=|>|<|%)\s*(.+)$/);
+  if (exprMatch) {
+    const left = Number(resolveVarPath(vars, exprMatch[1]));
+    const op = exprMatch[2];
+    const rightExpr = exprMatch[3].trim();
+
+    if (op === "%") {
+      // Modulo: "_iteration % 3 === 0"
+      const moduloMatch = rightExpr.match(/^(\d+)\s*(===|!==)\s*(\d+)$/);
+      if (moduloMatch) {
+        const divisor = Number(moduloMatch[1]);
+        const cmpOp = moduloMatch[2];
+        const cmpVal = Number(moduloMatch[3]);
+        const result = left % divisor;
+        return cmpOp === "===" ? result === cmpVal : result !== cmpVal;
+      }
+      return false;
+    }
+
+    const right = Number(rightExpr);
+    switch (op) {
+      case "===": return left === right;
+      case "!==": return left !== right;
+      case ">": return left > right;
+      case "<": return left < right;
+      case ">=": return left >= right;
+      case "<=": return left <= right;
+    }
+  }
+
+  // Simple var path → truthy check
+  return Boolean(resolveVarPath(vars, trimmed));
+}
+
 function parseVerdictResponse(text: string): { approved: boolean } {
   // Only "승인" counts as approval. "발행" is excluded because Damien
   // often says "수정하고 발행하자" (fix and then publish) in rejections.
@@ -581,13 +632,16 @@ async function executeStep(
     }
 
     case "loop": {
-      const maxIter = Math.min(step.maxIterations ?? 3, 10);
+      const maxIter = Math.min(step.maxIterations ?? 100, 100);
       const onMaxReached = step.onMaxReached ?? "continue";
       let loopVars = { ...vars };
 
       for (let iteration = 0; iteration < maxIter; iteration++) {
         // Check until condition BEFORE each iteration — exit if truthy
         if (Boolean(resolveVarPath(loopVars, step.until))) break;
+
+        // Expose iteration counter as _iteration (0-based) for condition expressions
+        loopVars = { ...loopVars, _iteration: iteration };
 
         // Execute loop body
         for (const bodyStep of step.steps) {
@@ -610,8 +664,7 @@ async function executeStep(
     }
 
     case "condition": {
-      const condValue = resolveVarPath(vars, step.if);
-      const isTruthy = Boolean(condValue);
+      const isTruthy = evaluateCondition(step.if, vars);
       const branchSteps = isTruthy ? step.then : (step.else ?? []);
 
       let branchVars = { ...vars };
