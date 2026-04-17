@@ -155,7 +155,8 @@ export async function sendToAgent(params: {
         agentName,
         ...(response.responseMetadata && { a2aResponseMeta: response.responseMetadata }),
       };
-    } catch {
+    } catch (err) {
+      console.error(`[sendToAgent] External A2A call failed for ${agent.displayName} (${rpcUrl}):`, err instanceof Error ? err.message : err);
       content = "I'm currently unavailable. Please try again later.";
       metadata = { agentName, error: true };
     }
