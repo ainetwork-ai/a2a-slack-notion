@@ -1,17 +1,26 @@
-# War Desk Source Shield
+# War Desk Source Shield — NEAR Bounty
 
-A source walks into a war-desk channel. They're scared. They have information about a hostage situation near the Strait of Hormuz. If what they say leaks — names, locations, operational details — someone could die.
+A **Slack Connect utility + A2A agent** for cross-org source protection in newsroom reporting.
 
-This app lets them talk to an AI journalist. The conversation never leaves the hardware enclave. Not to us, not to NEAR, not to anyone who serves a subpoena.
+Not a standalone product. This integrates with the `slack/` app: it posts TEE-attested source briefs into a Slack Connect channel (`#war-desk`) shared across newsroom organizations.
 
 > *"Most newsroom intake forms ask you to trust the newsroom. This one doesn't ask you to trust anyone. The hardware proves it."*
 
 ---
 
-## What actually runs
+## What this is
 
 ```
-Source opens page → talks to AI journalist
+near-bounty/
+├── A2A agent endpoint    — any A2A client can send a source brief to this agent
+├── Slack Connect poster  — posts the TEE-attested brief to #war-desk
+└── Manual intake page    — web UI for testing the intake flow manually
+```
+
+The core flow:
+
+```
+Source (Strait of Hormuz) → speaks to AI journalist
         │
         ▼
 NEAR AI Cloud (Intel TDX + NVIDIA H200 Confidential Compute)
@@ -19,30 +28,29 @@ NEAR AI Cloud (Intel TDX + NVIDIA H200 Confidential Compute)
   plaintext never exists outside the chip
         │
         ▼
-Per-response attestation badge (Intel TDX + NVIDIA NRAS verified)
+TEE attestation badge per response
+  intel_tdx: PASS · nvidia_nras: PASS · response_sig: PASS
         │
         ▼
-Structured brief → posted to #war-desk channel via Slack Connect
-        │
-        ▼
-Editor and reporters in the channel (human + A2A agents)
-  pick up the brief and run the story
+Slack Connect → #war-desk channel
+  shared across orgs — attestation travels with the brief
+  partner newsrooms verify independently, no one trusts anyone
 ```
 
 ## Endpoints
 
 | Route | What it does |
 |-------|-------------|
-| `/` | Trauma-informed source intake UI |
-| `/api/intake` | POST chat history → NEAR AI Cloud + attestation badge |
-| `/api/a2a` | A2A JSON-RPC `message/send` — any A2A client can talk to this agent |
-| `/.well-known/agent.json` | Live A2A agent card (`gdpr` + `near-tee-attestation` extensions) |
-| `/api/dsar` | Source data deletion request endpoint |
-| `/api/health` | Deployment + model status |
+| `/api/a2a` | A2A JSON-RPC `message/send` — source brief in, attested brief posted to Slack |
+| `/.well-known/agent.json` | A2A agent card (`gdpr` + `near-tee-attestation` extensions) |
+| `/api/intake` | REST intake for manual testing |
+| `/api/dsar` | Source data deletion request |
+| `/api/health` | Model + deployment status |
+| `/` | Manual intake UI (testing only) |
 
 ## Attestation
 
-Every response comes back with:
+Every brief comes with:
 
 ```
 TEE: NEAR AI Cloud — Intel TDX + NVIDIA H200 CC
@@ -53,32 +61,33 @@ response_sig:    PASS
 signing_address: 0x…
 ```
 
-The badge is green only when all four checks pass. The source can re-verify against Intel and NVIDIA's public attestation services themselves. No one's word required.
+Fail-closed: if any check fails, the brief is suppressed and not posted to the channel.
 
-If attestation fails for any reason — nonce mismatch, tampered report — the response is suppressed. Fail-closed, by design.
-
-## Why TEE for this specifically
+## Why TEE matters here
 
 | Risk | Standard cloud LLM | NEAR AI Cloud TEE |
 |------|-------------------|-------------------|
-| Provider reads the conversation | ✅ Yes (30-day retention typical) | ❌ TLS ends inside the chip |
-| RAM dump of the running process | ✅ Possible | ❌ Memory is hardware-encrypted |
+| Provider reads source's words | ✅ Yes (30-day retention) | ❌ TLS ends inside the chip |
 | Subpoena produces readable logs | ✅ Yes | ❌ Vendor has nothing to hand over |
 | Source must trust vendor's claims | ✅ Trust-me | ❌ Cryptographic proof per response |
 
-## Deploy
+## Setup
 
 ```bash
-# Vercel — set Root Directory to near-bounty/
-NEAR_AI_API_KEY=...   # from cloud.near.ai
-AGENT_PUBLIC_URL=...  # your deployment URL
+# env vars
+NEAR_AI_API_KEY=...      # from cloud.near.ai
+SLACK_BOT_TOKEN=...      # for posting to #war-desk
+SLACK_CHANNEL_ID=...     # #war-desk channel ID
 
-# Local
+# local dev (manual testing only)
 cd near-bounty
 npm install
 NEAR_AI_API_KEY=... npm run dev
+
+# deploy as Vercel function (set Root Directory: near-bounty/)
+vercel deploy
 ```
 
-## Slack Connect
+## Integration with slack/
 
-The brief output from the source intake is posted into a Slack Connect channel shared between the newsroom and partner orgs. Editors, reporters, and A2A agents on both sides can see and act on it — without any org having to trust the other's infrastructure. The attestation travels with the brief.
+The A2A agent card at `/.well-known/agent.json` can be invited into the `slack/` workspace. Once invited, it appears in the Agents sidebar and can be assigned to the `#war-desk` Slack Connect channel like any other agent.

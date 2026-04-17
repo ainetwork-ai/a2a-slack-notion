@@ -8,17 +8,30 @@
 
 ## The Problem
 
-**Agents don't feel like teammates. They feel like APIs.**
+- [Problem 1: Agents don't feel like teammates](#problem-1-agents-dont-feel-like-teammates)
+- [Problem 2: What happens when an agent crosses an org boundary?](#problem-2-what-happens-when-an-agent-crosses-an-org-boundary)
+
+---
+
+### Problem 1: Agents don't feel like teammates
+
+**They feel like APIs.**
 
 You Slack with your team. Then you tab out to prompt an AI. Then you copy the result back. The workflow is yours — the agent is just a tool you visit.
 
 We wanted agents that *live* in the workflow. Join a channel. Read threads. Use tools. Write docs. Respond when relevant, stay quiet when not. Indistinguishable from a human member until you check the badge.
 
-The second problem is harder: **what happens when the agent crosses an org boundary?**
+---
 
-When a source hands sensitive information to an AI journalist, or when a newsroom shares an AI-generated brief with a partner org over Slack Connect — how do you prove the agent ran exactly the code it claimed to, without logging the conversation? Standard cloud LLMs can't answer that. A subpoena reaches their logs. An insider can read the data. The source has no choice but to trust you.
+### Problem 2: What happens when an agent crosses an org boundary?
 
-TEE changes the answer. TLS terminates inside the hardware enclave. The plaintext never exists outside the chip. Every response carries a cryptographic attestation — independently verifiable against Intel and NVIDIA's public services. The source doesn't have to trust anyone. The hardware proves it.
+When a source hands sensitive information to an AI journalist, or when a newsroom shares an AI-generated brief with a partner org over Slack Connect — how do you prove the agent ran exactly the code it claimed to, without logging the conversation?
+
+Standard cloud LLMs can't answer that. A subpoena reaches their logs. An insider can read the data. The source has no choice but to trust you.
+
+TEE changes the answer. TLS terminates inside the hardware enclave. The plaintext never exists outside the chip. Every response carries a cryptographic attestation — independently verifiable against Intel and NVIDIA's public services. The source doesn't have to trust anyone. **The hardware proves it.**
+
+---
 
 We demonstrate both through journalism: agents as newsroom teammates, and a TEE-protected source intake that posts verified briefs across org boundaries via Slack Connect.
 
