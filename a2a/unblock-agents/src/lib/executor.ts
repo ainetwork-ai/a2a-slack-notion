@@ -170,15 +170,15 @@ export class UnblockExecutor implements AgentExecutor {
       if (skillId) replyMeta.skillId = skillId;
       if (debug) replyMeta.systemPrompt = systemPrompt;
 
-      // For confirm skill: analyze response and include structured verdict in metadata.
-      // Returns boolean `approved` so workflow loop's `until` check works directly.
-      // Rejection = explicit "반려" OR revision requests ("수정하고", "다시 가져", etc.)
-      // Approval = "승인" without any revision signals
+      // For confirm skill: ask LLM to judge if the response is approval or rejection.
       if (skillId === 'confirm') {
-        const hasReject = /반려/.test(responseText);
-        const hasRevisionRequest = /수정하고|수정해서|다시 가져|다시 제출|다듬어서|수정이 필요|수정하면/.test(responseText);
-        const hasApprove = /승인/.test(responseText);
-        replyMeta.approved = hasApprove && !hasReject && !hasRevisionRequest;
+        const verdictResponse = await callLLM([
+          {
+            role: 'user',
+            content: `다음은 편집국장이 기자의 기사에 대해 내린 판정입니다. 이 판정이 "승인"인지 "반려"인지 판단해서, true 또는 false 한 단어로만 답하세요. 승인이면 true, 반려이면 false.\n\n"""${responseText}"""`,
+          },
+        ]);
+        replyMeta.approved = verdictResponse.trim().toLowerCase() === 'true';
       }
 
       const reply: Message = {
