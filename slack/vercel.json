@@ -1,8 +1,15 @@
 {
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "installCommand": "cd .. && pnpm install --frozen-lockfile",
+  "buildCommand": "cd .. && pnpm --filter slack-a2a build",
   "crons": [
     {
-      "path": "/api/cron/cleanup",
-      "schedule": "0 0 * * *"
+      "path": "/api/cron/cleanup-share-links",
+      "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/cron/compact-page-snapshots",
+      "schedule": "0 4 * * 0"
     }
   ]
 }
