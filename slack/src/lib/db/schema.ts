@@ -538,7 +538,8 @@ export const workflowRuns = pgTable("workflow_runs", {
 
 export const canvases = pgTable("canvases", {
   id: uuid("id").primaryKey().defaultRandom(),
-  channelId: uuid("channel_id").references(() => channels.id, { onDelete: "cascade" }).unique(),
+  // channelId is no longer unique — multiple canvases (one per article) can belong to the same channel
+  channelId: uuid("channel_id").references(() => channels.id, { onDelete: "cascade" }),
   conversationId: uuid("conversation_id").references(() => dmConversations.id, { onDelete: "cascade" }).unique(),
   workspaceId: uuid("workspace_id").references(() => workspaces.id, { onDelete: "cascade" }).notNull(),
   title: text("title").notNull(),
@@ -547,6 +548,10 @@ export const canvases = pgTable("canvases", {
   updatedBy: uuid("updated_by").references(() => users.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  // Pipeline fields for structured newsroom/multi-agent workflows
+  pipelineStatus: text("pipeline_status").$type<"draft" | "edited" | "fact-checked" | "published">(),
+  topic: text("topic"),
+  pipelineRunId: uuid("pipeline_run_id"),
 });
 
 export const canvasRevisions = pgTable("canvas_revisions", {

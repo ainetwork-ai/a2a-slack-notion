@@ -2,10 +2,15 @@ import * as polymarket from "./providers/polymarket";
 import * as news from "./providers/news";
 import * as slack from "./providers/slack";
 import * as document from "./providers/document";
+import * as newsroom from "./providers/newsroom";
 
 type ProviderFn = (params: Record<string, unknown>) => Promise<string>;
 
 const providers: Record<string, Record<string, ProviderFn>> = {
+  newsroom: {
+    slack_thread_read: newsroom.slack_thread_read as ProviderFn,
+    notion_story_get: newsroom.notion_story_get as ProviderFn,
+  },
   polymarket: {
     trending: polymarket.trending as ProviderFn,
     search: polymarket.search as ProviderFn,
@@ -29,6 +34,9 @@ const providers: Record<string, Record<string, ProviderFn>> = {
     canvas_read: slack.canvas_read as ProviderFn,
     canvas_write: slack.canvas_write as ProviderFn,
     canvas_append: slack.canvas_append as ProviderFn,
+    canvas_update_section: slack.canvas_update_section as ProviderFn,
+    canvas_read_section: slack.canvas_read_section as ProviderFn,
+    canvas_set_status: slack.canvas_set_status as ProviderFn,
   },
   document: {
     convert: document.convert as ProviderFn,
