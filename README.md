@@ -65,7 +65,7 @@ We wanted agents that *live* in the workflow. Join a channel. Read threads. Use 
 
 **A trusted source should act as a sealed black box for the whole newsroom — queryable by anyone, but never exposed.**
 
-Say one reporter establishes a confidential source inside Iran. Normally that source only reaches the newsroom through that one reporter — a single fragile pipe. We want the *knowledge* to be available to every editor and partner-org reporter over Slack Connect, so anyone can ask "what does the source say about X?" — while the source's identity, raw words, and operational details never leak outside a hardware enclave.
+Say a non-profit has run an anonymous sentiment survey with ordinary Iranian civilians — teachers, nurses, students, shopkeepers — asking what they think about peace, ceasefire, and ending the war. Ordinary Iranians are just as tired of war as anyone else, and their voices deserve to be heard. But if any single respondent can be traced, they're at real risk. Normally the survey only reaches the newsroom through one reporter's notebook — a single fragile pipe. We want the *knowledge* — "what share of civilians want the war to end?" — available to every editor and partner-org reporter over Slack Connect, while the individual identities, provinces, and raw answers never leak outside a hardware enclave.
 
 **This is not hypothetical. Sources die when the infrastructure fails them.**
 
@@ -107,6 +107,42 @@ We demonstrate both through journalism: agents as newsroom teammates, and a TEE-
 - Left sidebar: channels, DMs, agent list
 - Center: message stream — human and agent messages share the same format
 - Agent messages carry a badge to distinguish source
+
+### Workflow Builder — chain A2A skills into a pipeline
+
+**The key point:** each step invokes a specific *skill* on a specific *agent* over A2A JSON-RPC, and the step's output flows into the next step as a variable. Humans don't orchestrate — the workflow does.
+
+![Workflow list](docs/screenshots/11-workflows.png)
+
+Each row is a durable multi-agent pipeline triggered by a channel message, a schedule, or a manual run.
+
+![Workflow editor — chained A2A skill invocations](docs/screenshots/12-workflow-editor.png)
+
+Inside the editor: every ⚡ step is `Invoke agent skill <agent-id>.<skill>` — a JSON-RPC `message/send` to the target agent's A2A endpoint. The reporter/manager routing uses template variables (`{{routing.reporter}}`, `{{routing.manager}}`) computed by the `damien.assignment` step, so one workflow adapts to whichever reporter/manager is relevant. The 📄 steps are `Write to canvas` — the draft lands in a Tiptap canvas after each revision. A `Loop until condition` at the bottom keeps the edit-revise cycle running until the manager's `confirm` skill passes.
+
+**A2A chain, skill by skill:**
+
+```
+damien.assignment        ← editor-in-chief dispatches the story
+  ↓
+reporter.report          ← reporter drafts
+  ↓
+write_to_canvas          ← draft lands in Canvas
+  ↓
+manager.guide            ← editorial feedback
+  ↓
+reporter.writing         ← reporter revises
+  ↓
+manager.feedback         ← second review
+  ↓
+reporter.revision        ← final pass
+  ↓
+damien.confirm           ← editor-in-chief approves
+  ↓
+loop_until (approved)    ← retries if not yet
+```
+
+Any of those agents can be swapped for an external A2A URL and the chain still runs — the workflow doesn't care whether the skill is executed locally or at `api.partner-newsroom.com/a2a`.
 
 ---
 
@@ -223,7 +259,54 @@ For agents you don't have yet, DM the built-in **Builder** agent. Describe the r
 
 Workflow Builder composes the invited + built agents into a pipeline: *assign → draft → edit → revise → approve → publish*. Any step can be an agent skill, a write-to-canvas, a loop-until-condition, or a human approval.
 
+![Step 1c - Workflows list](docs/screenshots/11-workflows.png)
+
+The workflows page lists every pipeline in the workspace with its trigger, step count, and a live run history — `completed` / `failed` / `running` / `pending` counts so you can see at a glance which pipelines are healthy.
+
+#### The key idea: chain A2A skills together
+
+The headline step type is **⚡ Invoke an agent skill**. Every agent — whether invited via A2A URL or built in-workspace — exposes its skills through the standard `agent-card.json`. Workflow Builder reads those cards and lets you pick a skill directly from a dropdown, map its inputs, and pipe its output into the next step. A workflow is just a DAG of A2A skill calls with some glue (canvas writes, approvals, conditions) in between.
+
 ![Step 1c - Workflow Editor](docs/screenshots/12-workflow-editor.png)
+
+Step palette (the `Add a step` picker):
+
+| Category | Steps |
+|----------|-------|
+| **Agents** | ⚡ Invoke an agent skill · 🤖 Ask an agent (legacy) |
+| **Canvas** | 📄 Write to a channel canvas |
+| **Messages** | 💬 Send a message · 📥 Collect input from a form · ↩️ Post to channel |
+| **People** | 👤 DM a user · ➕ Add to channel · ✅ Request approval |
+| **Logic** | 🔀 If/else condition · ⏱️ Wait for time |
+| **Channels** | 📝 Create channel |
+
+Example chain — the newsroom pipeline in the screenshot:
+
+```
+Trigger: /news <topic>           (slash-command from any channel)
+   │
+   ▼
+⚡ Invoke  @unblock-techa · research-topic       → $techDraft
+⚡ Invoke  @unblock-mark · market-angle          → $marketAngle
+⚡ Invoke  @unblock-roy · onchain-evidence       → $onchainData
+   │  (previous outputs are now variables — reference with {{$techDraft}} etc.)
+   ▼
+⚡ Invoke  @unblock-max · merge-and-edit
+            inputs: { tech: $techDraft, markets: $marketAngle, chain: $onchainData }
+            → $editedDraft
+   │
+   ▼
+⚡ Invoke  @unblock-victoria · fact-check · input: $editedDraft
+   │
+   ▼
+🔀 If fact-check passed
+   ├─ yes → ⚡ @unblock-olive · publish → 📄 Write canvas → ↩️ Post to #war-desk
+   └─ no  → ✅ Request approval from editor → loop back to merge-and-edit
+```
+
+Each `Invoke an agent skill` call is a JSON-RPC 2.0 message to the agent's A2A endpoint. Outputs from earlier steps become workflow variables (`{{$varName}}`) you reference in later steps' inputs — that's how cross-agent chaining works without shared infrastructure. Agents from different organizations, hosted wherever, plug into the same pipeline because they all speak A2A.
+
+Triggers cover the common entry points: `manual`, `schedule` (cron), `channel_message` (regex on a channel), `mention` (@agent), `slash_command` (e.g. `/news`), `shortcut` (lightning-button in the composer).
 
 ### Step 2: Set Up the Newsroom Channel
 
@@ -255,9 +338,9 @@ Reporter agents connected via external A2A URLs use MCP tools — web search, on
 
 This is where the scenario earns its weight.
 
-A frightened source near the Strait of Hormuz wants to report a hostage situation. They open a chat with an AI journalist on the newsroom's intake page. Everything they say — names, locations, operational details — could get someone killed if it leaked.
+A non-profit civil-society coalition has gathered anonymous survey responses from ordinary Iranian civilians across six provinces — asking about peace, ceasefire, and ending the war. Everything each respondent said could get them and their family harmed if it leaked. Iranians, like people everywhere, are tired of war and want peace — and the world deserves to hear that.
 
-The source intake runs on **NEAR AI Cloud** (Intel TDX + NVIDIA H200 Confidential Compute). TLS terminates *inside* the model enclave. The plaintext of their words never exists outside the chip — not in logs, not in vendor storage, not anywhere.
+The intake runs on **NEAR AI Cloud** (Intel TDX + NVIDIA H200 Confidential Compute). TLS terminates *inside* the model enclave. The plaintext of their words never exists outside the chip — not in logs, not in vendor storage, not anywhere. Only aggregate counts and percentages can leave the enclave.
 
 ![Step 4 - TEE Verification](docs/screenshots/06-tee-verify.png)
 
