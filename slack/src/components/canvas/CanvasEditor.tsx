@@ -220,6 +220,13 @@ export default function CanvasEditor({ channelId, onClose }: CanvasEditorProps) 
     const cursor = opts?.cursor;
     const append = opts?.append ?? false;
 
+    if (!channelId) {
+      console.error('canvas: channelId missing, skipping fetch');
+      setLoading(false);
+      setLoadingMore(false);
+      return;
+    }
+
     if (append) setLoadingMore(true); else setLoading(true);
 
     const params = new URLSearchParams();
@@ -269,6 +276,10 @@ export default function CanvasEditor({ channelId, onClose }: CanvasEditorProps) 
   // interactive pipeline dots. Server remains the source of truth — this is
   // just a UI hint so guests see non-clickable dots instead of a mystery 403.
   useEffect(() => {
+    if (!channelId) {
+      console.error('canvas: channelId missing, skipping fetch');
+      return;
+    }
     let cancelled = false;
     (async () => {
       try {
@@ -295,11 +306,22 @@ export default function CanvasEditor({ channelId, onClose }: CanvasEditorProps) 
   useEffect(() => {
     function handleOpenCanvas(e: Event) {
       const detail = (e as CustomEvent).detail as { canvasId?: string };
-      if (detail?.canvasId) openCanvas(detail.canvasId);
+      if (detail?.canvasId) {
+        loadList(); // refresh list to include newly created canvases
+        openCanvas(detail.canvasId);
+      }
     }
     window.addEventListener('open-canvas', handleOpenCanvas);
     return () => window.removeEventListener('open-canvas', handleOpenCanvas);
   });
+
+  // Auto-refresh canvas list every 10s to pick up new canvases from workflows
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (!canvas) loadList({ q: debouncedQuery }); // only refresh when in list view
+    }, 10000);
+    return () => clearInterval(interval);
+  }, [canvas, debouncedQuery, loadList]);
 
   function openCanvas(canvasId: string) {
     setLoading(true);
@@ -519,6 +541,11 @@ export default function CanvasEditor({ channelId, onClose }: CanvasEditorProps) 
   }
 
   async function handleCreateCanvas() {
+    if (!channelId) {
+      console.error('canvas: channelId missing, skipping fetch');
+      showToast('Channel is still loading — try again in a moment.', 'error');
+      return;
+    }
     setCreating(true);
     try {
       const res = await fetch(`/api/channels/${channelId}/canvas`, {
@@ -526,7 +553,15 @@ export default function CanvasEditor({ channelId, onClose }: CanvasEditorProps) 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({}),
       });
-      if (!res.ok) throw new Error('Failed to create canvas');
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        console.error('canvas: create failed', res.status, body);
+        const msg = (body && typeof body === 'object' && 'error' in body && typeof (body as { error: unknown }).error === 'string')
+          ? (body as { error: string }).error
+          : `Failed to create canvas (status ${res.status})`;
+        showToast(msg, 'error');
+        return;
+      }
       const created: Canvas = await res.json();
       setCanvasList(prev => [created, ...prev]);
       setCanvas(created);
@@ -539,7 +574,8 @@ export default function CanvasEditor({ channelId, onClose }: CanvasEditorProps) 
       baseUpdatedAtRef.current = created.updatedAt ?? null;
       // Subtask #7: next keystroke saves immediately
       fireImmediateRef.current = true;
-    } catch {
+    } catch (e) {
+      console.error('canvas: create threw', e);
       showToast('Failed to create canvas', 'error');
     } finally {
       setCreating(false);
