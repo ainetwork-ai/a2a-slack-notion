@@ -12,6 +12,7 @@ interface CanvasSummary {
   title: string;
   topic: string | null;
   pipelineStatus: PipelineStatus;
+  pipelineRunId: string | null;
   updatedAt: string;
   createdAt: string;
   updatedByName: string | null;
@@ -103,12 +104,11 @@ function PipelineStepper({ status, canEdit, onPickStatus }: PipelineStepperProps
 
 // ── Canvas list item ──────────────────────────────────────────────────────────
 
-function CanvasListItem({ canvas, onSelect }: { canvas: CanvasSummary; onSelect: () => void }) {
-  const status = canvas.pipelineStatus;
+function CanvasListItem({ canvas, onSelect, chained }: { canvas: CanvasSummary; onSelect: () => void; chained?: boolean }) {
   return (
     <button
       onClick={onSelect}
-      className="w-full text-left px-3.5 py-3 hover:bg-white/5 transition-colors border-b border-white/5 group"
+      className={`w-full text-left px-3.5 py-3 hover:bg-white/5 transition-colors border-b border-white/5 group ${chained ? 'pl-8' : ''}`}
     >
       <div className="flex items-start justify-between gap-2">
         <div className="flex-1 min-w-0">
@@ -754,12 +754,30 @@ export default function CanvasEditor({ channelId, onClose }: CanvasEditorProps) 
         ) : canvas ? (
           // ── Detail view ─────────────────────────────────────────────────────
           <>
-            {/* Pipeline status stepper — subtask #4: interactive */}
-            <PipelineStepper
-              status={canvas.pipelineStatus}
-              canEdit={canEditPipeline && !pipelineBusy}
-              onPickStatus={handlePickStatus}
-            />
+            {/* Related canvases from same pipeline run */}
+            {canvas.pipelineRunId && (() => {
+              const siblings = canvasList.filter(c => c.pipelineRunId === canvas.pipelineRunId);
+              if (siblings.length <= 1) return null;
+              return (
+                <div className="px-3.5 py-2 border-b border-white/5 flex items-center gap-1.5 overflow-x-auto shrink-0">
+                  {siblings.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()).map((s, i) => (
+                    <div key={s.id} className="flex items-center gap-1.5 shrink-0">
+                      {i > 0 && <span className="text-[#1d9bd1]/50">→</span>}
+                      <button
+                        onClick={() => openCanvas(s.id)}
+                        className={`text-xs px-2 py-1 rounded ${
+                          s.id === canvas.id
+                            ? 'bg-[#1d9bd1]/20 text-[#1d9bd1] font-medium'
+                            : 'text-slate-400 hover:text-white hover:bg-white/5'
+                        } transition-colors`}
+                      >
+                        {s.title}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
 
             {/* Subtask #6: conflict banner — non-dismissible */}
             {conflict && (
@@ -902,9 +920,31 @@ export default function CanvasEditor({ channelId, onClose }: CanvasEditorProps) 
               </div>
             ) : (
               <div className="flex-1 overflow-y-auto">
-                {canvasList.map(c => (
-                  <CanvasListItem key={c.id} canvas={c} onSelect={() => openCanvas(c.id)} />
-                ))}
+                {(() => {
+                  // Group canvases: show a pipeline chain connector for canvases
+                  // that share the same pipelineRunId
+                  let lastRunId: string | null = null;
+                  return canvasList.map((c, idx) => {
+                    const sameRun = c.pipelineRunId && c.pipelineRunId === lastRunId;
+                    const nextSameRun = c.pipelineRunId && idx < canvasList.length - 1 && canvasList[idx + 1]?.pipelineRunId === c.pipelineRunId;
+                    lastRunId = c.pipelineRunId;
+                    return (
+                      <div key={c.id} className="relative">
+                        {/* Chain connector line */}
+                        {sameRun && (
+                          <div className="absolute left-5 -top-0 w-px h-3 bg-[#1d9bd1]/40" />
+                        )}
+                        {nextSameRun && (
+                          <div className="absolute left-5 -bottom-0 w-px h-3 bg-[#1d9bd1]/40" />
+                        )}
+                        {sameRun && (
+                          <div className="absolute left-[17px] top-[11px] w-2 h-2 rounded-full border border-[#1d9bd1]/60 bg-[#1a1d21]" />
+                        )}
+                        <CanvasListItem canvas={c} onSelect={() => openCanvas(c.id)} chained={!!sameRun} />
+                      </div>
+                    );
+                  });
+                })()}
                 {/* Subtask #5: load-more button */}
                 {nextCursor && (
                   <div className="px-3 py-2 border-t border-white/5">

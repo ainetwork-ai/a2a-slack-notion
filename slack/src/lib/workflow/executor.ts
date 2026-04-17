@@ -344,6 +344,9 @@ async function executeSteps(
   startIndex: number = 0,
   workspaceId: string | null = null
 ): Promise<void> {
+  // Expose runId in vars so write_canvas can link canvases to this run
+  vars._runId = runId;
+
   try {
     for (let i = startIndex; i < steps.length; i++) {
       await db
@@ -826,9 +829,10 @@ async function executeStep(
       // Always create a new canvas (never overwrite existing ones).
       // Use raw SQL to avoid ORM schema mismatch (e.g. missing page_id column).
       const { sql: rawSql } = await import("drizzle-orm");
+      const pipelineRunId = (vars._runId as string) ?? null;
       const result = await db.execute(rawSql`
-        INSERT INTO canvases (id, channel_id, workspace_id, title, content, created_by, pipeline_status, created_at, updated_at)
-        VALUES (gen_random_uuid(), ${channel.id}, ${workspaceId}, ${title}, ${content}, ${canvasAgentId!}, 'draft', now(), now())
+        INSERT INTO canvases (id, channel_id, workspace_id, title, content, created_by, pipeline_status, pipeline_run_id, created_at, updated_at)
+        VALUES (gen_random_uuid(), ${channel.id}, ${workspaceId}, ${title}, ${content}, ${canvasAgentId!}, 'draft', ${pipelineRunId}, now(), now())
         RETURNING id
       `);
       const rows = (result as unknown as { rows: { id: string }[] }).rows ?? result;

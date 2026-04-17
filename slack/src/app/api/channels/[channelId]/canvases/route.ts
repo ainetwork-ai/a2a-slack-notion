@@ -84,6 +84,7 @@ export async function GET(
       title: canvases.title,
       topic: canvases.topic,
       pipelineStatus: canvases.pipelineStatus,
+      pipelineRunId: canvases.pipelineRunId,
       updatedAt: canvases.updatedAt,
       createdAt: canvases.createdAt,
       updatedByName: users.displayName,
