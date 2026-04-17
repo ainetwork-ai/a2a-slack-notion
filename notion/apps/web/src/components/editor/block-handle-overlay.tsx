@@ -121,14 +121,13 @@ export function BlockHandleOverlay() {
   return (
     // Gap 1: opacity transition for smooth 100ms fade-in/out
     <div
-      className="block-handle-container"
+      className="block-handle-container transition-opacity duration-100 ease-in"
       style={{
         position: 'fixed',
         top: handlePos.top,
         left: handlePos.left,
         zIndex: 20,
         opacity: isVisible ? 1 : 0,
-        transition: 'opacity 100ms ease',
         pointerEvents: isVisible ? 'auto' : 'none',
       }}
       contentEditable={false}

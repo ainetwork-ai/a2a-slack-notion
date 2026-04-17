@@ -92,7 +92,7 @@ export const SlashCommandList = forwardRef<SlashCommandListRef, SlashCommandList
 
     return (
       <div
-        className="slash-command-menu min-w-[300px] overflow-y-auto rounded-[var(--radius-md)] bg-[var(--bg-default)] shadow-[var(--shadow-menu)] p-0"
+        className="slash-command-menu notion-menu notion-scrollbar min-w-[300px] max-h-80 overflow-y-auto rounded-[var(--radius-md)] bg-[var(--bg-default)] shadow-[var(--shadow-menu)] p-0"
         style={{ maxHeight: MENU_MAX_HEIGHT }}
       >
         {groups.map((group) => (
@@ -128,7 +128,7 @@ export const SlashCommandList = forwardRef<SlashCommandListRef, SlashCommandList
                       ? 'opacity-40 cursor-not-allowed pointer-events-none'
                       : isSelected
                         ? 'bg-[var(--bg-hover)]'
-                        : 'hover:bg-[var(--bg-hover)]',
+                        : 'notion-hover',
                   )}
                   style={{
                     height: 44,
