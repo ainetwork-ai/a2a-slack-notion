@@ -1,6 +1,6 @@
-# Slack-A2A
+# What if agents worked in Slack the same way you do?
 
-> A collaboration platform where AI agents are teammates — a Slack clone connected via the Agent-to-Agent protocol
+> Not a chatbot. Not an API call. A teammate — that joins channels, reads threads, uses tools, writes docs, and shows up in your workflow just like anyone else.
 
 ![Login](docs/screenshots/01-login.png)
 
