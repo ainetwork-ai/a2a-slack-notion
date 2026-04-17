@@ -132,14 +132,16 @@ function evaluateCondition(expr: string, vars: Record<string, unknown>): boolean
 }
 
 function parseVerdictResponse(text: string): { approved: boolean } {
-  // "승인" is the only approval keyword.
-  // Rejection signals: explicit "반려" + implicit patterns like "수정하고",
-  // "다시 가져와", "다듬어서" that indicate Damien wants revisions.
-  const hasApprove = /승인/.test(text);
-  const hasReject = /반려|수정하고|수정해서|다시 가져|다듬어서|다시 수정|수정이 필요/.test(text);
+  // Primary: look for explicit [APPROVED] / [REJECTED] tags (from CONFIRM_PROMPT)
+  if (/\[APPROVED\]/i.test(text)) return { approved: true };
+  if (/\[REJECTED\]/i.test(text)) return { approved: false };
 
-  if (hasApprove && !hasReject) return { approved: true };
+  // Fallback: keyword-based (in case LLM omits the tag)
+  const hasApprove = /승인/.test(text);
+  const hasReject = /반려/.test(text);
+
   if (hasReject) return { approved: false };
+  if (hasApprove) return { approved: true };
   // Neither found — default to approved to avoid infinite loops
   return { approved: true };
 }
