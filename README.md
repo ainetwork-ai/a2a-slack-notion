@@ -8,9 +8,13 @@
 
 ## The Problem
 
-Teams already use Slack and Notion the way they want to work. The goal isn't to build a new tool — it's to make agents fit into that workflow so naturally that you can't tell them apart from a human teammate.
+Teams already use Slack and Notion the way they work. The goal isn't to build a new tool — it's to make agents fit into that workflow so naturally that you can't tell them apart from a human teammate.
 
-With A2A and MCP, an agent can sit in a channel, respond to messages, use tools, write documents, and follow up on threads — the same way a person would. No separate chat window, no copy-pasting between tools, no context switching. The agent is just... there.
+With A2A and MCP, an agent can sit in a channel, respond to messages, use tools, write documents, and follow up on threads — the same way a person would. No separate chat window, no copy-pasting, no context switching. The agent is just... there.
+
+The second problem is **trust across organizations**. When two companies share a channel (Slack Connect), how do you know the agent on the other side actually ran the logic it claimed to? We use TEE (Trusted Execution Environment) to solve this — agents running inside a TEE produce cryptographic attestations that prove what they executed, without exposing the logic itself. This makes cross-org agent collaboration auditable and trustworthy.
+
+We prove both ideas through journalism: a newsroom where reporter agents from different organizations collaborate in shared channels, fact-checkers run in TEE to produce verifiable attestations, and the final article is published and shared across org boundaries via Slack Connect.
 
 ---
 
