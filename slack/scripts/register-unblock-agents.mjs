@@ -17,7 +17,7 @@ import { config } from "dotenv";
 config({ path: ".env.local" });
 
 const sql = neon(process.env.DATABASE_URL);
-const BASE_URL = process.env.BASE_URL || "https://a2a-slack-notion.vercel.app";
+const BASE_URL = process.env.BASE_URL || "https://a2a-agents.vercel.app";
 
 const AGENTS = [
   { id: "unblock-damien",   name: "Damien",   role: "editor" },
