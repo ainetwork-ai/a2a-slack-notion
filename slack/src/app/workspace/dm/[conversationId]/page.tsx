@@ -81,6 +81,11 @@ export default function DMPage({ params }: { params: Promise<{ conversationId: s
       .catch(() => {});
   }, [conversationId]);
 
+  // Keep lastReadAt fresh while viewing — mark as read whenever new messages arrive
+  // (uses `messages` from the useMessages hook below via a separate effect that
+  //  watches the latest message ID)
+  const latestMsgRef = useRef<string | null>(null);
+
   useEffect(() => {
     if (conversation?.isMuted !== undefined) {
       setIsMuted(conversation.isMuted);
@@ -142,6 +147,16 @@ export default function DMPage({ params }: { params: Promise<{ conversationId: s
 
   const { messages, isLoading, hasMore, sendMessage, editMessage, deleteMessage, loadMore } =
     useMessages({ conversationId, currentUser: authUser ? { id: authUser.id, displayName: authUser.displayName, avatarUrl: authUser.avatarUrl } : undefined });
+
+  // Mark as read whenever new messages arrive while viewing
+  useEffect(() => {
+    if (!conversationId || messages.length === 0) return;
+    const newest = messages[0]?.id;
+    if (newest && newest !== latestMsgRef.current) {
+      latestMsgRef.current = newest;
+      fetch(`/api/dm/${conversationId}/read`, { method: 'PATCH' }).catch(() => {});
+    }
+  }, [conversationId, messages]);
 
   const { typingUsers } = useTyping(undefined, conversationId);
   const { isOnline } = usePresence();
