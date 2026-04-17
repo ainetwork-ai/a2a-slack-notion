@@ -562,6 +562,26 @@ export const canvasRevisions = pgTable("canvas_revisions", {
   editedAt: timestamp("edited_at").defaultNow().notNull(),
 });
 
+export const channelBookmarks = pgTable(
+  "channel_bookmarks",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    channelId: uuid("channel_id")
+      .references(() => channels.id, { onDelete: "cascade" })
+      .notNull(),
+    title: text("title").notNull(),
+    url: text("url").notNull(),
+    emoji: text("emoji").default("🔖").notNull(),
+    position: integer("position").default(0).notNull(),
+    createdBy: uuid("created_by")
+      .references(() => users.id)
+      .notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (t) => [index("channel_bookmarks_channel_idx").on(t.channelId, t.position)]
+);
+
 export const agentSkillConfigs = pgTable(
   "agent_skill_configs",
   {

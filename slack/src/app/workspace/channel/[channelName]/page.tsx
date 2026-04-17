@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, use, useEffect, useRef, useCallback } from 'react';
-import { Hash, Users, Settings, Pin, LogOut, Search, X, Bell, BellOff, BellRing, FileText } from 'lucide-react';
+import { Hash, Settings, Pin, LogOut, Search, X, Bell, BellOff, BellRing, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -21,6 +21,8 @@ import ThreadPanel from '@/components/chat/ThreadPanel';
 import InviteMemberModal from '@/components/modals/InviteMemberModal';
 import ChannelDetailPanel from '@/components/chat/ChannelDetailPanel';
 import CanvasEditor from '@/components/canvas/CanvasEditor';
+import BookmarksBar from '@/components/channel/BookmarksBar';
+import MemberAvatarStack from '@/components/channel/MemberAvatarStack';
 import { useMessages, Message } from '@/lib/hooks/use-messages';
 import { useAuth } from '@/lib/hooks/use-auth';
 import { useTyping } from '@/lib/realtime/use-typing';
@@ -329,15 +331,10 @@ export default function ChannelPage({ params }: { params: Promise<{ channelName:
             </Popover>
           )}
           {channel?.memberCount !== undefined && (
-            <Button
-              variant="ghost"
-              size="sm"
+            <MemberAvatarStack
+              members={channelData?.members ?? []}
               onClick={() => setDetailPanelOpen(v => !v)}
-              className="text-slate-400 hover:text-white hover:bg-white/10 gap-1.5 h-8"
-            >
-              <Users className="w-4 h-4" />
-              <span className="text-xs">{channel.memberCount}</span>
-            </Button>
+            />
           )}
           {(() => {
             const activeAgents = (channelData?.members ?? []).filter(
@@ -392,6 +389,9 @@ export default function ChannelPage({ params }: { params: Promise<{ channelName:
           </DropdownMenu>
         </div>
       </div>
+
+      {/* Bookmarks bar */}
+      {channelId && <BookmarksBar channelId={channelId} />}
 
       {/* H4: Search results */}
       {searchOpen && searchQuery.trim() && (
