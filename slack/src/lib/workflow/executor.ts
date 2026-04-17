@@ -610,15 +610,17 @@ async function executeStep(
 
       // Pass inputs as metadata.variables for external A2A agents (e.g. unblock-agents)
       // that expect structured variables rather than text-formatted inputs.
-      // Also pass channelId from trigger so responses appear in the channel.
+      // Also pass channelId from trigger so responses appear in the channel,
+      // unless the step is marked silent (e.g. report/writing → canvas only).
       const trigger = vars.trigger as { channelId?: string } | undefined;
+      const silent = (step as { silent?: boolean }).silent === true;
 
       const agentMessage = await sendToAgent({
         agentId: agent.id,
         text: skillMessage,
         skillId: step.skillId,
         variables: Object.keys(resolvedInputs).length > 0 ? resolvedInputs : undefined,
-        channelId: trigger?.channelId,
+        channelId: silent ? undefined : trigger?.channelId,
       });
 
       // If the agent returned an `approved` field in metadata (confirm skill),

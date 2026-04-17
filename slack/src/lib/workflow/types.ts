@@ -23,6 +23,8 @@ export type WorkflowStep =
       skillId: string;
       inputs?: Record<string, string>;
       saveAs?: string;
+      /** When true, agent response is NOT posted to channel (use with write_canvas). */
+      silent?: boolean;
     }
   | {
       // @deprecated — use `invoke_skill` with a skill defined in the agent's
