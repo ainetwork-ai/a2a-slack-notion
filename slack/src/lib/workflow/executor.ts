@@ -623,21 +623,9 @@ async function executeStep(
         channelId: silent ? undefined : trigger?.channelId,
       });
 
-      // For silent skills: post a short notification in the channel under the agent's name.
-      if (silent && trigger?.channelId) {
-        const isRevision = step.skillId === "revision";
-        const notificationText = isRevision
-          ? "I've revised the article. Please review it on the canvas."
-          : "I've written the article to the canvas. Please take a look.";
-        await db
-          .insert(messages)
-          .values({
-            channelId: trigger.channelId,
-            userId: agent.id,
-            content: notificationText,
-            contentType: "agent-response",
-            metadata: { agentName: agent.displayName, isCanvasNotification: true },
-          });
+      // For silent skills: save agent info for the write_canvas notification later.
+      if (silent) {
+        vars._lastSilentAgent = { id: agent.id, name: agent.displayName, skillId: step.skillId };
       }
 
       // If the agent returned an `approved` field in metadata (confirm skill),
@@ -845,6 +833,32 @@ async function executeStep(
       `);
       const rows = (result as unknown as { rows: { id: string }[] }).rows ?? result;
       const canvasId = Array.isArray(rows) ? rows[0]?.id : undefined;
+
+      // Post canvas notification under the agent's name with a link to the canvas
+      const silentAgent = vars._lastSilentAgent as { id: string; name: string; skillId: string } | undefined;
+      const triggerForCanvas = vars.trigger as { channelId?: string } | undefined;
+      if (silentAgent && triggerForCanvas?.channelId && canvasId) {
+        const isRevision = silentAgent.skillId === "revision";
+        const notificationText = isRevision
+          ? `I've revised the article. Please review it on the canvas.`
+          : `I've written the article to the canvas. Please take a look.`;
+        await db
+          .insert(messages)
+          .values({
+            channelId: triggerForCanvas.channelId,
+            userId: silentAgent.id,
+            content: notificationText,
+            contentType: "agent-response",
+            metadata: {
+              agentName: silentAgent.name,
+              canvasId,
+              canvasTitle: title,
+              isCanvasNotification: true,
+            },
+          });
+        // Clear so the next write_canvas doesn't re-notify
+        delete vars._lastSilentAgent;
+      }
 
       return canvasId ?? content;
     }

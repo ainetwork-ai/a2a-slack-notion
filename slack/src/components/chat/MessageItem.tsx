@@ -590,6 +590,22 @@ export default function MessageItem({
 
             <BuilderResultActions metadata={message.metadata} />
 
+            {/* Canvas link — clickable to open canvas panel */}
+            {message.metadata && typeof message.metadata === 'object' && 'canvasId' in message.metadata && (
+              <button
+                onClick={() => {
+                  // Dispatch custom event that CanvasEditor listens for
+                  window.dispatchEvent(new CustomEvent('open-canvas', {
+                    detail: { canvasId: (message.metadata as { canvasId: string }).canvasId },
+                  }));
+                }}
+                className="mt-1.5 inline-flex items-center gap-1.5 px-2.5 py-1 text-xs bg-[#1a1d21] border border-white/10 rounded-lg text-[#1d9bd1] hover:bg-white/5 hover:border-[#1d9bd1]/30 transition-colors"
+              >
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M2 3a1 1 0 011-1h10a1 1 0 011 1v10a1 1 0 01-1 1H3a1 1 0 01-1-1V3zm2 1v8h8V4H4zm1 1h6v1H5V5zm0 2h6v1H5V7zm0 2h4v1H5V9z"/></svg>
+                View on Canvas
+              </button>
+            )}
+
             {/* OG link preview — T6 */}
             {firstUrl && (/\.(jpe?g|png|gif|webp|svg)(\?.*)?$/i.test(firstUrl) ? (
               <div

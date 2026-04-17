@@ -295,6 +295,16 @@ export default function CanvasEditor({ channelId, onClose }: CanvasEditorProps) 
     return () => { cancelled = true; };
   }, [channelId]);
 
+  // Listen for open-canvas events from channel messages (canvas link clicks)
+  useEffect(() => {
+    function handleOpenCanvas(e: Event) {
+      const detail = (e as CustomEvent).detail as { canvasId?: string };
+      if (detail?.canvasId) openCanvas(detail.canvasId);
+    }
+    window.addEventListener('open-canvas', handleOpenCanvas);
+    return () => window.removeEventListener('open-canvas', handleOpenCanvas);
+  });
+
   function openCanvas(canvasId: string) {
     setLoading(true);
     fetch(`/api/canvases/${canvasId}`)
