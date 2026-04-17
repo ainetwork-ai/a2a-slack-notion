@@ -4,6 +4,7 @@ interface AppStore {
   activeThread: string | null;
   searchOpen: boolean;
   agentInviteOpen: boolean;
+  connectionInviteOpen: boolean;
   agentBuildOpen: boolean;
   agentEditId: string | null;
   testAgent: { id: string; name: string } | null;
@@ -16,6 +17,7 @@ interface AppStore {
   setActiveThread: (messageId: string | null) => void;
   setSearchOpen: (open: boolean) => void;
   setAgentInviteOpen: (open: boolean) => void;
+  setConnectionInviteOpen: (open: boolean) => void;
   setAgentBuildOpen: (open: boolean) => void;
   setAgentEditId: (agentId: string | null) => void;
   setTestAgent: (agent: { id: string; name: string } | null) => void;
@@ -32,6 +34,7 @@ export const useAppStore = create<AppStore>((set) => ({
   activeThread: null,
   searchOpen: false,
   agentInviteOpen: false,
+  connectionInviteOpen: false,
   agentBuildOpen: false,
   agentEditId: null,
   testAgent: null,
@@ -44,6 +47,7 @@ export const useAppStore = create<AppStore>((set) => ({
   setActiveThread: (messageId) => set({ activeThread: messageId }),
   setSearchOpen: (open) => set({ searchOpen: open }),
   setAgentInviteOpen: (open) => set({ agentInviteOpen: open }),
+  setConnectionInviteOpen: (open) => set({ connectionInviteOpen: open }),
   setAgentBuildOpen: (open) => set({ agentBuildOpen: open }),
   setAgentEditId: (agentId) => set({ agentEditId: agentId }),
   setTestAgent: (agent) => set({ testAgent: agent }),

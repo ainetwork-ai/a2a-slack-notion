@@ -1,0 +1,69 @@
+{
+  "_notice": "FICTIONAL SYNTHETIC DATA FOR DEMO PURPOSES. Any resemblance to real Iranian, Iraqi, or other state facilities, equipment, or personnel is coincidental. Figures, IDs, and relationships are invented to illustrate TEE-mediated sealed Q&A.",
+  "dataset_id": "sealed_centrifuge_telemetry_v1",
+  "controller": "Example State Nuclear Authority (fictional)",
+  "period": { "from": "2025-01-01", "to": "2025-12-31" },
+  "schema": {
+    "facility_id": "internal identifier (NEVER DISCLOSE)",
+    "centrifuge_id": "internal identifier (NEVER DISCLOSE)",
+    "cascade_group": "internal grouping (NEVER DISCLOSE)",
+    "month": "YYYY-MM aggregation",
+    "peak_enrichment_pct": "highest U-235 enrichment observed that month",
+    "output_kg_uf6": "UF6 gas produced that month (kg)",
+    "output_kg_heu_equivalent": "estimated U-235 mass extracted that month (kg)",
+    "maintenance_hours": "downtime hours that month",
+    "operator_personnel_count": "assigned staff (NEVER DISCLOSE)"
+  },
+  "facilities": [
+    { "facility_id": "FAC-A", "display_region": "redacted", "centrifuge_count": 180 },
+    { "facility_id": "FAC-B", "display_region": "redacted", "centrifuge_count": 142 },
+    { "facility_id": "FAC-C", "display_region": "redacted", "centrifuge_count": 86 }
+  ],
+  "monthly_records": [
+    { "facility_id": "FAC-A", "cascade_group": "G-1", "month": "2025-01", "peak_enrichment_pct": 4.8, "output_kg_uf6": 612.3, "output_kg_heu_equivalent": 4.1, "maintenance_hours": 18, "operator_personnel_count": 22 },
+    { "facility_id": "FAC-A", "cascade_group": "G-1", "month": "2025-02", "peak_enrichment_pct": 4.9, "output_kg_uf6": 598.7, "output_kg_heu_equivalent": 4.0, "maintenance_hours": 14, "operator_personnel_count": 22 },
+    { "facility_id": "FAC-A", "cascade_group": "G-1", "month": "2025-03", "peak_enrichment_pct": 5.0, "output_kg_uf6": 620.1, "output_kg_heu_equivalent": 4.2, "maintenance_hours": 16, "operator_personnel_count": 22 },
+    { "facility_id": "FAC-A", "cascade_group": "G-1", "month": "2025-04", "peak_enrichment_pct": 4.7, "output_kg_uf6": 605.4, "output_kg_heu_equivalent": 4.1, "maintenance_hours": 20, "operator_personnel_count": 22 },
+    { "facility_id": "FAC-A", "cascade_group": "G-1", "month": "2025-05", "peak_enrichment_pct": 4.8, "output_kg_uf6": 609.8, "output_kg_heu_equivalent": 4.1, "maintenance_hours": 12, "operator_personnel_count": 22 },
+    { "facility_id": "FAC-A", "cascade_group": "G-1", "month": "2025-06", "peak_enrichment_pct": 4.9, "output_kg_uf6": 617.2, "output_kg_heu_equivalent": 4.2, "maintenance_hours": 15, "operator_personnel_count": 22 },
+    { "facility_id": "FAC-A", "cascade_group": "G-2", "month": "2025-01", "peak_enrichment_pct": 3.6, "output_kg_uf6": 455.0, "output_kg_heu_equivalent": 2.3, "maintenance_hours": 22, "operator_personnel_count": 18 },
+    { "facility_id": "FAC-A", "cascade_group": "G-2", "month": "2025-06", "peak_enrichment_pct": 3.7, "output_kg_uf6": 468.1, "output_kg_heu_equivalent": 2.4, "maintenance_hours": 17, "operator_personnel_count": 18 },
+    { "facility_id": "FAC-B", "cascade_group": "G-3", "month": "2025-01", "peak_enrichment_pct": 19.8, "output_kg_uf6": 82.5, "output_kg_heu_equivalent": 3.1, "maintenance_hours": 34, "operator_personnel_count": 16 },
+    { "facility_id": "FAC-B", "cascade_group": "G-3", "month": "2025-02", "peak_enrichment_pct": 19.9, "output_kg_uf6": 80.0, "output_kg_heu_equivalent": 3.0, "maintenance_hours": 28, "operator_personnel_count": 16 },
+    { "facility_id": "FAC-B", "cascade_group": "G-3", "month": "2025-03", "peak_enrichment_pct": 19.7, "output_kg_uf6": 78.3, "output_kg_heu_equivalent": 2.9, "maintenance_hours": 31, "operator_personnel_count": 16 },
+    { "facility_id": "FAC-B", "cascade_group": "G-3", "month": "2025-04", "peak_enrichment_pct": 19.8, "output_kg_uf6": 81.7, "output_kg_heu_equivalent": 3.1, "maintenance_hours": 25, "operator_personnel_count": 16 },
+    { "facility_id": "FAC-B", "cascade_group": "G-3", "month": "2025-05", "peak_enrichment_pct": 19.9, "output_kg_uf6": 79.4, "output_kg_heu_equivalent": 3.0, "maintenance_hours": 29, "operator_personnel_count": 16 },
+    { "facility_id": "FAC-B", "cascade_group": "G-3", "month": "2025-06", "peak_enrichment_pct": 19.8, "output_kg_uf6": 82.2, "output_kg_heu_equivalent": 3.1, "maintenance_hours": 33, "operator_personnel_count": 16 },
+    { "facility_id": "FAC-C", "cascade_group": "G-4", "month": "2025-01", "peak_enrichment_pct": 4.5, "output_kg_uf6": 312.0, "output_kg_heu_equivalent": 1.9, "maintenance_hours": 24, "operator_personnel_count": 12 },
+    { "facility_id": "FAC-C", "cascade_group": "G-4", "month": "2025-02", "peak_enrichment_pct": 4.6, "output_kg_uf6": 308.5, "output_kg_heu_equivalent": 1.8, "maintenance_hours": 21, "operator_personnel_count": 12 },
+    { "facility_id": "FAC-C", "cascade_group": "G-4", "month": "2025-03", "peak_enrichment_pct": 4.7, "output_kg_uf6": 315.2, "output_kg_heu_equivalent": 1.9, "maintenance_hours": 19, "operator_personnel_count": 12 },
+    { "facility_id": "FAC-C", "cascade_group": "G-4", "month": "2025-04", "peak_enrichment_pct": 4.5, "output_kg_uf6": 310.8, "output_kg_heu_equivalent": 1.9, "maintenance_hours": 23, "operator_personnel_count": 12 },
+    { "facility_id": "FAC-C", "cascade_group": "G-4", "month": "2025-05", "peak_enrichment_pct": 4.6, "output_kg_uf6": 313.5, "output_kg_heu_equivalent": 1.9, "maintenance_hours": 20, "operator_personnel_count": 12 },
+    { "facility_id": "FAC-C", "cascade_group": "G-4", "month": "2025-06", "peak_enrichment_pct": 4.7, "output_kg_uf6": 316.9, "output_kg_heu_equivalent": 1.9, "maintenance_hours": 22, "operator_personnel_count": 12 }
+  ],
+  "disclosure_policy_v1": {
+    "allowed_question_categories": [
+      "aggregate_totals_over_period",
+      "min_max_across_records",
+      "counts_above_or_below_threshold",
+      "yes_no_threshold_compliance",
+      "monthly_totals_across_all_facilities",
+      "highest_enrichment_observed_anywhere"
+    ],
+    "disallowed_question_categories": [
+      "specific_facility_id_disclosure",
+      "specific_cascade_group_disclosure",
+      "personnel_count_or_identity",
+      "exact_dates_below_monthly_granularity",
+      "equipment_supplier_or_origin",
+      "geographic_coordinates_or_region",
+      "any_raw_record_return"
+    ],
+    "numeric_rounding": {
+      "enrichment_percent": 1,
+      "output_kg": 1,
+      "counts": 0
+    },
+    "refusal_template": "This question is blocked by disclosure rule '{{rule}}'. A policy-compliant reformulation could be: '{{suggestion}}'. No data was read."
+  }
+}

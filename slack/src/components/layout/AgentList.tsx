@@ -8,6 +8,7 @@ import { useAppStore } from '@/lib/stores/app-store';
 import { useToast } from '@/components/ui/toast-provider';
 import { cn } from '@/lib/utils';
 import useSWR, { useSWRConfig } from 'swr';
+import { isSealedConnection } from '@/lib/connections/is-connection';
 
 const fetcher = (url: string) => fetch(url).then(r => r.json());
 
@@ -23,6 +24,7 @@ interface Agent {
   status: 'online' | 'offline' | 'busy';
   conversationId?: string;
   a2aUrl?: string;
+  agentCardJson?: unknown;
   agentVisibility?: 'public' | 'private' | 'unlisted';
   agentCategory?: string;
   isMine?: boolean;
@@ -87,11 +89,13 @@ export default function AgentList() {
     refreshInterval: 10000,
   });
 
-  const agents = (data ?? []).map(a => ({
-    ...a,
-    name: a.displayName || a.name || 'Unnamed',
-    iconUrl: a.iconUrl || a.avatarUrl,
-  }));
+  const agents = (data ?? [])
+    .filter(a => tab !== 'workspace' || !isSealedConnection(a.agentCardJson))
+    .map(a => ({
+      ...a,
+      name: a.displayName || a.name || 'Unnamed',
+      iconUrl: a.iconUrl || a.avatarUrl,
+    }));
 
   function isActive(agent: Agent) {
     const key = agentDmKey(agent);
