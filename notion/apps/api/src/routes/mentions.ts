@@ -1,5 +1,11 @@
 import { Hono } from 'hono';
-import { prisma } from '../lib/prisma.js';
+import { and, eq, ilike, sql } from 'drizzle-orm';
+import { db } from '../lib/db.js';
+import {
+  workspaceMembers,
+  users,
+  blocks,
+} from '../../../../slack/src/lib/db/schema';
 import { appEvents } from '../lib/events.js';
 import type { AppVariables } from '../types/app.js';
 import type { MentionEvent } from '../lib/events.js';
@@ -13,7 +19,7 @@ mentions.get('/suggest', async (c) => {
     return c.json({ object: 'error', status: 401, code: 'unauthorized', message: 'Not authenticated' }, 401);
   }
 
-  const type = c.req.query('type');
+  const type = c.req.query('type') ?? 'user';
   const q = c.req.query('q') ?? '';
   const workspaceId = c.req.query('workspace_id');
 
@@ -21,114 +27,44 @@ mentions.get('/suggest', async (c) => {
     return c.json({ object: 'error', status: 400, code: 'validation_error', message: 'workspace_id required' }, 400);
   }
 
-  if (!type || type === 'all') {
-    // No type specified — return all workspace members (users + agents)
-    const members = await prisma.workspaceMember.findMany({
-      where: {
-        workspaceId,
-        user: { name: { contains: q, mode: 'insensitive' } },
-      },
-      include: {
-        user: {
-          select: { id: true, name: true, image: true, isAgent: true, a2aUrl: true, agentStatus: true },
-        },
-      },
-      take: 10,
-    });
+  if (type === 'user') {
+    const results = await db
+      .select({
+        id: users.id,
+        name: users.displayName,
+        avatar: users.avatarUrl,
+      })
+      .from(workspaceMembers)
+      .innerJoin(users, eq(users.id, workspaceMembers.userId))
+      .where(
+        and(
+          eq(workspaceMembers.workspaceId, workspaceId),
+          ilike(users.displayName, `%${q}%`),
+        ),
+      )
+      .limit(5);
 
     return c.json(
-      members.map((m) => ({
-        id: m.user.id,
-        name: m.user.name,
-        avatar: m.user.image ?? undefined,
-        ...(m.user.isAgent && {
-          isAgent: true,
-          a2aUrl: m.user.a2aUrl,
-          agentStatus: m.user.agentStatus,
-        }),
-      })),
+      results.map((r) => ({ id: r.id, name: r.name, avatar: r.avatar ?? undefined })),
     );
   }
 
-  if (type === 'agent') {
-    // Search agents in workspace by name
-    const agentUsers = await prisma.user.findMany({
-      where: {
-        isAgent: true,
-        name: { contains: q, mode: 'insensitive' },
-        workspaceMembers: { some: { workspaceId } },
-      },
-      select: { id: true, name: true, image: true, a2aUrl: true, agentStatus: true },
-      take: 5,
-    });
-
-    const results = agentUsers.map((a) => ({
-      id: a.id,
-      name: a.name,
-      avatar: a.image ?? undefined,
-      isAgent: true,
-      a2aUrl: a.a2aUrl,
-      agentStatus: a.agentStatus,
-    }));
-
-    return c.json(results);
-  }
-
-  if (type === 'user') {
-    const includeAgents = c.req.query('include_agents') === 'true';
-
-    // Search workspace members by name (ILIKE)
-    const members = await prisma.workspaceMember.findMany({
-      where: {
-        workspaceId,
-        user: {
-          name: { contains: q, mode: 'insensitive' },
-          ...(includeAgents ? {} : { isAgent: false }),
-        },
-      },
-      include: {
-        user: {
-          select: { id: true, name: true, image: true, isAgent: true, a2aUrl: true, agentStatus: true },
-        },
-      },
-      take: 5,
-    });
-
-    const results = members.map((m) => ({
-      id: m.user.id,
-      name: m.user.name,
-      avatar: m.user.image ?? undefined,
-      ...(m.user.isAgent && {
-        isAgent: true,
-        a2aUrl: m.user.a2aUrl,
-        agentStatus: m.user.agentStatus,
-      }),
-    }));
-
-    return c.json(results);
-  }
-
   if (type === 'page') {
-    // Search pages by title in workspace
-    const pages = await prisma.block.findMany({
-      where: {
-        workspaceId,
-        type: 'page',
-        archived: false,
-        properties: {
-          path: ['title'],
-          string_contains: q,
-        },
-      },
-      select: {
-        id: true,
-        properties: true,
-      },
-      take: 5,
-    });
+    const pages = await db
+      .select({ id: blocks.id, properties: blocks.properties })
+      .from(blocks)
+      .where(
+        and(
+          eq(blocks.workspaceId, workspaceId),
+          eq(blocks.type, 'page'),
+          eq(blocks.archived, false),
+          sql`${blocks.properties}->>'title' ILIKE ${'%' + q + '%'}`,
+        ),
+      )
+      .limit(5);
 
     const results = pages.map((p) => {
-      const props = p.properties as Record<string, unknown>;
+      const props = (p.properties ?? {}) as Record<string, unknown>;
       return {
         id: p.id,
         name: (props['title'] as string) ?? 'Untitled',
@@ -150,7 +86,7 @@ mentions.post('/notify', async (c) => {
   }
 
   const body = await c.req.json() as {
-    type: 'user' | 'page' | 'date' | 'agent';
+    type: 'user' | 'page' | 'date';
     targetId: string;
     pageId: string;
     blockId: string;

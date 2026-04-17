@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { Hash, Plus, ChevronDown, ChevronRight, ArrowUpDown, Clock, Archive, Folder, FolderOpen, FolderPlus, MoreHorizontal, X, Compass, Eye, EyeOff } from 'lucide-react';
+import { Hash, Lock, Plus, ChevronDown, ChevronRight, ArrowUpDown, Clock, Archive, Folder, FolderOpen, FolderPlus, MoreHorizontal, X, Compass, Eye, EyeOff } from 'lucide-react';
 import { useAppStore } from '@/lib/stores/app-store';
 import { cn } from '@/lib/utils';
 import useSWR from 'swr';
@@ -47,6 +47,7 @@ export default function ChannelList({ workspaceId }: ChannelListProps) {
   const [creatingFolder, setCreatingFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
   const [movingChannelId, setMovingChannelId] = useState<string | null>(null);
+  const [showAllUnfiled, setShowAllUnfiled] = useState(false);
 
   const url = workspaceId
     ? `/api/channels?workspaceId=${workspaceId}`
@@ -162,7 +163,11 @@ export default function ChannelList({ workspaceId }: ChannelListProps) {
               : 'text-[#bcabbc] hover:bg-white/5 hover:text-white'
           )}
         >
-          <Hash className="w-4 h-4 shrink-0 opacity-70" />
+          {channel.isPrivate ? (
+            <Lock className="w-3.5 h-3.5 shrink-0 opacity-70" />
+          ) : (
+            <Hash className="w-4 h-4 shrink-0 opacity-70" />
+          )}
           <span
             className={cn(
               'truncate flex-1',
@@ -365,10 +370,37 @@ export default function ChannelList({ workspaceId }: ChannelListProps) {
             );
           })}
 
-          {/* Unfiled channels */}
-          {unfiledChannels.map((channel) => (
-            <ChannelItem key={channel.id} channel={channel} />
-          ))}
+          {/* Unfiled channels — collapse to 5 unless expanded or filtered */}
+          {(() => {
+            const COLLAPSE_THRESHOLD = 5;
+            const shouldCollapse = unfiledChannels.length > COLLAPSE_THRESHOLD && !showAllUnfiled && !unreadOnly;
+            const visible = shouldCollapse ? unfiledChannels.slice(0, COLLAPSE_THRESHOLD) : unfiledChannels;
+            return (
+              <>
+                {visible.map((channel) => (
+                  <ChannelItem key={channel.id} channel={channel} />
+                ))}
+                {unfiledChannels.length > COLLAPSE_THRESHOLD && !unreadOnly && (
+                  <button
+                    onClick={() => setShowAllUnfiled((v) => !v)}
+                    className="w-full flex items-center gap-2 px-2 py-1 rounded text-xs text-[#bcabbc]/80 hover:text-white hover:bg-white/5 transition-colors"
+                  >
+                    {showAllUnfiled ? (
+                      <>
+                        <ChevronDown className="w-3 h-3 shrink-0" />
+                        Show less
+                      </>
+                    ) : (
+                      <>
+                        <ChevronRight className="w-3 h-3 shrink-0" />
+                        Show {unfiledChannels.length - COLLAPSE_THRESHOLD} more
+                      </>
+                    )}
+                  </button>
+                )}
+              </>
+            );
+          })()}
 
           {unreadOnly && channels.length > 0 && visibleChannels.length === 0 && (
             <p className="text-xs text-slate-500 px-4 py-1.5">No unread channels</p>
@@ -424,7 +456,11 @@ export default function ChannelList({ workspaceId }: ChannelListProps) {
                       : 'text-[#bcabbc] hover:bg-white/5 hover:text-white hover:opacity-80'
                   )}
                 >
-                  <Hash className="w-4 h-4 shrink-0 opacity-70" />
+                  {channel.isPrivate ? (
+                    <Lock className="w-3.5 h-3.5 shrink-0 opacity-70" />
+                  ) : (
+                    <Hash className="w-4 h-4 shrink-0 opacity-70" />
+                  )}
                   <span className="truncate">{channel.name}</span>
                 </button>
               ))}

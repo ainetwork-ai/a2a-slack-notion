@@ -1,4 +1,6 @@
-import { prisma } from './prisma.js';
+import { and, asc, eq } from 'drizzle-orm';
+import { db } from './db.js';
+import { blocks } from '../../../../slack/src/lib/db/schema';
 
 // ---------------------------------------------------------------------------
 // CSV helpers
@@ -27,7 +29,6 @@ function propertyValueToString(value: unknown): string {
   if (typeof value === 'number') return String(value);
   if (typeof value === 'string') return value;
   if (Array.isArray(value)) {
-    // multi_select, files, people
     return value
       .map((v) => {
         if (typeof v === 'string') return v;
@@ -41,9 +42,7 @@ function propertyValueToString(value: unknown): string {
   }
   if (typeof value === 'object') {
     const obj = value as Record<string, unknown>;
-    // date objects
     if (obj['start']) return String(obj['start']);
-    // select object
     if (obj['name']) return String(obj['name']);
   }
   return JSON.stringify(value);
@@ -54,11 +53,12 @@ function propertyValueToString(value: unknown): string {
 // ---------------------------------------------------------------------------
 
 export async function databaseToCsv(databaseId: string): Promise<string> {
-  // Load the database block (contains schema in properties)
-  const database = await prisma.block.findUnique({
-    where: { id: databaseId },
-    select: { properties: true, childrenOrder: true },
-  });
+  const database = await db
+    .select({ properties: blocks.properties, childrenOrder: blocks.childrenOrder })
+    .from(blocks)
+    .where(eq(blocks.id, databaseId))
+    .limit(1)
+    .then((r) => r[0]);
 
   if (!database) throw new Error('Database not found');
 
@@ -68,24 +68,25 @@ export async function databaseToCsv(databaseId: string): Promise<string> {
     { name: string; type: string }
   >;
 
-  // Collect property definitions in order
   const propertyIds = Object.keys(schema);
   const propertyNames = propertyIds.map((id) => schema[id]?.name ?? id);
 
   // Fetch all database row blocks (type = page, direct children of database)
-  const rows = await prisma.block.findMany({
-    where: { parentId: databaseId, archived: false },
-    select: { id: true, properties: true, createdAt: true },
-    orderBy: { createdAt: 'asc' },
-  });
+  const rows = await db
+    .select({
+      id: blocks.id,
+      properties: blocks.properties,
+      createdAt: blocks.createdAt,
+    })
+    .from(blocks)
+    .where(and(eq(blocks.parentId, databaseId), eq(blocks.archived, false)))
+    .orderBy(asc(blocks.createdAt));
 
   const lines: string[] = [];
 
-  // Header row — always include "Title" + schema properties
   const header = ['Title', ...propertyNames];
   lines.push(rowToCsv(header));
 
-  // Data rows
   for (const row of rows) {
     const rowProps = (row.properties ?? {}) as Record<string, unknown>;
     const title = (rowProps['title'] as string) ?? '';

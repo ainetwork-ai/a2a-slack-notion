@@ -1,6 +1,11 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { prisma } from '../lib/prisma.js';
+import { and, desc, eq, lt } from 'drizzle-orm';
+import { db } from '../lib/db.js';
+import {
+  pageSnapshots,
+  blocks,
+} from '../../../../slack/src/lib/db/schema';
 import { requirePermission } from '../middleware/require-permission.js';
 import type { AppVariables } from '../types/app.js';
 
@@ -12,7 +17,7 @@ function requireUser(c: { get: (key: 'user') => AppVariables['user'] }) {
   return user;
 }
 
-// GET /api/v1/pages/:pageId/history — list snapshots newest first, paginated
+// GET /api/v1/pages/:pageId/history
 history.get('/', requirePermission('can_view'), async (c) => {
   const user = requireUser(c);
   if (!user) return c.json({ object: 'error', status: 401, code: 'unauthorized', message: 'Not authenticated' }, 401);
@@ -22,20 +27,33 @@ history.get('/', requirePermission('can_view'), async (c) => {
   const cursorParam = c.req.query('cursor');
   const limit = Math.min(Number(limitParam ?? 20), 100);
 
-  const snapshots = await prisma.pageSnapshot.findMany({
-    where: { pageId },
-    orderBy: { createdAt: 'desc' },
-    take: limit + 1,
-    ...(cursorParam ? { cursor: { id: cursorParam }, skip: 1 } : {}),
-    select: {
-      id: true,
-      pageId: true,
-      title: true,
-      createdBy: true,
-      createdAt: true,
-      // exclude snapshot bytes from list
-    },
-  });
+  const baseWhere = eq(pageSnapshots.pageId, pageId);
+
+  let whereClause = baseWhere;
+  if (cursorParam) {
+    const cursorRow = await db
+      .select({ createdAt: pageSnapshots.createdAt })
+      .from(pageSnapshots)
+      .where(eq(pageSnapshots.id, cursorParam))
+      .limit(1)
+      .then((r) => r[0]);
+    if (cursorRow) {
+      whereClause = and(baseWhere, lt(pageSnapshots.createdAt, cursorRow.createdAt))!;
+    }
+  }
+
+  const snapshots = await db
+    .select({
+      id: pageSnapshots.id,
+      pageId: pageSnapshots.pageId,
+      title: pageSnapshots.title,
+      createdBy: pageSnapshots.createdBy,
+      createdAt: pageSnapshots.createdAt,
+    })
+    .from(pageSnapshots)
+    .where(whereClause)
+    .orderBy(desc(pageSnapshots.createdAt))
+    .limit(limit + 1);
 
   const hasMore = snapshots.length > limit;
   const items = hasMore ? snapshots.slice(0, limit) : snapshots;
@@ -49,7 +67,7 @@ history.get('/', requirePermission('can_view'), async (c) => {
   });
 });
 
-// GET /api/v1/pages/:pageId/history/:snapshotId — get single snapshot (base64)
+// GET /api/v1/pages/:pageId/history/:snapshotId
 history.get('/:snapshotId', requirePermission('can_view'), async (c) => {
   const user = requireUser(c);
   if (!user) return c.json({ object: 'error', status: 401, code: 'unauthorized', message: 'Not authenticated' }, 401);
@@ -57,62 +75,69 @@ history.get('/:snapshotId', requirePermission('can_view'), async (c) => {
   const pageId = c.req.param('pageId' as never) as string;
   const snapshotId = c.req.param('snapshotId');
 
-  const snapshot = await prisma.pageSnapshot.findFirst({
-    where: { id: snapshotId, pageId },
-  });
+  const snapshot = await db
+    .select()
+    .from(pageSnapshots)
+    .where(and(eq(pageSnapshots.id, snapshotId), eq(pageSnapshots.pageId, pageId)))
+    .limit(1)
+    .then((r) => r[0]);
 
   if (!snapshot) {
     return c.json({ object: 'error', status: 404, code: 'not_found', message: 'Snapshot not found' }, 404);
   }
 
+  // Slack schema stores snapshot as base64 text, not bytea. Return it as-is.
   return c.json({
     id: snapshot.id,
     pageId: snapshot.pageId,
     title: snapshot.title,
     createdBy: snapshot.createdBy,
     createdAt: snapshot.createdAt,
-    snapshot: Buffer.from(snapshot.snapshot).toString('base64'),
+    snapshot: snapshot.snapshot,
   });
 });
 
-// POST /api/v1/pages/:pageId/history — manually save a snapshot ("Save version")
+// POST /api/v1/pages/:pageId/history
 history.post('/', requirePermission('can_edit'), async (c) => {
   const user = requireUser(c);
   if (!user) return c.json({ object: 'error', status: 401, code: 'unauthorized', message: 'Not authenticated' }, 401);
 
   const pageId = c.req.param('pageId' as never) as string;
 
-  const page = await prisma.block.findUnique({
-    where: { id: pageId, type: 'page' },
-    select: { properties: true, content: true },
-  });
+  const page = await db
+    .select({ properties: blocks.properties, content: blocks.content })
+    .from(blocks)
+    .where(and(eq(blocks.id, pageId), eq(blocks.type, 'page')))
+    .limit(1)
+    .then((r) => r[0]);
 
   if (!page) {
     return c.json({ object: 'error', status: 404, code: 'not_found', message: 'Page not found' }, 404);
   }
 
-  const props = page.properties as Record<string, unknown>;
-  const content = page.content as Record<string, unknown>;
+  const props = (page.properties ?? {}) as Record<string, unknown>;
+  const content = (page.content ?? {}) as Record<string, unknown>;
   const title = (props['title'] as string) ?? 'Untitled';
   const yjsSnapshot = content['yjsSnapshot'];
 
-  // If no Yjs snapshot exists yet, store empty bytes as placeholder
-  const snapshotBytes =
+  const snapshotB64 =
     yjsSnapshot && typeof yjsSnapshot === 'string'
-      ? Buffer.from(yjsSnapshot, 'base64')
-      : Buffer.alloc(0);
+      ? yjsSnapshot
+      : Buffer.alloc(0).toString('base64');
 
   const body = await c.req.json().catch(() => ({}));
   const label = (body as Record<string, unknown>)['label'] as string | undefined;
 
-  const created = await prisma.pageSnapshot.create({
-    data: {
+  const created = await db
+    .insert(pageSnapshots)
+    .values({
       pageId,
       title: label ? `${title} — ${label}` : title,
-      snapshot: snapshotBytes,
+      snapshot: snapshotB64,
       createdBy: user.id,
-    },
-  });
+    })
+    .returning()
+    .then((r) => r[0]!);
 
   return c.json(
     {
@@ -130,7 +155,7 @@ const RestoreSchema = z.object({
   label: z.string().optional(),
 });
 
-// POST /api/v1/pages/:pageId/history/:snapshotId/restore — restore a snapshot
+// POST /api/v1/pages/:pageId/history/:snapshotId/restore
 history.post('/:snapshotId/restore', requirePermission('can_edit'), async (c) => {
   const user = requireUser(c);
   if (!user) return c.json({ object: 'error', status: 401, code: 'unauthorized', message: 'Not authenticated' }, 401);
@@ -142,59 +167,61 @@ history.post('/:snapshotId/restore', requirePermission('can_edit'), async (c) =>
   const parsed = RestoreSchema.safeParse(body);
   const label = parsed.success ? parsed.data.label : undefined;
 
-  const snapshot = await prisma.pageSnapshot.findFirst({
-    where: { id: snapshotId, pageId },
-  });
+  const snapshot = await db
+    .select()
+    .from(pageSnapshots)
+    .where(and(eq(pageSnapshots.id, snapshotId), eq(pageSnapshots.pageId, pageId)))
+    .limit(1)
+    .then((r) => r[0]);
 
   if (!snapshot) {
     return c.json({ object: 'error', status: 404, code: 'not_found', message: 'Snapshot not found' }, 404);
   }
 
-  const page = await prisma.block.findUnique({
-    where: { id: pageId, type: 'page' },
-    select: { properties: true, content: true },
-  });
+  const page = await db
+    .select({ properties: blocks.properties, content: blocks.content })
+    .from(blocks)
+    .where(and(eq(blocks.id, pageId), eq(blocks.type, 'page')))
+    .limit(1)
+    .then((r) => r[0]);
 
   if (!page) {
     return c.json({ object: 'error', status: 404, code: 'not_found', message: 'Page not found' }, 404);
   }
 
-  const props = page.properties as Record<string, unknown>;
-  const currentContent = page.content as Record<string, unknown>;
+  const props = (page.properties ?? {}) as Record<string, unknown>;
+  const currentContent = (page.content ?? {}) as Record<string, unknown>;
   const currentTitle = (props['title'] as string) ?? 'Untitled';
   const currentYjs = currentContent['yjsSnapshot'];
 
-  // Safety net: save a snapshot of current state before restoring
-  const safetyBytes =
+  const safetyB64 =
     currentYjs && typeof currentYjs === 'string'
-      ? Buffer.from(currentYjs, 'base64')
-      : Buffer.alloc(0);
+      ? currentYjs
+      : Buffer.alloc(0).toString('base64');
 
   const safetyTitle = label
     ? `Before restore — ${label}`
     : `Before restore — ${new Date().toISOString()}`;
 
-  // Atomically: (1) save safety snapshot, (2) apply restored snapshot to Block
-  await prisma.$transaction(async (tx) => {
-    await tx.pageSnapshot.create({
-      data: {
-        pageId,
-        title: safetyTitle,
-        snapshot: safetyBytes,
-        createdBy: user.id,
-      },
+  await db.transaction(async (tx) => {
+    await tx.insert(pageSnapshots).values({
+      pageId,
+      title: safetyTitle,
+      snapshot: safetyB64,
+      createdBy: user.id,
     });
 
-    await tx.block.update({
-      where: { id: pageId },
-      data: {
+    await tx
+      .update(blocks)
+      .set({
         properties: { ...props, title: snapshot.title },
         content: {
           ...currentContent,
-          yjsSnapshot: Buffer.from(snapshot.snapshot).toString('base64'),
-        } as Record<string, string>,
-      },
-    });
+          yjsSnapshot: snapshot.snapshot,
+        } as Record<string, unknown>,
+        updatedAt: new Date(),
+      })
+      .where(eq(blocks.id, pageId));
   });
 
   return c.json({

@@ -1,15 +1,13 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import { getCookie, deleteCookie } from 'hono/cookie';
 import { serve } from '@hono/node-server';
+import { eq } from 'drizzle-orm';
 import { createLogger, API_BASE_PATH } from '@notion/shared';
 import { traceMiddleware } from './middleware/trace.js';
 import { errorHandler } from './middleware/error-handler.js';
 import { rateLimit } from './middleware/rate-limit.js';
-import { demoModeMiddleware, checkDemoModeProductionGuard } from './middleware/demo-mode.js';
-import { prisma } from './lib/prisma.js';
-import { COOKIE_NAME } from './lib/auth.js';
-import { verifyToken } from './lib/jwt.js';
+import { db } from './lib/db.js';
+import { users } from '../../../slack/src/lib/db/schema';
 import { authRoutes } from './routes/auth.js';
 import { workspaces } from './routes/workspaces.js';
 import { pages } from './routes/pages.js';
@@ -32,8 +30,6 @@ import { automations } from './routes/automations.js';
 import { webhooks } from './routes/webhooks.js';
 import { exportRoutes } from './routes/export.js';
 import { importRoutes } from './routes/import.js';
-import { agents } from './routes/agents.js';
-import { invites } from './routes/invites.js';
 import { startHocuspocus } from './hocuspocus.js';
 import { ensureSearchIndex } from './lib/search.js';
 import { setupEventHandlers } from './lib/event-handlers.js';
@@ -45,19 +41,14 @@ import type { AppVariables } from './types/app.js';
 const app = new Hono<{ Variables: AppVariables }>();
 const logger = createLogger('api');
 
-// DEMO_MODE production safety guard
-checkDemoModeProductionGuard();
-
 // Global middleware
 app.use(
   '*',
   cors({
     origin: (origin) => {
-      if (!origin) return origin;
-      if (/^https?:\/\/localhost(:\d+)?$/.test(origin)) return origin;
-      const allowed = process.env['CORS_ORIGIN'] ?? 'http://localhost:3010';
-      if (origin === allowed) return origin;
-      return null;
+      const allowed = process.env['CORS_ORIGIN'] ?? 'http://localhost:3000';
+      if (!origin || origin === allowed) return origin;
+      return allowed;
     },
     allowHeaders: ['Content-Type', 'Authorization'],
     credentials: true,
@@ -75,32 +66,35 @@ app.use(`${API_BASE_PATH}/*`, async (c, next) => {
   c.header('Notion-Version', '2026-04-15');
 });
 
-// DEMO_MODE: injects a fixed demo user, bypassing JWT validation
-app.use(`${API_BASE_PATH}/*`, demoModeMiddleware);
-
-// JWT cookie auth middleware — reads session_token cookie and sets user context
+// Default user middleware — no authentication required, always use a fixed default user.
+// The slack schema uses `ainAddress` (unique) for the AIN wallet identifier and
+// `displayName` for the user's display name — there is no `walletAddress`/`name`/`image`.
+// We map those to the AuthenticatedUser shape the API already exposes.
 app.use(`${API_BASE_PATH}/*`, async (c, next) => {
-  // If demo mode already injected a user, skip JWT validation
-  if (c.get('user')) {
-    await next();
-    return;
-  }
+  const DEFAULT_ADDR = 'default';
+  const existing = await db
+    .select()
+    .from(users)
+    .where(eq(users.ainAddress, DEFAULT_ADDR))
+    .limit(1)
+    .then((r) => r[0]);
 
-  const token = getCookie(c, COOKIE_NAME);
-  if (token) {
-    try {
-      const payload = await verifyToken(token);
-      const user = await prisma.user.findUnique({
-        where: { id: payload.sub },
-        select: { id: true, walletAddress: true, name: true, image: true, createdAt: true },
-      });
-      if (user) {
-        c.set('user', user as AuthenticatedUser);
-      }
-    } catch {
-      deleteCookie(c, COOKIE_NAME, { path: '/' });
-    }
-  }
+  const row =
+    existing ??
+    (await db
+      .insert(users)
+      .values({ ainAddress: DEFAULT_ADDR, displayName: 'Default User' })
+      .returning()
+      .then((r) => r[0]!));
+
+  const defaultUser: AuthenticatedUser = {
+    id: row.id,
+    walletAddress: row.ainAddress,
+    name: row.displayName,
+    image: row.avatarUrl ?? null,
+    createdAt: row.createdAt,
+  };
+  c.set('user', defaultUser);
   await next();
 });
 
@@ -138,8 +132,6 @@ api.route('/automations', automations);
 api.route('/webhooks', webhooks);
 api.route('/pages/:pageId/export', exportRoutes);
 api.route('/import', importRoutes);
-api.route('/agents', agents);
-api.route('/invites', invites);
 
 api.get('/me', (c) => {
   const user = c.get('user');

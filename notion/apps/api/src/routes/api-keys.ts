@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { createHash, randomBytes } from 'node:crypto';
-import { prisma } from '../lib/prisma.js';
+import { and, desc, eq } from 'drizzle-orm';
+import { db, apiKeys as apiKeysTable } from '../lib/db.js';
 import type { AppVariables } from '../types/app.js';
 import { z } from 'zod';
 
@@ -29,32 +30,28 @@ apiKeys.post('/', async (c) => {
     return c.json({ object: 'error', status: 400, code: 'validation_error', message: parsed.error.message }, 400);
   }
 
-  // Generate key: ntn_ + 32 random hex chars
-  const rawHex = randomBytes(16).toString('hex'); // 32 hex chars
+  const rawHex = randomBytes(16).toString('hex');
   const fullKey = `ntn_${rawHex}`;
-
-  // Hash for storage
   const keyHash = createHash('sha256').update(fullKey).digest('hex');
-
-  // Prefix for display: ntn_ + first 8 hex chars
   const keyPrefix = `ntn_${rawHex.slice(0, 8)}`;
 
-  const apiKey = await prisma.apiKey.create({
-    data: {
+  const apiKey = await db
+    .insert(apiKeysTable)
+    .values({
       userId: user.id,
       name: parsed.data.name,
       keyHash,
       keyPrefix,
-    },
-  });
+    })
+    .returning()
+    .then((r) => r[0]!);
 
-  // Return full key ONLY once
   return c.json(
     {
       object: 'api_key',
       id: apiKey.id,
       name: apiKey.name,
-      key: fullKey, // shown only at creation
+      key: fullKey,
       keyPrefix: apiKey.keyPrefix,
       createdAt: apiKey.createdAt,
     },
@@ -62,24 +59,24 @@ apiKeys.post('/', async (c) => {
   );
 });
 
-// GET / — List user's API keys (never return full key)
+// GET / — List user's API keys
 apiKeys.get('/', async (c) => {
   const user = requireUser(c);
   if (!user) {
     return c.json({ object: 'error', status: 401, code: 'unauthorized', message: 'Not authenticated' }, 401);
   }
 
-  const keys = await prisma.apiKey.findMany({
-    where: { userId: user.id },
-    select: {
-      id: true,
-      name: true,
-      keyPrefix: true,
-      lastUsedAt: true,
-      createdAt: true,
-    },
-    orderBy: { createdAt: 'desc' },
-  });
+  const keys = await db
+    .select({
+      id: apiKeysTable.id,
+      name: apiKeysTable.name,
+      keyPrefix: apiKeysTable.keyPrefix,
+      lastUsedAt: apiKeysTable.lastUsedAt,
+      createdAt: apiKeysTable.createdAt,
+    })
+    .from(apiKeysTable)
+    .where(eq(apiKeysTable.userId, user.id))
+    .orderBy(desc(apiKeysTable.createdAt));
 
   return c.json({
     object: 'list',
@@ -96,12 +93,20 @@ apiKeys.delete('/:keyId', async (c) => {
 
   const { keyId } = c.req.param();
 
-  const existing = await prisma.apiKey.findUnique({ where: { id: keyId } });
+  const existing = await db
+    .select()
+    .from(apiKeysTable)
+    .where(eq(apiKeysTable.id, keyId))
+    .limit(1)
+    .then((r) => r[0]);
+
   if (!existing || existing.userId !== user.id) {
     return c.json({ object: 'error', status: 404, code: 'not_found', message: 'API key not found' }, 404);
   }
 
-  await prisma.apiKey.delete({ where: { id: keyId } });
+  await db
+    .delete(apiKeysTable)
+    .where(and(eq(apiKeysTable.id, keyId), eq(apiKeysTable.userId, user.id)));
 
   return c.json({ object: 'api_key', id: keyId, deleted: true });
 });

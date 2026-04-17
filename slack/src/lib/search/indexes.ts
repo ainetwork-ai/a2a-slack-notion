@@ -24,15 +24,24 @@ export const INDEX_MESSAGES: IndexDefinition = {
 export const INDEX_PAGES: IndexDefinition = {
   uid: "pages",
   primaryKey: "id",
-  searchableAttributes: ["title", "topic"],
-  filterableAttributes: ["workspaceId", "archived", "createdBy"],
+  // Title is weighted higher than topic/icon by virtue of ordering
+  searchableAttributes: ["title", "topic", "icon"],
+  filterableAttributes: ["workspaceId", "archived", "createdBy", "updatedAt"],
 };
 
 export const INDEX_BLOCKS: IndexDefinition = {
   uid: "blocks",
   primaryKey: "id",
   searchableAttributes: ["text"],
-  filterableAttributes: ["workspaceId", "pageId", "type"],
+  filterableAttributes: ["workspaceId", "pageId", "type", "archived"],
+};
+
+// Channels index — for TopBar global search scope="channels"
+export const INDEX_CHANNELS: IndexDefinition = {
+  uid: "channels",
+  primaryKey: "id",
+  searchableAttributes: ["name", "description"],
+  filterableAttributes: ["workspaceId", "isArchived", "isPrivate"],
 };
 
 export const INDEX_USERS: IndexDefinition = {
@@ -47,6 +56,7 @@ export const ALL_INDEXES: IndexDefinition[] = [
   INDEX_PAGES,
   INDEX_BLOCKS,
   INDEX_USERS,
+  INDEX_CHANNELS,
 ];
 
 // Block types eligible for full-text indexing (skip structural/media blocks)

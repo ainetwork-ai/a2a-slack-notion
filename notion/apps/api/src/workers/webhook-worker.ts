@@ -1,6 +1,7 @@
 import { createHmac } from 'node:crypto';
+import { and, eq, sql } from 'drizzle-orm';
 import { Worker, redisConnection } from '../lib/queue.js';
-import { prisma } from '../lib/prisma.js';
+import { db, notionWebhooks } from '../lib/db.js';
 
 export interface WebhookJobData {
   event: string;
@@ -13,13 +14,16 @@ export function startWebhookWorker() {
     async (job) => {
       const { event, data } = job.data;
 
-      // Fetch all active webhooks subscribed to this event
-      const activeWebhooks = await prisma.webhook.findMany({
-        where: {
-          active: true,
-          events: { has: event },
-        },
-      });
+      // `events` is a JSONB string[]; use `?` operator to test membership.
+      const activeWebhooks = await db
+        .select()
+        .from(notionWebhooks)
+        .where(
+          and(
+            eq(notionWebhooks.active, true),
+            sql`${notionWebhooks.events} ? ${event}`,
+          ),
+        );
 
       if (activeWebhooks.length === 0) return;
 
@@ -48,11 +52,9 @@ export function startWebhookWorker() {
             }
           } catch (err) {
             console.error(`[webhook-worker] Failed to deliver to ${webhook.url}:`, err);
-            // Don't throw — this webhook delivery failed, others can succeed
           }
         }),
       );
-      // Job always completes — individual webhook failures are logged but don't retry the whole batch
     },
     { connection: redisConnection },
   );

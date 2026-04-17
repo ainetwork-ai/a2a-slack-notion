@@ -43,7 +43,8 @@ export default function NotionCanvasEditor({ channelId, onClose }: NotionCanvasE
     setLoading(true);
     fetch(`/api/channels/${channelId}/canvases`)
       .then((r) => r.json())
-      .then((rows: CanvasRow[]) => {
+      .then((data: { canvases?: CanvasRow[] } | CanvasRow[]) => {
+        const rows = Array.isArray(data) ? data : data?.canvases;
         setCanvasList(Array.isArray(rows) ? rows : []);
       })
       .catch(() => setCanvasList([]))

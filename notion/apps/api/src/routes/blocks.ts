@@ -1,11 +1,12 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { prisma } from '../lib/prisma.js';
+import { and, asc, eq, SQL } from 'drizzle-orm';
+import { db } from '../lib/db.js';
+import { blocks as blocksTable, type BlockType } from '../../../../slack/src/lib/db/schema';
 import { requirePermission } from '../middleware/require-permission.js';
 import { checkPagePermission } from '../lib/permissions.js';
 import { appEvents } from '../lib/events.js';
 import type { AppVariables } from '../types/app.js';
-import type { Prisma } from '../generated/prisma/client.js';
 
 const blocks = new Hono<{ Variables: AppVariables }>();
 
@@ -34,6 +35,13 @@ const UpdateBlockSchema = z.object({
   content: z.record(z.string(), z.unknown()).optional(),
 });
 
+const VALID_BLOCK_TYPES: readonly BlockType[] = [
+  'page', 'text', 'heading_1', 'heading_2', 'heading_3',
+  'bulleted_list', 'numbered_list', 'to_do', 'toggle', 'callout',
+  'code', 'divider', 'image', 'quote', 'table', 'bookmark', 'file',
+  'embed', 'database',
+] as const;
+
 // GET / — list blocks filtered by pageId and/or parentId
 blocks.get('/', async (c) => {
   const user = requireUser(c);
@@ -58,14 +66,15 @@ blocks.get('/', async (c) => {
     }
   }
 
-  const where: Record<string, unknown> = { archived: false };
-  if (pageId) where['pageId'] = pageId;
-  if (parentId) where['parentId'] = parentId;
+  const conditions: SQL[] = [eq(blocksTable.archived, false)];
+  if (pageId) conditions.push(eq(blocksTable.pageId, pageId));
+  if (parentId) conditions.push(eq(blocksTable.parentId, parentId));
 
-  const results = await prisma.block.findMany({
-    where,
-    orderBy: { createdAt: 'asc' },
-  });
+  const results = await db
+    .select()
+    .from(blocksTable)
+    .where(and(...conditions))
+    .orderBy(asc(blocksTable.createdAt));
 
   // Exclude the page block itself from children results
   const filteredResults = pageId
@@ -98,43 +107,39 @@ blocks.post('/', async (c) => {
     return c.json({ object: 'error', status: 403, code: 'forbidden', message: 'No permission to create blocks on this page' }, 403);
   }
 
-  // Validate block type against Prisma enum
-  const validTypes = [
-    'page', 'text', 'heading_1', 'heading_2', 'heading_3',
-    'bulleted_list', 'numbered_list', 'to_do', 'toggle', 'callout',
-    'code', 'divider', 'image', 'quote', 'table', 'bookmark', 'file',
-    'embed', 'database',
-  ];
-  if (!validTypes.includes(type)) {
+  if (!VALID_BLOCK_TYPES.includes(type as BlockType)) {
     return c.json(
       { object: 'error', status: 400, code: 'validation_error', message: `Invalid block type: ${type}` },
       400,
     );
   }
 
-  const block = await prisma.block.create({
-    data: {
-      type: type as Parameters<typeof prisma.block.create>[0]['data']['type'],
+  const block = await db
+    .insert(blocksTable)
+    .values({
+      type: type as BlockType,
       parentId: parentId ?? null,
       pageId,
       workspaceId,
       createdBy: user.id,
-      properties: (properties ?? {}) as unknown as Prisma.InputJsonValue,
-      content: (content ?? {}) as unknown as Prisma.InputJsonValue,
-    },
-  });
+      properties: (properties ?? {}) as Record<string, unknown>,
+      content: (content ?? {}) as Record<string, unknown>,
+    })
+    .returning()
+    .then((r) => r[0]!);
 
-  // Add to parent's childrenOrder
   if (parentId) {
-    const parent = await prisma.block.findUnique({
-      where: { id: parentId },
-      select: { childrenOrder: true },
-    });
+    const parent = await db
+      .select({ childrenOrder: blocksTable.childrenOrder })
+      .from(blocksTable)
+      .where(eq(blocksTable.id, parentId))
+      .limit(1)
+      .then((r) => r[0]);
     if (parent) {
-      await prisma.block.update({
-        where: { id: parentId },
-        data: { childrenOrder: [...parent.childrenOrder, block.id] },
-      });
+      await db
+        .update(blocksTable)
+        .set({ childrenOrder: [...parent.childrenOrder, block.id] })
+        .where(eq(blocksTable.id, parentId));
     }
   } else {
     // No parentId — append to the page block's childrenOrder
@@ -150,7 +155,6 @@ blocks.post('/', async (c) => {
     }
   }
 
-  // Emit webhook event
   appEvents.emit('block.changed', { blockId: block.id, pageId: block.pageId, updatedBy: user.id });
 
   return c.json({ object: 'block', ...block }, 201);
@@ -173,7 +177,13 @@ blocks.patch('/:id', async (c) => {
     );
   }
 
-  const existing = await prisma.block.findUnique({ where: { id } });
+  const existing = await db
+    .select()
+    .from(blocksTable)
+    .where(eq(blocksTable.id, id))
+    .limit(1)
+    .then((r) => r[0]);
+
   if (!existing || existing.archived) {
     return c.json({ object: 'error', status: 404, code: 'not_found', message: 'Block not found' }, 404);
   }
@@ -191,15 +201,17 @@ blocks.patch('/:id', async (c) => {
     ? { ...(existing.content as Record<string, unknown>), ...parsed.data.content }
     : existing.content;
 
-  const block = await prisma.block.update({
-    where: { id },
-    data: {
-      properties: updatedProperties as unknown as Prisma.InputJsonValue,
-      content: updatedContent as unknown as Prisma.InputJsonValue,
-    },
-  });
+  const block = await db
+    .update(blocksTable)
+    .set({
+      properties: updatedProperties as Record<string, unknown>,
+      content: updatedContent as Record<string, unknown>,
+      updatedAt: new Date(),
+    })
+    .where(eq(blocksTable.id, id))
+    .returning()
+    .then((r) => r[0]!);
 
-  // Emit webhook event
   appEvents.emit('block.changed', { blockId: block.id, pageId: block.pageId, updatedBy: user.id });
 
   return c.json({ object: 'block', ...block });
@@ -214,7 +226,13 @@ blocks.delete('/:id', async (c) => {
 
   const id = c.req.param('id');
 
-  const existing = await prisma.block.findUnique({ where: { id } });
+  const existing = await db
+    .select()
+    .from(blocksTable)
+    .where(eq(blocksTable.id, id))
+    .limit(1)
+    .then((r) => r[0]);
+
   if (!existing) {
     return c.json({ object: 'error', status: 404, code: 'not_found', message: 'Block not found' }, 404);
   }
@@ -224,19 +242,23 @@ blocks.delete('/:id', async (c) => {
     return c.json({ object: 'error', status: 403, code: 'forbidden', message: 'No permission to delete blocks on this page' }, 403);
   }
 
-  await prisma.block.update({ where: { id }, data: { archived: true } });
+  await db
+    .update(blocksTable)
+    .set({ archived: true, updatedAt: new Date() })
+    .where(eq(blocksTable.id, id));
 
-  // Remove from parent's childrenOrder
   if (existing.parentId) {
-    const parent = await prisma.block.findUnique({
-      where: { id: existing.parentId },
-      select: { childrenOrder: true },
-    });
+    const parent = await db
+      .select({ childrenOrder: blocksTable.childrenOrder })
+      .from(blocksTable)
+      .where(eq(blocksTable.id, existing.parentId))
+      .limit(1)
+      .then((r) => r[0]);
     if (parent) {
-      await prisma.block.update({
-        where: { id: existing.parentId },
-        data: { childrenOrder: parent.childrenOrder.filter((cid) => cid !== id) },
-      });
+      await db
+        .update(blocksTable)
+        .set({ childrenOrder: parent.childrenOrder.filter((cid) => cid !== id) })
+        .where(eq(blocksTable.id, existing.parentId));
     }
   }
 
@@ -258,36 +280,34 @@ blocks.patch('/:id/reorder', requirePermission('can_edit'), async (c) => {
   type ReorderError = { ok: false; status: 400 | 404; code: string; message: string };
   type ReorderOk = { ok: true; childrenOrder: string[] };
 
-  const result: ReorderError | ReorderOk = await prisma.$transaction(async (tx) => {
-    const parent = await tx.block.findUnique({
-      where: { id: parentId },
-      select: { childrenOrder: true },
-    });
+  const result: ReorderError | ReorderOk = await db.transaction(async (tx) => {
+    const parent = await tx
+      .select({ childrenOrder: blocksTable.childrenOrder })
+      .from(blocksTable)
+      .where(eq(blocksTable.id, parentId))
+      .limit(1)
+      .then((r) => r[0]);
 
     if (!parent) {
-      return { ok: false, status: 404, code: 'not_found', message: 'Parent block not found' } satisfies ReorderError;
+      return { ok: false, status: 404, code: 'not_found', message: 'Parent block not found' } as const;
     }
 
     const order = [...parent.childrenOrder];
 
     if (!order.includes(blockId)) {
-      return { ok: false, status: 400, code: 'validation_error', message: 'blockId is not in childrenOrder' } satisfies ReorderError;
+      return { ok: false, status: 400, code: 'validation_error', message: 'blockId is not in childrenOrder' } as const;
     }
 
-    // Remove blockId from current position
     const filtered = order.filter((id) => id !== blockId);
 
     let newOrder: string[];
     if (afterId === null) {
-      // Insert at the beginning
       newOrder = [blockId, ...filtered];
     } else {
       const afterIndex = filtered.indexOf(afterId);
       if (afterIndex === -1) {
-        // afterId not found — append at end
         newOrder = [...filtered, blockId];
       } else {
-        // Insert immediately after afterId
         newOrder = [
           ...filtered.slice(0, afterIndex + 1),
           blockId,
@@ -296,12 +316,12 @@ blocks.patch('/:id/reorder', requirePermission('can_edit'), async (c) => {
       }
     }
 
-    await tx.block.update({
-      where: { id: parentId },
-      data: { childrenOrder: newOrder },
-    });
+    await tx
+      .update(blocksTable)
+      .set({ childrenOrder: newOrder })
+      .where(eq(blocksTable.id, parentId));
 
-    return { ok: true, childrenOrder: newOrder } satisfies ReorderOk;
+    return { ok: true, childrenOrder: newOrder } as const;
   });
 
   if (!result.ok) {

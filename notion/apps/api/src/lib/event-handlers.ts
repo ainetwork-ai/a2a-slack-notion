@@ -1,7 +1,8 @@
+import { eq } from 'drizzle-orm';
 import { appEvents } from './events.js';
 import { notificationQueue, webhookQueue } from './queue.js';
-import { prisma } from './prisma.js';
-import { indexPage } from './search.js';
+import { db } from './db.js';
+import { users, blocks } from '../../../../slack/src/lib/db/schema';
 import type { MentionEvent } from './events.js';
 
 export interface CommentEvent {
@@ -17,24 +18,21 @@ export interface CommentEvent {
 export function setupEventHandlers() {
   // mention.created → notification for the mentioned user
   appEvents.on('mention.created', async (event: MentionEvent) => {
-    if (event.type === 'agent') {
-      // Agent mentions are handled directly by the AgentMentionTrigger on the client.
-      // No server-side notification needed — the invoke happens via POST /agents/invoke.
-      return;
-    }
     if (event.type !== 'user') return; // Only notify for user mentions
 
     try {
-      // Lookup mentioner's name for a friendly notification title
-      const mentioner = await prisma.user.findUnique({
-        where: { id: event.mentionedBy },
-        select: { name: true },
-      });
+      // Lookup mentioner's display name for a friendly notification title
+      const mentioner = await db
+        .select({ displayName: users.displayName })
+        .from(users)
+        .where(eq(users.id, event.mentionedBy))
+        .limit(1)
+        .then((r) => r[0]);
 
       await notificationQueue.add('mention', {
         type: 'mention',
         userId: event.targetId,
-        title: `${mentioner?.name ?? 'Someone'} mentioned you`,
+        title: `${mentioner?.displayName ?? 'Someone'} mentioned you`,
         body: undefined,
         pageId: event.pageId,
       });
@@ -47,26 +45,31 @@ export function setupEventHandlers() {
   appEvents.on('comment.created', async (event: CommentEvent) => {
     try {
       // Find the page (block of type page) creator
-      const page = await prisma.block.findUnique({
-        where: { id: event.pageId },
-        select: { createdBy: true, properties: true },
-      });
+      const page = await db
+        .select({ createdBy: blocks.createdBy, properties: blocks.properties })
+        .from(blocks)
+        .where(eq(blocks.id, event.pageId))
+        .limit(1)
+        .then((r) => r[0]);
+
       if (!page) return;
 
       if (page.createdBy !== event.authorId) {
         // Don't notify self
-        const commenter = await prisma.user.findUnique({
-          where: { id: event.authorId },
-          select: { name: true },
-        });
+        const commenter = await db
+          .select({ displayName: users.displayName })
+          .from(users)
+          .where(eq(users.id, event.authorId))
+          .limit(1)
+          .then((r) => r[0]);
 
-        const props = page.properties as Record<string, unknown>;
+        const props = (page.properties ?? {}) as Record<string, unknown>;
         const pageTitle = (props['title'] as string) ?? 'a page';
 
         await notificationQueue.add('comment', {
           type: 'comment',
           userId: page.createdBy,
-          title: `${commenter?.name ?? 'Someone'} commented on "${pageTitle}"`,
+          title: `${commenter?.displayName ?? 'Someone'} commented on "${pageTitle}"`,
           body: undefined,
           pageId: event.pageId,
         });
@@ -92,65 +95,21 @@ export function setupEventHandlers() {
 
   const WEBHOOK_JOB_OPTS = { attempts: 5, backoff: { type: 'exponential' as const, delay: 1000 } };
 
-  // page.created → webhook + search index
+  // page.created → webhook
   appEvents.on('page.created', async (event: { pageId: string; workspaceId: string; createdBy: string }) => {
     try {
       await webhookQueue.add('webhook', { event: 'page.created', data: event }, WEBHOOK_JOB_OPTS);
     } catch (err) {
       console.error('[event-handlers] Failed to enqueue page.created webhook:', err);
     }
-
-    // Index in Meilisearch (non-fatal)
-    try {
-      const block = await prisma.block.findUnique({
-        where: { id: event.pageId },
-        select: { id: true, workspaceId: true, properties: true, type: true, createdBy: true, updatedAt: true },
-      });
-      if (block) {
-        const props = block.properties as Record<string, unknown>;
-        await indexPage({
-          id: block.id,
-          workspaceId: block.workspaceId,
-          title: (props['title'] as string) ?? 'Untitled',
-          textContent: (props['title'] as string) ?? '',
-          createdBy: block.createdBy,
-          type: block.type,
-          updatedAt: block.updatedAt.toISOString(),
-        });
-      }
-    } catch {
-      // Non-fatal: search index failure must not break the event pipeline
-    }
   });
 
-  // page.updated → webhook + search index
+  // page.updated → webhook
   appEvents.on('page.updated', async (event: { pageId: string; workspaceId: string; updatedBy: string }) => {
     try {
       await webhookQueue.add('webhook', { event: 'page.updated', data: event }, WEBHOOK_JOB_OPTS);
     } catch (err) {
       console.error('[event-handlers] Failed to enqueue page.updated webhook:', err);
-    }
-
-    // Re-index in Meilisearch (non-fatal)
-    try {
-      const block = await prisma.block.findUnique({
-        where: { id: event.pageId },
-        select: { id: true, workspaceId: true, properties: true, type: true, createdBy: true, updatedAt: true },
-      });
-      if (block) {
-        const props = block.properties as Record<string, unknown>;
-        await indexPage({
-          id: block.id,
-          workspaceId: block.workspaceId,
-          title: (props['title'] as string) ?? 'Untitled',
-          textContent: (props['title'] as string) ?? '',
-          createdBy: block.createdBy,
-          type: block.type,
-          updatedAt: block.updatedAt.toISOString(),
-        });
-      }
-    } catch {
-      // Non-fatal: search index failure must not break the event pipeline
     }
   });
 

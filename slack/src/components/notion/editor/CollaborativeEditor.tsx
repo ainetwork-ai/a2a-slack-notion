@@ -87,7 +87,7 @@ export function CollaborativeEditor({
         .then((res) => (res.ok ? res.json() : null))
         .then((data: { doc: Record<string, unknown> } | null) => {
           if (data?.doc && e && !e.isDestroyed) {
-            e.commands.setContent(data.doc, false);
+            e.commands.setContent(data.doc, { emitUpdate: false });
           }
         })
         .catch(() => {/* no saved doc yet — start empty */});

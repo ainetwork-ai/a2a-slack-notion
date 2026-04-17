@@ -3,6 +3,7 @@ import { users, channels, channelMembers, messages, reactions, mentions, files, 
 import { eq, and, desc, lt, sql, inArray, or, ilike } from "drizzle-orm";
 import { requireAuth } from "@/lib/auth/middleware";
 import { NextRequest, NextResponse } from "next/server";
+import { onMessageUpdated, onMessageDeleted } from "@/lib/search/hooks";
 
 export async function PATCH(
   request: NextRequest,
@@ -48,6 +49,18 @@ export async function PATCH(
     .where(eq(messages.id, messageId))
     .returning();
 
+  // Update search index (best-effort)
+  onMessageUpdated({
+    id: updated.id,
+    content: updated.content,
+    senderName: user.displayName,
+    workspaceId: null,
+    channelId: updated.channelId,
+    conversationId: updated.conversationId,
+    senderId: updated.userId,
+    createdAt: updated.createdAt.getTime(),
+  });
+
   return NextResponse.json(updated);
 }
 
@@ -76,6 +89,9 @@ export async function DELETE(
   }
 
   await db.delete(messages).where(eq(messages.id, messageId));
+
+  // Remove from search index (best-effort)
+  onMessageDeleted(messageId);
 
   return NextResponse.json({ success: true });
 }

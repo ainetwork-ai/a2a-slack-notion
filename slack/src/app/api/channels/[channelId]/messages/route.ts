@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { sendToAgent } from "@/lib/a2a/message-bridge";
 import { checkAutoEngagement } from "@/lib/a2a/auto-engage";
 import { runWorkflow } from "@/lib/workflow/executor";
+import { onMessageCreated } from "@/lib/search/hooks";
 
 export async function GET(
   request: NextRequest,
@@ -193,6 +194,18 @@ export async function POST(
       parentId: parentId || null,
     })
     .returning();
+
+  // Index message for search (best-effort)
+  onMessageCreated({
+    id: message.id,
+    content: message.content,
+    senderName: user.displayName,
+    workspaceId: null,
+    channelId,
+    conversationId: null,
+    senderId: user.id,
+    createdAt: message.createdAt.getTime(),
+  });
 
   // Fire outgoing webhooks that match this message
   {

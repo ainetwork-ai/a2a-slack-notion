@@ -11,6 +11,7 @@ import { blocks, workspaceMembers } from '@/lib/db/schema';
 import { eq, and, lt, or, ilike, sql } from 'drizzle-orm';
 import { requireAuth } from '@/lib/auth/middleware';
 import { NextRequest, NextResponse } from 'next/server';
+import { onPageCreated } from '@/lib/search/hooks';
 
 // ─── Cursor helpers ───────────────────────────────────────────────────────────
 
@@ -161,6 +162,20 @@ export async function POST(req: NextRequest) {
     }
 
     return { ...created, pageId: created.id };
+  });
+
+  // Best-effort delta index for global search (fire-and-forget)
+  onPageCreated({
+    id: page.id,
+    type: 'page',
+    pageId: page.id,
+    workspaceId: page.workspaceId,
+    properties: page.properties,
+    content: page.content,
+    archived: page.archived,
+    createdBy: page.createdBy,
+    createdAt: page.createdAt,
+    updatedAt: page.updatedAt,
   });
 
   return NextResponse.json(page, { status: 201 });

@@ -1,106 +1,84 @@
+/**
+ * Notion MCP server entrypoint.
+ *
+ * Exposes 14 tools (5 page, 4 block, 2 database, 2 comment, 1 search) that proxy
+ * into the slack workspace REST API. All transport is stdio so the server can be
+ * launched by slack's MCP registry like any other provider.
+ *
+ * Env contract:
+ *   SLACK_BASE_URL  — base URL of the slack Next.js app (default: http://localhost:3000)
+ *   SLACK_API_KEY   — bearer token sent on every outbound request (optional in dev)
+ *
+ * Errors from zod validation or the upstream API are surfaced back to the MCP
+ * client as `isError: true` tool results so the caller can reason about them
+ * without the connection dropping.
+ */
+
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
-  ListResourcesRequestSchema,
-  ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
-import { TOOLS, dispatchTool, apiCall } from './tools.js';
-import { startHttpServer } from './http.js';
+import { z } from 'zod';
 
-// DEMO_MODE production guard
-if (
-  process.env['NODE_ENV'] === 'production' &&
-  process.env['MCP_MODE'] === 'all'
-) {
-  process.stderr.write('WARNING: MCP_MODE=all not recommended in production\n');
-}
+import { allTools, toolMap } from './tools/index.js';
+import { textResult } from './http.js';
 
-// ─── Server factory ───────────────────────────────────────────────────────────
-// Creates a fresh Server instance per use (required for HTTP stateless mode)
+const SERVER_NAME = 'notion';
+const SERVER_VERSION = '0.1.0';
 
-export function createMcpServer() {
-  const srv = new Server(
-    { name: 'notion-mcp', version: '0.1.0' },
-    { capabilities: { tools: {}, resources: {} } },
-  );
+const server = new Server(
+  { name: SERVER_NAME, version: SERVER_VERSION },
+  { capabilities: { tools: {} } },
+);
 
-  srv.setRequestHandler(ListToolsRequestSchema, async () => ({
-    tools: TOOLS.map((t) => ({
-      name: t.name,
-      description: t.description,
-      inputSchema: t.inputSchema,
-    })),
-  }));
+server.setRequestHandler(ListToolsRequestSchema, async () => ({
+  tools: allTools.map(({ name, description, inputSchema }) => ({
+    name,
+    description,
+    inputSchema,
+  })),
+}));
 
-  srv.setRequestHandler(CallToolRequestSchema, async (request) => {
-    const { name, arguments: args } = request.params;
-    return dispatchTool(name, args as Record<string, unknown>);
-  });
+server.setRequestHandler(CallToolRequestSchema, async (request) => {
+  const { name, arguments: args } = request.params;
+  const tool = toolMap.get(name);
 
-  srv.setRequestHandler(ListResourcesRequestSchema, async () => ({
-    resources: [
-      {
-        uri: 'workspace://info',
-        name: 'Workspace Info',
-        description: 'Basic information about the first workspace.',
-        mimeType: 'application/json',
-      },
-      {
-        uri: 'workspace://recent-pages',
-        name: 'Recent Pages',
-        description: 'Pages recently visited by the authenticated user.',
-        mimeType: 'application/json',
-      },
-    ],
-  }));
+  if (!tool) {
+    return {
+      content: [{ type: 'text', text: `Unknown tool: ${name}` }],
+      isError: true,
+    };
+  }
 
-  srv.setRequestHandler(ReadResourceRequestSchema, async (request) => {
-    const { uri } = request.params;
-    try {
-      let data: unknown;
-      if (uri === 'workspace://info') {
-        data = await apiCall('GET', '/workspaces');
-        if (Array.isArray(data) && data.length > 0) data = data[0];
-      } else if (uri === 'workspace://recent-pages') {
-        data = await apiCall('GET', '/recent');
-      } else {
-        return { contents: [{ uri, mimeType: 'application/json', text: JSON.stringify({ error: `Unknown resource: ${uri}` }) }] };
-      }
-      return { contents: [{ uri, mimeType: 'application/json', text: JSON.stringify(data, null, 2) }] };
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      return { contents: [{ uri, mimeType: 'application/json', text: JSON.stringify({ error: message }) }] };
-    }
-  });
-
-  return srv;
-}
-
-// ─── Start ────────────────────────────────────────────────────────────────────
+  try {
+    const result = await tool.handler(args ?? {});
+    return textResult(result);
+  } catch (err) {
+    const message =
+      err instanceof z.ZodError
+        ? `Invalid arguments for ${name}: ${JSON.stringify(err.issues)}`
+        : err instanceof Error
+          ? err.message
+          : String(err);
+    return {
+      content: [{ type: 'text', text: message }],
+      isError: true,
+    };
+  }
+});
 
 async function main() {
-  const mode = process.env['MCP_MODE'] ?? 'stdio';
-
-  if (mode === 'http') {
-    startHttpServer(createMcpServer); // Pass factory, not instance
-  } else if (mode === 'all') {
-    startHttpServer(createMcpServer);
-    const transport = new StdioServerTransport();
-    const server = createMcpServer();
-    await server.connect(transport);
-    process.stderr.write('Notion MCP server started (stdio + HTTP)\n');
-  } else {
-    // Default: stdio
-    const transport = new StdioServerTransport();
-    const server = createMcpServer();
-    await server.connect(transport);
-    process.stderr.write('Notion MCP server started\n');
-  }
+  const transport = new StdioServerTransport();
+  await server.connect(transport);
+  // stderr is the only safe channel — stdout is reserved for the JSON-RPC stream.
+  process.stderr.write(
+    `Notion MCP server ready (${allTools.length} tools, base=${process.env['SLACK_BASE_URL'] ?? 'http://localhost:3000'})\n`,
+  );
 }
 
 main().catch((err) => {
-  process.stderr.write(`Fatal: ${err}\n`);
+  process.stderr.write(`Fatal: ${err instanceof Error ? err.stack ?? err.message : err}\n`);
   process.exit(1);
 });

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
-import { MessageSquare, Bell, BellOff } from 'lucide-react';
+import { MessageSquare, Bell, BellOff, X, Hash } from 'lucide-react';
 import { useAppStore } from '@/lib/stores/app-store';
 import { useMessages } from '@/lib/hooks/use-messages';
 import { useAuth } from '@/lib/hooks/use-auth';
@@ -97,25 +97,44 @@ export default function ThreadPanel({
         showCloseButton={false}
       >
         <SheetHeader className="px-4 h-12 border-b border-white/10 flex flex-row items-center gap-2">
-          <MessageSquare className="w-[18px] h-[18px] text-slate-400" />
-          <SheetTitle className="text-white text-[17px] font-bold flex-1">Thread</SheetTitle>
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            <MessageSquare className="w-[18px] h-[18px] text-slate-400 shrink-0" />
+            <SheetTitle className="text-white text-[17px] font-bold shrink-0">Thread</SheetTitle>
+            {channelName && (
+              <span className="flex items-center gap-0.5 text-sm text-slate-400 min-w-0">
+                <span className="text-slate-500 shrink-0">in</span>
+                <Hash className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                <span className="truncate hover:underline cursor-default" title={channelName}>
+                  {channelName}
+                </span>
+              </span>
+            )}
+          </div>
           <button
             onClick={handleToggleSubscription}
             disabled={subscribeLoading}
             title={isSubscribed ? 'Unfollow thread' : 'Follow thread'}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded text-sm text-slate-400 hover:text-white hover:bg-white/10 transition-colors disabled:opacity-50"
+            className="flex items-center gap-1.5 px-2 py-1 rounded text-xs text-slate-400 hover:text-white hover:bg-white/10 transition-colors disabled:opacity-50 shrink-0"
           >
             {isSubscribed ? (
               <>
-                <BellOff className="w-4 h-4" />
+                <BellOff className="w-3.5 h-3.5" />
                 <span>Unfollow</span>
               </>
             ) : (
               <>
-                <Bell className="w-4 h-4" />
+                <Bell className="w-3.5 h-3.5" />
                 <span>Follow</span>
               </>
             )}
+          </button>
+          <button
+            onClick={() => setActiveThread(null)}
+            title="Close thread"
+            aria-label="Close thread"
+            className="flex items-center justify-center w-7 h-7 rounded text-slate-400 hover:text-white hover:bg-white/10 transition-colors shrink-0"
+          >
+            <X className="w-4 h-4" />
           </button>
         </SheetHeader>
 

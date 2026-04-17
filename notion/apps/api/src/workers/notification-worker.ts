@@ -1,5 +1,5 @@
 import { Worker, redisConnection } from '../lib/queue.js';
-import { prisma } from '../lib/prisma.js';
+import { db, notionNotifications } from '../lib/db.js';
 import { sseClients } from '../lib/sse-clients.js';
 
 export interface NotificationJobData {
@@ -17,11 +17,12 @@ export function startNotificationWorker() {
       const { type, userId, title, body, pageId } = job.data;
 
       try {
-        const notification = await prisma.notification.create({
-          data: { userId, type, title, body, pageId },
-        });
+        const notification = await db
+          .insert(notionNotifications)
+          .values({ userId, type, title, body, pageId })
+          .returning()
+          .then((r) => r[0]!);
 
-        // Push to any connected SSE clients for this user
         const writers = sseClients.get(userId);
         if (writers && writers.size > 0) {
           const payload = `data: ${JSON.stringify(notification)}\n\n`;
@@ -31,7 +32,7 @@ export function startNotificationWorker() {
         }
       } catch (err) {
         console.error('[notification-worker] Failed to process job:', err);
-        throw err; // BullMQ will retry
+        throw err;
       }
     },
     { connection: redisConnection },

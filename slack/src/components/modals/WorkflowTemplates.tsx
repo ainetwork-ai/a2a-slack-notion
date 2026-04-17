@@ -5,8 +5,8 @@ import useSWR from 'swr';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Loader2 } from 'lucide-react';
-import type { WorkflowStep } from '@/lib/workflow/types';
 import { NEWSROOM_TEMPLATE } from '@/lib/workflow/templates/notion-newsroom';
+import type { WorkflowStep } from '@/lib/workflow/types';
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 

@@ -11,6 +11,7 @@ import { blocks, pagePermissions, workspaceMembers, type BlockType } from '@/lib
 import { eq, and } from 'drizzle-orm';
 import { requireAuth } from '@/lib/auth/middleware';
 import { NextRequest, NextResponse } from 'next/server';
+import { onBlockCreated } from '@/lib/search/hooks';
 
 const ALLOWED_BLOCK_TYPES: BlockType[] = [
   'page', 'text', 'heading_1', 'heading_2', 'heading_3', 'bulleted_list', 'numbered_list',
@@ -85,6 +86,20 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }
 
     return created;
+  });
+
+  // Best-effort delta index (fire-and-forget)
+  onBlockCreated({
+    id: result.id,
+    type: result.type,
+    pageId: result.pageId,
+    workspaceId: result.workspaceId,
+    properties: result.properties,
+    content: result.content,
+    archived: result.archived,
+    createdBy: result.createdBy,
+    createdAt: result.createdAt,
+    updatedAt: result.updatedAt,
   });
 
   return NextResponse.json(result, { status: 201 });

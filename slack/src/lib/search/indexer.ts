@@ -13,6 +13,7 @@ import {
   INDEX_PAGES,
   INDEX_BLOCKS,
   INDEX_USERS,
+  INDEX_CHANNELS,
   INDEXABLE_BLOCK_TYPES,
   type IndexDefinition,
 } from "./indexes";
@@ -36,9 +37,13 @@ export interface MeiliPage {
   id: string;
   title: string;
   topic: string | null;
+  icon?: string | null;
   workspaceId: string;
   archived: boolean;
   createdBy: string;
+  // Unix ms — Meili filters on numbers
+  createdAt?: number;
+  updatedAt?: number;
 }
 
 export interface MeiliBlock {
@@ -47,6 +52,7 @@ export interface MeiliBlock {
   type: string;
   workspaceId: string;
   pageId: string;
+  archived?: boolean;
 }
 
 export interface MeiliUser {
@@ -54,6 +60,83 @@ export interface MeiliUser {
   displayName: string;
   ainAddress: string;
   isAgent: boolean;
+}
+
+export interface MeiliChannel {
+  id: string;
+  name: string;
+  description: string | null;
+  workspaceId: string;
+  isArchived: boolean;
+  isPrivate: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Extractors — best-effort text extraction from polymorphic JSONB columns
+// ---------------------------------------------------------------------------
+
+/** Extract a plain-text title from blocks.properties. */
+export function extractTitle(properties: unknown): string {
+  if (!properties || typeof properties !== "object") return "";
+  const p = properties as Record<string, unknown>;
+  const raw = p.title;
+  if (typeof raw === "string") return raw;
+  if (Array.isArray(raw)) {
+    // Flatten Notion-style rich text [[text, annotations], ...] or plain string[]
+    return raw
+      .map((seg) => {
+        if (typeof seg === "string") return seg;
+        if (Array.isArray(seg)) return String(seg[0] ?? "");
+        if (seg && typeof seg === "object" && "text" in seg) {
+          return String((seg as { text?: unknown }).text ?? "");
+        }
+        return "";
+      })
+      .join("");
+  }
+  return "";
+}
+
+/**
+ * Extract searchable text from a block's `content` (JSONB) and `properties`.
+ * Handles:
+ *   - Notion-style { text: "..." } or { text: [[str, attrs], ...] }
+ *   - Tiptap-style { content: [{ type: 'text', text: '...' }] } (recursive)
+ *   - { caption: "..." }, { alt: "..." } for media blocks
+ */
+export function extractBlockText(
+  content: unknown,
+  properties?: unknown,
+): string {
+  const parts: string[] = [];
+
+  // properties.title is the richest source for most block types
+  const t = extractTitle(properties);
+  if (t) parts.push(t);
+
+  function walk(node: unknown): void {
+    if (!node) return;
+    if (typeof node === "string") {
+      parts.push(node);
+      return;
+    }
+    if (Array.isArray(node)) {
+      for (const n of node) walk(n);
+      return;
+    }
+    if (typeof node === "object") {
+      const obj = node as Record<string, unknown>;
+      if (typeof obj.text === "string") parts.push(obj.text);
+      else if (Array.isArray(obj.text)) walk(obj.text);
+      if (typeof obj.caption === "string") parts.push(obj.caption);
+      if (typeof obj.alt === "string") parts.push(obj.alt);
+      if (typeof obj.url === "string") parts.push(obj.url);
+      if (Array.isArray(obj.content)) walk(obj.content);
+    }
+  }
+
+  walk(content);
+  return parts.join(" ").replace(/\s+/g, " ").trim();
 }
 
 // ---------------------------------------------------------------------------
@@ -132,6 +215,14 @@ export function indexUser(user: MeiliUser): void {
   scheduleUpsert(INDEX_USERS, user.id, user as unknown as Record<string, unknown>);
 }
 
+export function indexChannel(channel: MeiliChannel): void {
+  scheduleUpsert(
+    INDEX_CHANNELS,
+    channel.id,
+    channel as unknown as Record<string, unknown>,
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Delete helper
 // ---------------------------------------------------------------------------
@@ -164,9 +255,13 @@ export async function flushAllIndexers(): Promise<void> {
       flushPromises.push(
         (async () => {
           try {
-            const def = [INDEX_MESSAGES, INDEX_PAGES, INDEX_BLOCKS, INDEX_USERS].find(
-              (d) => d.uid === uid
-            );
+            const def = [
+              INDEX_MESSAGES,
+              INDEX_PAGES,
+              INDEX_BLOCKS,
+              INDEX_USERS,
+              INDEX_CHANNELS,
+            ].find((d) => d.uid === uid);
             if (def) await ensureIndex(def);
             await meili.index(uid).addDocuments([entry.doc]);
           } catch (err) {

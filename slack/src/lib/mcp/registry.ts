@@ -14,6 +14,154 @@ export interface McpServer {
 
 export const MCP_SERVERS: McpServer[] = [
   {
+    id: 'notion',
+    name: 'Notion',
+    description: 'Create, read, update, and search Notion pages, blocks, databases, and comments',
+    icon: '📝',
+    tools: [
+      {
+        name: 'pages.create',
+        description: 'Create a new page in a workspace.',
+        parameters: {
+          workspaceId: { type: 'string', description: 'Workspace UUID', required: true },
+          title: { type: 'string', description: 'Page title; defaults to "Untitled"' },
+          parentPageId: { type: 'string', description: 'Optional parent page UUID for nesting' },
+          icon: { type: 'string', description: 'Optional emoji or icon string' },
+          userId: { type: 'string', description: 'Calling user ID for auth check' },
+        },
+      },
+      {
+        name: 'pages.get',
+        description: 'Fetch a page and its child block count.',
+        parameters: {
+          pageId: { type: 'string', description: 'Page UUID', required: true },
+          userId: { type: 'string', description: 'Calling user ID for auth check' },
+        },
+      },
+      {
+        name: 'pages.update',
+        description: 'Update a page title, icon, cover, or archived flag.',
+        parameters: {
+          pageId: { type: 'string', description: 'Page UUID', required: true },
+          title: { type: 'string', description: 'New title' },
+          icon: { type: 'string', description: 'New icon' },
+          cover: { type: 'string', description: 'New cover' },
+          archived: { type: 'boolean', description: 'Set archived state' },
+          userId: { type: 'string', description: 'Calling user ID for auth check' },
+        },
+      },
+      {
+        name: 'pages.delete',
+        description: 'Soft-delete (archive) a page; pass hard=true to permanently delete.',
+        parameters: {
+          pageId: { type: 'string', description: 'Page UUID', required: true },
+          hard: { type: 'boolean', description: 'Permanently delete when true' },
+          userId: { type: 'string', description: 'Calling user ID for auth check' },
+        },
+      },
+      {
+        name: 'pages.query',
+        description: 'List or search pages within a workspace.',
+        parameters: {
+          workspaceId: { type: 'string', description: 'Workspace UUID', required: true },
+          q: { type: 'string', description: 'Optional title substring filter' },
+          limit: { type: 'number', description: 'Max results (default 50, max 200)' },
+          userId: { type: 'string', description: 'Calling user ID for auth check' },
+        },
+      },
+      {
+        name: 'blocks.append',
+        description: 'Append a new block to a page.',
+        parameters: {
+          pageId: { type: 'string', description: 'Owning page UUID', required: true },
+          type: { type: 'string', description: 'Block type (text, heading_1, code, …)', required: true },
+          content: { type: 'string', description: 'Block body JSON (stringified object)' },
+          properties: { type: 'string', description: 'Block properties JSON (stringified object)' },
+          parentId: { type: 'string', description: 'Parent block UUID; defaults to pageId' },
+          afterBlockId: { type: 'string', description: 'Insert after this sibling block' },
+          userId: { type: 'string', description: 'Calling user ID for auth check' },
+        },
+      },
+      {
+        name: 'blocks.get',
+        description: 'Fetch a single block by ID.',
+        parameters: {
+          blockId: { type: 'string', description: 'Block UUID', required: true },
+          userId: { type: 'string', description: 'Calling user ID for auth check' },
+        },
+      },
+      {
+        name: 'blocks.update',
+        description: 'Update a block: properties, content, childrenOrder, or archived flag.',
+        parameters: {
+          blockId: { type: 'string', description: 'Block UUID', required: true },
+          properties: { type: 'string', description: 'New properties JSON (stringified object)' },
+          content: { type: 'string', description: 'New content JSON (stringified object)' },
+          childrenOrder: { type: 'string', description: 'New ordered child UUIDs (stringified array)' },
+          archived: { type: 'boolean', description: 'Set archived state' },
+          userId: { type: 'string', description: 'Calling user ID for auth check' },
+        },
+      },
+      {
+        name: 'blocks.delete',
+        description: 'Delete a block and its descendants.',
+        parameters: {
+          blockId: { type: 'string', description: 'Block UUID', required: true },
+          userId: { type: 'string', description: 'Calling user ID for auth check' },
+        },
+      },
+      {
+        name: 'databases.query',
+        description: 'Query row blocks inside a database block.',
+        parameters: {
+          databaseBlockId: { type: 'string', description: 'UUID of the database block', required: true },
+          limit: { type: 'number', description: 'Max rows (default 50, max 200)' },
+          userId: { type: 'string', description: 'Calling user ID for auth check' },
+        },
+      },
+      {
+        name: 'databases.addView',
+        description: 'Create a new view (table/board/list/calendar/gallery/timeline) for a database.',
+        parameters: {
+          databaseBlockId: { type: 'string', description: 'UUID of the database block', required: true },
+          name: { type: 'string', description: 'View display name', required: true },
+          type: { type: 'string', description: 'View type: table|board|list|calendar|gallery|timeline', required: true },
+          userId: { type: 'string', description: 'Calling user ID for auth check' },
+        },
+      },
+      {
+        name: 'comments.create',
+        description: 'Add a comment to a block.',
+        parameters: {
+          blockId: { type: 'string', description: 'Block UUID to comment on', required: true },
+          content: { type: 'string', description: 'Comment text or JSON content', required: true },
+          threadId: { type: 'string', description: 'Optional thread UUID for replies' },
+          userId: { type: 'string', description: 'Calling user ID for auth check', required: true },
+        },
+      },
+      {
+        name: 'comments.resolve',
+        description: 'Mark a comment as resolved.',
+        parameters: {
+          commentId: { type: 'string', description: 'Comment UUID', required: true },
+          userId: { type: 'string', description: 'Calling user ID for auth check' },
+        },
+      },
+      {
+        name: 'search',
+        description: 'Search a workspace across pages and databases.',
+        parameters: {
+          workspaceId: { type: 'string', description: 'Workspace UUID to scope the search', required: true },
+          q: { type: 'string', description: 'Free-text query', required: true },
+          types: { type: 'string', description: 'Comma-separated types to filter: page,database' },
+          limit: { type: 'number', description: 'Max results (default 50, max 200)' },
+          userId: { type: 'string', description: 'Calling user ID for auth check' },
+        },
+      },
+    ],
+  },
+
+  {
     id: "polymarket",
     name: "Polymarket",
     description: "Prediction market data — trending markets, search, and odds",

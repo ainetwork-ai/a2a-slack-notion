@@ -1,11 +1,17 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { prisma } from '../lib/prisma.js';
+import { randomBytes } from 'node:crypto';
+import { and, asc, desc, eq } from 'drizzle-orm';
+import { db } from '../lib/db.js';
+import {
+  shareLinks,
+  blocks,
+  type PermissionLevel,
+} from '../../../../slack/src/lib/db/schema';
 import { requirePermission } from '../middleware/require-permission.js';
 import { checkPagePermission } from '../lib/permissions.js';
 import type { AppVariables } from '../types/app.js';
 
-// Two separate routers — one mounted under /pages/:pageId/share, one under /share
 export const pageShareRoutes = new Hono<{ Variables: AppVariables }>();
 export const shareTokenRoutes = new Hono<{ Variables: AppVariables }>();
 
@@ -14,6 +20,11 @@ const CreateShareLinkSchema = z.object({
   isPublic: z.boolean().default(false),
   expiresAt: z.string().datetime().optional(),
 });
+
+// Generate a compact URL-safe token (slack schema has no default).
+function newToken(): string {
+  return randomBytes(18).toString('base64url');
+}
 
 // POST /pages/:pageId/share — create a share link for a page
 pageShareRoutes.post('/', requirePermission('full_access'), async (c) => {
@@ -27,20 +38,28 @@ pageShareRoutes.post('/', requirePermission('full_access'), async (c) => {
 
   const { level, isPublic, expiresAt } = parsed.data;
 
-  // Verify page exists
-  const page = await prisma.block.findUnique({ where: { id: pageId, type: 'page' } });
+  const page = await db
+    .select()
+    .from(blocks)
+    .where(and(eq(blocks.id, pageId), eq(blocks.type, 'page')))
+    .limit(1)
+    .then((r) => r[0]);
+
   if (!page) {
     return c.json({ object: 'error', status: 404, code: 'not_found', message: 'Page not found' }, 404);
   }
 
-  const link = await prisma.shareLink.create({
-    data: {
+  const link = await db
+    .insert(shareLinks)
+    .values({
       pageId,
-      level,
+      token: newToken(),
+      level: level as PermissionLevel,
       isPublic,
       expiresAt: expiresAt ? new Date(expiresAt) : null,
-    },
-  });
+    })
+    .returning()
+    .then((r) => r[0]!);
 
   return c.json(link, 201);
 });
@@ -49,10 +68,11 @@ pageShareRoutes.post('/', requirePermission('full_access'), async (c) => {
 pageShareRoutes.get('/', requirePermission('full_access'), async (c) => {
   const pageId = c.req.param('pageId' as never) as string;
 
-  const links = await prisma.shareLink.findMany({
-    where: { pageId },
-    orderBy: { createdAt: 'desc' },
-  });
+  const links = await db
+    .select()
+    .from(shareLinks)
+    .where(eq(shareLinks.pageId, pageId))
+    .orderBy(desc(shareLinks.createdAt));
 
   return c.json(links);
 });
@@ -66,7 +86,13 @@ shareTokenRoutes.delete('/:token', async (c) => {
 
   const { token } = c.req.param();
 
-  const link = await prisma.shareLink.findUnique({ where: { token } });
+  const link = await db
+    .select()
+    .from(shareLinks)
+    .where(eq(shareLinks.token, token))
+    .limit(1)
+    .then((r) => r[0]);
+
   if (!link) {
     return c.json({ object: 'error', status: 404, code: 'not_found', message: 'Share link not found' }, 404);
   }
@@ -76,25 +102,29 @@ shareTokenRoutes.delete('/:token', async (c) => {
     return c.json({ object: 'error', status: 403, code: 'forbidden', message: 'Not authorized to delete this share link' }, 403);
   }
 
-  await prisma.shareLink.delete({ where: { token } });
+  await db.delete(shareLinks).where(eq(shareLinks.token, token));
   return c.json({ object: 'share_link', token, deleted: true });
 });
 
-// GET /share/:token — access a page via share link (public if isPublic=true, no auth needed)
+// GET /share/:token — access a page via share link
 shareTokenRoutes.get('/:token', async (c) => {
   const { token } = c.req.param();
 
-  const link = await prisma.shareLink.findUnique({ where: { token } });
+  const link = await db
+    .select()
+    .from(shareLinks)
+    .where(eq(shareLinks.token, token))
+    .limit(1)
+    .then((r) => r[0]);
+
   if (!link) {
     return c.json({ object: 'error', status: 404, code: 'not_found', message: 'Share link not found' }, 404);
   }
 
-  // Check expiry
   if (link.expiresAt && link.expiresAt < new Date()) {
     return c.json({ object: 'error', status: 410, code: 'share_link_expired', message: 'This share link has expired' }, 410);
   }
 
-  // Non-public links require authentication
   if (!link.isPublic) {
     const user = c.get('user');
     if (!user) {
@@ -102,25 +132,27 @@ shareTokenRoutes.get('/:token', async (c) => {
     }
   }
 
-  // Fetch the page content
-  const page = await prisma.block.findUnique({
-    where: { id: link.pageId, archived: false },
-    include: {
-      children: {
-        where: { archived: false },
-        orderBy: { createdAt: 'asc' },
-      },
-    },
-  });
+  const page = await db
+    .select()
+    .from(blocks)
+    .where(and(eq(blocks.id, link.pageId), eq(blocks.archived, false)))
+    .limit(1)
+    .then((r) => r[0]);
 
   if (!page) {
     return c.json({ object: 'error', status: 404, code: 'not_found', message: 'Page not found' }, 404);
   }
 
+  const children = await db
+    .select()
+    .from(blocks)
+    .where(and(eq(blocks.parentId, page.id), eq(blocks.archived, false)))
+    .orderBy(asc(blocks.createdAt));
+
   return c.json({
     object: 'shared_page',
     accessLevel: link.level,
     readOnly: link.level === 'can_view',
-    page,
+    page: { ...page, children },
   });
 });

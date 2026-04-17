@@ -1,5 +1,7 @@
 import { Hono } from 'hono';
-import { prisma } from '../lib/prisma.js';
+import { and, eq } from 'drizzle-orm';
+import { db } from '../lib/db.js';
+import { blocks } from '../../../../slack/src/lib/db/schema';
 import { requirePermission } from '../middleware/require-permission.js';
 import { pageToMarkdown } from '../lib/export-markdown.js';
 import { databaseToCsv } from '../lib/export-csv.js';
@@ -25,10 +27,12 @@ exportRoutes.post('/', requirePermission('can_view'), async (c) => {
   const pageId = c.req.param('pageId' as never) as string;
   const format = c.req.query('format') ?? 'markdown';
 
-  const page = await prisma.block.findUnique({
-    where: { id: pageId, archived: false },
-    select: { id: true, type: true, properties: true },
-  });
+  const page = await db
+    .select({ id: blocks.id, type: blocks.type, properties: blocks.properties })
+    .from(blocks)
+    .where(and(eq(blocks.id, pageId), eq(blocks.archived, false)))
+    .limit(1)
+    .then((r) => r[0]);
 
   if (!page) {
     return c.json({ object: 'error', status: 404, code: 'not_found', message: 'Page not found' }, 404);
@@ -39,7 +43,6 @@ exportRoutes.post('/', requirePermission('can_view'), async (c) => {
     .replace(/[^a-z0-9_\-]/gi, '_')
     .toLowerCase();
 
-  // ── Markdown export ──────────────────────────────────────────────────────
   if (format === 'markdown') {
     let md: string;
     try {
@@ -54,7 +57,6 @@ exportRoutes.post('/', requirePermission('can_view'), async (c) => {
     return c.body(md);
   }
 
-  // ── CSV export (database blocks only) ────────────────────────────────────
   if (format === 'csv') {
     if (page.type !== 'database') {
       return c.json(

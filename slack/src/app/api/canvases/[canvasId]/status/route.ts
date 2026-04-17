@@ -21,10 +21,10 @@ import { channelMembers } from "@/lib/db/schema";
 async function canUserAccessCanvas(
   userId: string,
   canvas: typeof canvases.$inferSelect
-): Promise<boolean> {
+): Promise<{ access: true; role: string; scope: "channel" | "workspace" } | { access: false }> {
   if (canvas.channelId) {
     const [membership] = await db
-      .select()
+      .select({ role: channelMembers.role })
       .from(channelMembers)
       .where(
         and(
@@ -33,11 +33,12 @@ async function canUserAccessCanvas(
         )
       )
       .limit(1);
-    return !!membership;
+    if (!membership) return { access: false };
+    return { access: true, role: membership.role, scope: "channel" };
   }
   // For workspace-level or DM canvases, check workspace membership
   const [wm] = await db
-    .select()
+    .select({ role: workspaceMembers.role })
     .from(workspaceMembers)
     .where(
       and(
@@ -46,7 +47,8 @@ async function canUserAccessCanvas(
       )
     )
     .limit(1);
-  return !!wm;
+  if (!wm) return { access: false };
+  return { access: true, role: wm.role, scope: "workspace" };
 }
 
 // ---------------------------------------------------------------------------
@@ -76,8 +78,13 @@ export async function PATCH(
   }
 
   const canAccess = await canUserAccessCanvas(user.id, canvas);
-  if (!canAccess) {
+  if (!canAccess.access) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  // Subtask #8: guests cannot change pipeline status on channel canvases
+  if (canAccess.scope === "channel" && canAccess.role === "guest") {
+    return NextResponse.json({ error: "Guests cannot change canvas status" }, { status: 403 });
   }
 
   // Parse body

@@ -5,6 +5,7 @@ import { requireAuth } from "@/lib/auth/middleware";
 import { NextRequest, NextResponse } from "next/server";
 import { sendToAgent } from "@/lib/a2a/message-bridge";
 import { handleBuilderMessage } from "@/lib/a2a/builder-agent";
+import { onMessageCreated } from "@/lib/search/hooks";
 
 export async function GET(
   request: NextRequest,
@@ -139,6 +140,18 @@ export async function POST(
     .insert(messages)
     .values({ conversationId, userId: user.id, content, metadata: metadata || null, parentId: parentId || null })
     .returning();
+
+  // Index message for search (best-effort)
+  onMessageCreated({
+    id: message.id,
+    content: message.content,
+    senderName: user.displayName,
+    workspaceId: null,
+    channelId: null,
+    conversationId,
+    senderId: user.id,
+    createdAt: message.createdAt.getTime(),
+  });
 
   // Update conversation updatedAt
   await db

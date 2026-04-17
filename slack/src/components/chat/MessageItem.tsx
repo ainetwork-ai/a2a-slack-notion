@@ -283,6 +283,8 @@ import ReactionPicker from './ReactionPicker';
 import ImageLightbox from './ImageLightbox';
 import UserProfilePopup from './UserProfilePopup';
 import ShareMessageModal from '@/components/modals/ShareMessageModal';
+import PageLinkCard from './PageLinkCard';
+import { detectPageLinks } from '@/lib/chat/detect-page-link';
 import { cn } from '@/lib/utils';
 import { useAppStore } from '@/lib/stores/app-store';
 import { useToast } from '@/components/ui/toast-provider';
@@ -605,6 +607,12 @@ export default function MessageItem({
             ) : (
               <OGCard url={firstUrl} />
             ))}
+
+            {/* Page link cards — same-workspace /pages/:id unfurling */}
+            {typeof window !== 'undefined' &&
+              detectPageLinks(message.content, window.location.origin).map(({ pageId }) => (
+                <PageLinkCard key={pageId} pageId={pageId} />
+              ))}
 
             {message.metadata && typeof message.metadata === 'object' && 'fileUrl' in message.metadata && (
               <div className="mt-2">

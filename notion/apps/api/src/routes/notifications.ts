@@ -1,7 +1,8 @@
 import { Hono } from 'hono';
 import { stream } from 'hono/streaming';
 import { z } from 'zod';
-import { prisma } from '../lib/prisma.js';
+import { and, count, desc, eq } from 'drizzle-orm';
+import { db, notionNotifications } from '../lib/db.js';
 import { addSseClient } from '../lib/sse-clients.js';
 import type { AppVariables } from '../types/app.js';
 
@@ -25,16 +26,22 @@ notifications.get('/', async (c) => {
   });
   const { limit, offset } = parsed.success ? parsed.data : { limit: 20, offset: 0 };
 
-  const [items, total] = await Promise.all([
-    prisma.notification.findMany({
-      where: { userId: user.id },
-      orderBy: { createdAt: 'desc' },
-      take: limit,
-      skip: offset,
-    }),
-    prisma.notification.count({ where: { userId: user.id } }),
+  const [items, totalRow] = await Promise.all([
+    db
+      .select()
+      .from(notionNotifications)
+      .where(eq(notionNotifications.userId, user.id))
+      .orderBy(desc(notionNotifications.createdAt))
+      .limit(limit)
+      .offset(offset),
+    db
+      .select({ value: count() })
+      .from(notionNotifications)
+      .where(eq(notionNotifications.userId, user.id))
+      .then((r) => r[0]),
   ]);
 
+  const total = totalRow?.value ?? 0;
   return c.json({ items, total, limit, offset });
 });
 
@@ -45,11 +52,13 @@ notifications.get('/unread-count', async (c) => {
     return c.json({ object: 'error', status: 401, code: 'unauthorized', message: 'Not authenticated' }, 401);
   }
 
-  const count = await prisma.notification.count({
-    where: { userId: user.id, read: false },
-  });
+  const row = await db
+    .select({ value: count() })
+    .from(notionNotifications)
+    .where(and(eq(notionNotifications.userId, user.id), eq(notionNotifications.read, false)))
+    .then((r) => r[0]);
 
-  return c.json({ count });
+  return c.json({ count: row?.value ?? 0 });
 });
 
 // GET /notifications/stream — SSE endpoint for real-time notifications
@@ -62,17 +71,15 @@ notifications.get('/stream', async (c) => {
   c.header('Content-Type', 'text/event-stream');
   c.header('Cache-Control', 'no-cache');
   c.header('Connection', 'keep-alive');
-  c.header('X-Accel-Buffering', 'no'); // Disable Nginx buffering
+  c.header('X-Accel-Buffering', 'no');
 
   return stream(c, async (s) => {
-    // Send initial keep-alive
     await s.write(': connected\n\n');
 
     const cleanup = addSseClient(user.id, (chunk) => {
       s.write(chunk).catch(() => {});
     });
 
-    // Keep stream open with periodic heartbeats
     const heartbeat = setInterval(() => {
       s.write(': heartbeat\n\n').catch(() => {
         clearInterval(heartbeat);
@@ -80,7 +87,6 @@ notifications.get('/stream', async (c) => {
       });
     }, 30_000);
 
-    // Wait until the client disconnects
     await new Promise<void>((resolve) => {
       s.onAbort(() => {
         clearInterval(heartbeat);
@@ -98,12 +104,13 @@ notifications.patch('/read-all', async (c) => {
     return c.json({ object: 'error', status: 401, code: 'unauthorized', message: 'Not authenticated' }, 401);
   }
 
-  const { count } = await prisma.notification.updateMany({
-    where: { userId: user.id, read: false },
-    data: { read: true },
-  });
+  const updated = await db
+    .update(notionNotifications)
+    .set({ read: true })
+    .where(and(eq(notionNotifications.userId, user.id), eq(notionNotifications.read, false)))
+    .returning({ id: notionNotifications.id });
 
-  return c.json({ updated: count });
+  return c.json({ updated: updated.length });
 });
 
 // PATCH /notifications/:id/read — mark a single notification as read
@@ -115,7 +122,13 @@ notifications.patch('/:id/read', async (c) => {
 
   const { id } = c.req.param();
 
-  const existing = await prisma.notification.findUnique({ where: { id } });
+  const existing = await db
+    .select()
+    .from(notionNotifications)
+    .where(eq(notionNotifications.id, id))
+    .limit(1)
+    .then((r) => r[0]);
+
   if (!existing) {
     return c.json({ object: 'error', status: 404, code: 'not_found', message: 'Notification not found' }, 404);
   }
@@ -123,10 +136,12 @@ notifications.patch('/:id/read', async (c) => {
     return c.json({ object: 'error', status: 403, code: 'forbidden', message: 'Not your notification' }, 403);
   }
 
-  const notification = await prisma.notification.update({
-    where: { id },
-    data: { read: true },
-  });
+  const notification = await db
+    .update(notionNotifications)
+    .set({ read: true })
+    .where(eq(notionNotifications.id, id))
+    .returning()
+    .then((r) => r[0]);
 
   return c.json(notification);
 });

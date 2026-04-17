@@ -1,4 +1,3 @@
-// @ts-expect-error TODO: add `pino` and `pino-pretty` to slack/package.json — notion's shared logger depends on them
 import pino from 'pino';
 import { randomUUID } from 'node:crypto';
 

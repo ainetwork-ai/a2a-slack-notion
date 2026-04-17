@@ -1,6 +1,8 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { prisma } from '../lib/prisma.js';
+import { asc, eq } from 'drizzle-orm';
+import { db } from '../lib/db.js';
+import { automations as automationsTable } from '../../../../slack/src/lib/db/schema';
 import type { AppVariables } from '../types/app.js';
 
 const automations = new Hono<{ Variables: AppVariables }>();
@@ -11,7 +13,6 @@ function requireUser(c: { get: (key: 'user') => AppVariables['user'] }) {
   return user;
 }
 
-// Trigger schemas
 const TriggerSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('status_change'),
@@ -29,7 +30,6 @@ const TriggerSchema = z.discriminatedUnion('type', [
   }),
 ]);
 
-// Action schemas
 const ActionSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('send_notification'),
@@ -61,7 +61,7 @@ const UpdateAutomationSchema = z.object({
   active: z.boolean().optional(),
 });
 
-// GET /automations?workspace_id=... — list automations for a workspace
+// GET /automations?workspace_id=...
 automations.get('/', async (c) => {
   const user = requireUser(c);
   if (!user) return c.json({ object: 'error', status: 401, code: 'unauthorized', message: 'Not authenticated' }, 401);
@@ -69,15 +69,16 @@ automations.get('/', async (c) => {
   const workspaceId = c.req.query('workspace_id');
   if (!workspaceId) return c.json({ object: 'error', status: 400, code: 'validation_error', message: 'workspace_id required' }, 400);
 
-  const all = await prisma.automation.findMany({
-    where: { workspaceId },
-    orderBy: { createdAt: 'asc' },
-  });
+  const all = await db
+    .select()
+    .from(automationsTable)
+    .where(eq(automationsTable.workspaceId, workspaceId))
+    .orderBy(asc(automationsTable.createdAt));
 
   return c.json(all);
 });
 
-// POST /automations — create an automation
+// POST /automations
 automations.post('/', async (c) => {
   const user = requireUser(c);
   if (!user) return c.json({ object: 'error', status: 401, code: 'unauthorized', message: 'Not authenticated' }, 401);
@@ -86,20 +87,22 @@ automations.post('/', async (c) => {
   const parsed = CreateAutomationSchema.safeParse(body);
   if (!parsed.success) return c.json({ object: 'error', status: 400, code: 'validation_error', message: parsed.error.message }, 400);
 
-  const automation = await prisma.automation.create({
-    data: {
+  const automation = await db
+    .insert(automationsTable)
+    .values({
       workspaceId: parsed.data.workspaceId,
       name: parsed.data.name,
-      trigger: parsed.data.trigger as object,
-      actions: parsed.data.actions as object[],
+      trigger: parsed.data.trigger,
+      actions: parsed.data.actions,
       createdBy: user.id,
-    },
-  });
+    })
+    .returning()
+    .then((r) => r[0]!);
 
   return c.json(automation, 201);
 });
 
-// PATCH /automations/:id — update (toggle active, change config)
+// PATCH /automations/:id
 automations.patch('/:id', async (c) => {
   const user = requireUser(c);
   if (!user) return c.json({ object: 'error', status: 401, code: 'unauthorized', message: 'Not authenticated' }, 401);
@@ -109,39 +112,47 @@ automations.patch('/:id', async (c) => {
   const parsed = UpdateAutomationSchema.safeParse(body);
   if (!parsed.success) return c.json({ object: 'error', status: 400, code: 'validation_error', message: parsed.error.message }, 400);
 
-  const existing = await prisma.automation.findUnique({ where: { id } });
+  const existing = await db
+    .select()
+    .from(automationsTable)
+    .where(eq(automationsTable.id, id))
+    .limit(1)
+    .then((r) => r[0]);
+
   if (!existing) return c.json({ object: 'error', status: 404, code: 'not_found', message: 'Automation not found' }, 404);
 
-  const updateData: {
-    name?: string;
-    trigger?: object;
-    actions?: object[];
-    active?: boolean;
-  } = {};
-
+  const updateData: Partial<typeof automationsTable.$inferInsert> = {};
   if (parsed.data.name !== undefined) updateData.name = parsed.data.name;
-  if (parsed.data.trigger !== undefined) updateData.trigger = parsed.data.trigger as object;
-  if (parsed.data.actions !== undefined) updateData.actions = parsed.data.actions as object[];
+  if (parsed.data.trigger !== undefined) updateData.trigger = parsed.data.trigger;
+  if (parsed.data.actions !== undefined) updateData.actions = parsed.data.actions;
   if (parsed.data.active !== undefined) updateData.active = parsed.data.active;
 
-  const updated = await prisma.automation.update({
-    where: { id },
-    data: updateData,
-  });
+  const updated = await db
+    .update(automationsTable)
+    .set(updateData)
+    .where(eq(automationsTable.id, id))
+    .returning()
+    .then((r) => r[0]);
 
   return c.json(updated);
 });
 
-// DELETE /automations/:id — delete an automation
+// DELETE /automations/:id
 automations.delete('/:id', async (c) => {
   const user = requireUser(c);
   if (!user) return c.json({ object: 'error', status: 401, code: 'unauthorized', message: 'Not authenticated' }, 401);
 
   const { id } = c.req.param();
-  const existing = await prisma.automation.findUnique({ where: { id } });
+  const existing = await db
+    .select()
+    .from(automationsTable)
+    .where(eq(automationsTable.id, id))
+    .limit(1)
+    .then((r) => r[0]);
+
   if (!existing) return c.json({ object: 'error', status: 404, code: 'not_found', message: 'Automation not found' }, 404);
 
-  await prisma.automation.delete({ where: { id } });
+  await db.delete(automationsTable).where(eq(automationsTable.id, id));
   return c.json({ object: 'automation', id, deleted: true });
 });
 

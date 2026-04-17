@@ -1,7 +1,8 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { randomBytes } from 'node:crypto';
-import { prisma } from '../lib/prisma.js';
+import { desc, eq } from 'drizzle-orm';
+import { db, notionWebhooks } from '../lib/db.js';
 import type { AppVariables } from '../types/app.js';
 
 const webhooks = new Hono<{ Variables: AppVariables }>();
@@ -34,14 +35,16 @@ webhooks.post('/', async (c) => {
 
   const secret = randomBytes(32).toString('hex');
 
-  const webhook = await prisma.webhook.create({
-    data: {
+  const webhook = await db
+    .insert(notionWebhooks)
+    .values({
       userId: user.id,
       url: parsed.data.url,
       secret,
-      events: parsed.data.events,
-    },
-  });
+      events: parsed.data.events as unknown as string[],
+    })
+    .returning()
+    .then((r) => r[0]!);
 
   return c.json(
     {
@@ -64,23 +67,22 @@ webhooks.get('/', async (c) => {
     return c.json({ object: 'error', status: 401, code: 'unauthorized', message: 'Not authenticated' }, 401);
   }
 
-  const results = await prisma.webhook.findMany({
-    where: { userId: user.id },
-    orderBy: { createdAt: 'desc' },
-    select: {
-      id: true,
-      url: true,
-      events: true,
-      active: true,
-      createdAt: true,
-      // secret intentionally omitted from listing
-    },
-  });
+  const results = await db
+    .select({
+      id: notionWebhooks.id,
+      url: notionWebhooks.url,
+      events: notionWebhooks.events,
+      active: notionWebhooks.active,
+      createdAt: notionWebhooks.createdAt,
+    })
+    .from(notionWebhooks)
+    .where(eq(notionWebhooks.userId, user.id))
+    .orderBy(desc(notionWebhooks.createdAt));
 
   return c.json({ object: 'list', results });
 });
 
-// DELETE /:id — delete with ownership check
+// DELETE /:id
 webhooks.delete('/:id', async (c) => {
   const user = c.get('user');
   if (!user) {
@@ -89,7 +91,13 @@ webhooks.delete('/:id', async (c) => {
 
   const id = c.req.param('id');
 
-  const existing = await prisma.webhook.findUnique({ where: { id } });
+  const existing = await db
+    .select()
+    .from(notionWebhooks)
+    .where(eq(notionWebhooks.id, id))
+    .limit(1)
+    .then((r) => r[0]);
+
   if (!existing) {
     return c.json({ object: 'error', status: 404, code: 'not_found', message: 'Webhook not found' }, 404);
   }
@@ -97,7 +105,7 @@ webhooks.delete('/:id', async (c) => {
     return c.json({ object: 'error', status: 403, code: 'forbidden', message: 'Access denied' }, 403);
   }
 
-  await prisma.webhook.delete({ where: { id } });
+  await db.delete(notionWebhooks).where(eq(notionWebhooks.id, id));
 
   return c.json({ object: 'webhook', id, deleted: true });
 });

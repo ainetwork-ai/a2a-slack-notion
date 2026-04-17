@@ -1,5 +1,7 @@
 import { Hono } from 'hono';
-import { prisma } from '../lib/prisma.js';
+import { and, eq, sql } from 'drizzle-orm';
+import { db } from '../lib/db.js';
+import { blocks } from '../../../../slack/src/lib/db/schema';
 import { searchPages } from '../lib/search.js';
 import type { AppVariables } from '../types/app.js';
 
@@ -26,27 +28,29 @@ search.post('/', async (c) => {
     });
   }
 
-  // Decision #10: PG LIKE fallback when Meilisearch is unavailable
-  const pgResults = await prisma.block.findMany({
-    where: {
-      workspaceId,
-      type: 'page',
-      archived: false,
-      properties: {
-        path: ['title'],
-        string_contains: query,
-      },
-    },
-    select: {
-      id: true,
-      properties: true,
-      createdBy: true,
-      createdAt: true,
-      updatedAt: true,
-    },
-    take: limit ?? 20,
-    skip: offset ?? 0,
-  });
+  // Postgres JSONB LIKE fallback. Drizzle has no direct `path: ['title'],
+  // string_contains: query` equivalent, so we use a raw SQL snippet that
+  // matches Prisma's behavior: `properties->>'title' ILIKE '%query%'`.
+  const q = String(query);
+  const pgResults = await db
+    .select({
+      id: blocks.id,
+      properties: blocks.properties,
+      createdBy: blocks.createdBy,
+      createdAt: blocks.createdAt,
+      updatedAt: blocks.updatedAt,
+    })
+    .from(blocks)
+    .where(
+      and(
+        eq(blocks.workspaceId, workspaceId),
+        eq(blocks.type, 'page'),
+        eq(blocks.archived, false),
+        sql`${blocks.properties}->>'title' ILIKE ${'%' + q + '%'}`,
+      ),
+    )
+    .limit(Number(limit ?? 20))
+    .offset(Number(offset ?? 0));
 
   return c.json({
     object: 'list',

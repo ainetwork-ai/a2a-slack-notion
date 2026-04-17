@@ -1,8 +1,129 @@
 import { db } from "@/lib/db";
-import { users, channels, channelMembers, messages, dmMembers, canvases } from "@/lib/db/schema";
-import { eq, and, desc, isNotNull, lt, gt, inArray, or, ilike, SQL } from "drizzle-orm";
+import { users, channels, channelMembers, messages, dmMembers, canvases, blocks, workspaceMembers } from "@/lib/db/schema";
+import { eq, and, desc, isNotNull, lt, gt, inArray, or, ilike, sql, SQL } from "drizzle-orm";
 import { requireAuth } from "@/lib/auth/middleware";
 import { NextRequest, NextResponse } from "next/server";
+import { meili } from "@/lib/search/meili-client";
+import { INDEX_PAGES, INDEX_BLOCKS } from "@/lib/search/indexes";
+import { extractTitle, type MeiliPage, type MeiliBlock } from "@/lib/search/indexer";
+
+// Scope token from ?scope= — selects which buckets participate in the response.
+type SearchScope = 'all' | 'channels' | 'messages' | 'docs';
+
+/**
+ * Search Notion pages + blocks. Tries Meilisearch first, falls back to
+ * Postgres ILIKE. Results are grouped so each page appears once with block
+ * snippets collapsed under it.
+ *
+ * Never throws — returns `{ pages: [], blocks: [] }` on any failure
+ * (e.g. MEILI_HOST unset, network error, index missing).
+ */
+async function searchDocs(
+  q: string,
+  workspaceId: string,
+  limit: number,
+): Promise<{
+  pages: Array<{ id: string; title: string; icon?: string | null; workspaceId: string }>;
+  blocks: Array<{ id: string; pageId: string; text: string; type: string; workspaceId: string }>;
+}> {
+  if (!q || !workspaceId) return { pages: [], blocks: [] };
+
+  // Meilisearch path
+  if (process.env.MEILI_HOST) {
+    try {
+      const filter = `workspaceId = "${workspaceId}"`;
+      const [pageRes, blockRes] = await Promise.all([
+        meili.index(INDEX_PAGES.uid).search<MeiliPage>(q, {
+          filter,
+          limit,
+          attributesToHighlight: ['title', 'topic'],
+        }),
+        meili.index(INDEX_BLOCKS.uid).search<MeiliBlock>(q, {
+          filter,
+          limit,
+          attributesToHighlight: ['text'],
+          attributesToCrop: ['text'],
+          cropLength: 20,
+        }),
+      ]);
+      return {
+        pages: (pageRes.hits as MeiliPage[]).map((h: MeiliPage) => ({
+          id: h.id,
+          title: h.title,
+          icon: h.icon ?? null,
+          workspaceId: h.workspaceId,
+        })),
+        blocks: (blockRes.hits as MeiliBlock[]).map((h: MeiliBlock) => ({
+          id: h.id,
+          pageId: h.pageId,
+          text: h.text,
+          type: h.type,
+          workspaceId: h.workspaceId,
+        })),
+      };
+    } catch {
+      // Fall through to Postgres fallback — Meili may be unreachable / index missing
+    }
+  }
+
+  // Postgres ILIKE fallback (handles both Meili-down and MEILI_HOST unset).
+  try {
+    const likeQ = `%${q}%`;
+    const pageRows = await db
+      .select()
+      .from(blocks)
+      .where(and(
+        eq(blocks.workspaceId, workspaceId),
+        eq(blocks.type, 'page'),
+        eq(blocks.archived, false),
+        ilike(sql`${blocks.properties}->>'title'`, likeQ),
+      ))
+      .limit(limit);
+
+    const blockRows = await db
+      .select()
+      .from(blocks)
+      .where(and(
+        eq(blocks.workspaceId, workspaceId),
+        sql`${blocks.type} <> 'page'`,
+        eq(blocks.archived, false),
+        or(
+          ilike(sql`${blocks.properties}->>'title'`, likeQ),
+          ilike(sql`${blocks.content}::text`, likeQ),
+        ) as ReturnType<typeof eq>,
+      ))
+      .limit(limit);
+
+    return {
+      pages: pageRows.map((p) => {
+        const props = (p.properties ?? {}) as Record<string, unknown>;
+        const icon = typeof props.icon === 'string' ? (props.icon as string) : null;
+        return {
+          id: p.id,
+          title: extractTitle(props) || 'Untitled',
+          icon,
+          workspaceId: p.workspaceId,
+        };
+      }),
+      blocks: blockRows.map((b) => {
+        const props = (b.properties ?? {}) as Record<string, unknown>;
+        const title = extractTitle(props);
+        const contentText = typeof (b.content as Record<string, unknown>)?.text === 'string'
+          ? String((b.content as Record<string, unknown>).text)
+          : '';
+        return {
+          id: b.id,
+          pageId: b.pageId,
+          text: (title || contentText || '').slice(0, 200),
+          type: b.type,
+          workspaceId: b.workspaceId,
+        };
+      }),
+    };
+  } catch {
+    return { pages: [], blocks: [] };
+  }
+}
 
 interface ParsedQuery {
   text: string;
@@ -71,6 +192,13 @@ export async function GET(request: NextRequest) {
   const channelIdFilter = searchParams.get("channelId");
   const offset = parseInt(searchParams.get("offset") ?? "0", 10);
   const limit = parseInt(searchParams.get("limit") ?? "50", 10);
+  const scopeParam = (searchParams.get('scope') ?? 'all').toLowerCase() as SearchScope;
+  const scope: SearchScope = (['all', 'channels', 'messages', 'docs'] as const).includes(
+    scopeParam as SearchScope,
+  )
+    ? scopeParam
+    : 'all';
+  const workspaceParam = searchParams.get('workspace') ?? searchParams.get('workspaceId');
 
   if (!q || q.trim().length === 0) {
     return NextResponse.json({ results: [] });
@@ -343,31 +471,83 @@ export async function GET(request: NextRequest) {
         .limit(10)
     : [];
 
+  // Notion pages/blocks — Meili-backed, gracefully degrades to Postgres.
+  // Requires a workspace scope; if absent, we skip docs to avoid cross-workspace leakage.
+  let docsPages: Array<{ id: string; type: 'page'; title: string; content: string; workspaceId: string; icon?: string | null }> = [];
+  let docsBlocks: Array<{ id: string; type: 'block'; pageId: string; content: string; blockType: string; workspaceId: string }> = [];
+
+  if (parsed.text && workspaceParam && (scope === 'all' || scope === 'docs')) {
+    // Verify workspace membership before running doc search to avoid leakage
+    const [wm] = await db
+      .select()
+      .from(workspaceMembers)
+      .where(and(
+        eq(workspaceMembers.workspaceId, workspaceParam),
+        eq(workspaceMembers.userId, user.id),
+      ))
+      .limit(1);
+
+    if (wm) {
+      const docs = await searchDocs(parsed.text, workspaceParam, Math.min(limit, 20));
+      docsPages = docs.pages.map((p) => ({
+        id: p.id,
+        type: 'page' as const,
+        title: p.title,
+        content: p.title,
+        icon: p.icon ?? null,
+        workspaceId: p.workspaceId,
+      }));
+      // Collapse blocks by pageId so each page surfaces at most one block snippet
+      const seen = new Set<string>();
+      for (const b of docs.blocks) {
+        if (seen.has(b.pageId)) continue;
+        seen.add(b.pageId);
+        docsBlocks.push({
+          id: b.id,
+          type: 'block' as const,
+          pageId: b.pageId,
+          content: b.text,
+          blockType: b.type,
+          workspaceId: b.workspaceId,
+        });
+      }
+    }
+  }
+
+  // Apply scope filter to the Slack-side buckets.
+  const showChannels = scope === 'all' || scope === 'channels';
+  const showMessages = scope === 'all' || scope === 'messages';
+  const showUsers = scope === 'all';
+  const showCanvases = scope === 'all' || scope === 'docs';
+  const showDocs = scope === 'all' || scope === 'docs';
+
   const allResults = [
-    ...channelResults.map(ch => ({
+    ...(showChannels ? channelResults.map(ch => ({
       id: ch.id,
       type: 'channel' as const,
       content: ch.name,
       channelName: ch.name,
       senderName: null,
       channelId: ch.id,
-    })),
-    ...canvasResults.map(c => ({
+    })) : []),
+    ...(showCanvases ? canvasResults.map(c => ({
       id: c.id,
       type: 'canvas' as const,
       content: c.title,
       channelId: c.channelId ?? null,
       channelName: null,
       senderName: null,
-    })),
-    ...enriched,
-    ...userResults.map(u => ({
+    })) : []),
+    ...(showDocs ? docsPages : []),
+    ...(showDocs ? docsBlocks : []),
+    ...(showMessages ? enriched : []),
+    ...(showUsers ? userResults.map(u => ({
       id: u.id,
       type: 'user' as const,
       content: u.displayName,
       senderName: u.displayName,
-    })),
+    })) : []),
   ];
 
-  return NextResponse.json({ results: allResults, textQuery: parsed.text, hasMore, offset, limit });
+  return NextResponse.json({ results: allResults, textQuery: parsed.text, hasMore, offset, limit, scope });
 }

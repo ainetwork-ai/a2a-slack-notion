@@ -5,8 +5,10 @@
  * all errors are caught and logged; nothing here can crash the API.
  */
 
+import { and, eq } from 'drizzle-orm';
 import { createLogger } from '@notion/shared';
-import { prisma } from './prisma.js';
+import { db, notionNotifications } from './db.js';
+import { automations, blocks } from '../../../../slack/src/lib/db/schema';
 import { notificationQueue } from './queue.js';
 
 const logger = createLogger('automation-engine');
@@ -37,6 +39,32 @@ interface UpdatePropertyAction {
 
 type AutomationAction = SendNotificationAction | UpdatePropertyAction;
 
+// ── Private helpers ───────────────────────────────────────────────────────────
+
+/**
+ * Find active automations whose workspace contains the given database block.
+ * Replaces the old Prisma `workspace.blocks.some` join.
+ */
+async function findActiveAutomationsForDatabase(databaseId: string) {
+  // 1) Find the workspace of the database block
+  const dbBlock = await db
+    .select({ workspaceId: blocks.workspaceId })
+    .from(blocks)
+    .where(eq(blocks.id, databaseId))
+    .limit(1)
+    .then((r) => r[0]);
+
+  if (!dbBlock) return [];
+
+  // 2) Fetch active automations for that workspace
+  return await db
+    .select()
+    .from(automations)
+    .where(
+      and(eq(automations.active, true), eq(automations.workspaceId, dbBlock.workspaceId)),
+    );
+}
+
 // ── Public API ────────────────────────────────────────────────────────────────
 
 /**
@@ -53,15 +81,7 @@ export async function checkAutomations(
   changedProps: Record<string, { oldValue: unknown; newValue: unknown }>,
 ): Promise<void> {
   try {
-    const automationRows = await prisma.automation.findMany({
-      where: {
-        active: true,
-        workspace: {
-          blocks: { some: { id: databaseId } },
-        },
-      },
-    });
-
+    const automationRows = await findActiveAutomationsForDatabase(databaseId);
     if (automationRows.length === 0) return;
 
     for (const row of automationRows) {
@@ -96,15 +116,7 @@ export async function checkAutomationsOnCreate(
   rowId: string,
 ): Promise<void> {
   try {
-    const automationRows = await prisma.automation.findMany({
-      where: {
-        active: true,
-        workspace: {
-          blocks: { some: { id: databaseId } },
-        },
-      },
-    });
-
+    const automationRows = await findActiveAutomationsForDatabase(databaseId);
     if (automationRows.length === 0) return;
 
     for (const row of automationRows) {
@@ -131,7 +143,7 @@ export async function checkAutomationsOnCreate(
   }
 }
 
-// ── Private helpers ───────────────────────────────────────────────────────────
+// ── Trigger / Action implementation ──────────────────────────────────────────
 
 function isTriggerFired(
   trigger: AutomationTrigger,
@@ -178,15 +190,13 @@ async function executeAction(
   if (action.type === 'send_notification') {
     const { userId, message } = action.config;
 
-    // Persist notification record
-    await prisma.notification.create({
-      data: {
-        userId,
-        type: 'automation',
-        title: 'Automation triggered',
-        body: message,
-        pageId: rowId,
-      },
+    // Persist notification record (notion's extended notification shape)
+    await db.insert(notionNotifications).values({
+      userId,
+      type: 'automation',
+      title: 'Automation triggered',
+      body: message,
+      pageId: rowId,
     });
 
     // Enqueue for push delivery (best-effort)
@@ -202,23 +212,26 @@ async function executeAction(
   } else if (action.type === 'update_property') {
     const { propertyId, value } = action.config;
 
-    const row = await prisma.block.findUnique({
-      where: { id: rowId },
-      select: { properties: true },
-    });
+    const row = await db
+      .select({ properties: blocks.properties })
+      .from(blocks)
+      .where(eq(blocks.id, rowId))
+      .limit(1)
+      .then((r) => r[0]);
+
     if (!row) {
       logger.warn({ rowId }, 'update_property: row not found');
       return;
     }
 
-    const props = row.properties as Record<string, unknown>;
+    const props = (row.properties ?? {}) as Record<string, unknown>;
     const values = (props['values'] as Record<string, unknown>) ?? {};
     values[propertyId] = value;
 
-    await prisma.block.update({
-      where: { id: rowId },
-      data: { properties: { ...props, values } as object },
-    });
+    await db
+      .update(blocks)
+      .set({ properties: { ...props, values } as Record<string, unknown> })
+      .where(eq(blocks.id, rowId));
 
     logger.info({ rowId, propertyId }, 'update_property action executed');
   } else {

@@ -1,8 +1,15 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { randomUUID } from 'node:crypto';
-import { prisma } from '../lib/prisma.js';
-import { Prisma } from '../generated/prisma/client.js';
+import { and, asc, desc, eq, inArray } from 'drizzle-orm';
+import { db } from '../lib/db.js';
+import {
+  blocks,
+  databaseViews,
+  databaseTemplates,
+  type BlockType,
+  type ViewType as DbViewType,
+} from '../../../../slack/src/lib/db/schema';
 import { encodeCursor, decodeCursor } from '../lib/pagination.js';
 import type { AppVariables } from '../types/app.js';
 import type {
@@ -25,7 +32,6 @@ import type {
   RollupResult,
 } from '@notion/shared';
 import { AUTO_PROPERTIES, parseFormula, evaluateFormula } from '@notion/shared';
-import type { PrismaClient } from '../generated/prisma/client.js';
 import { checkAutomations, checkAutomationsOnCreate } from '../lib/automation-engine.js';
 
 const databases = new Hono<{ Variables: AppVariables }>();
@@ -224,7 +230,6 @@ function computeFormula(
 ): FormulaResult {
   try {
     const rowProps = row.properties as DatabaseRowProperties;
-    // Build EvalContext keyed by property name
     const contextProperties: Record<string, unknown> = {};
     for (const propDef of schema.properties) {
       const val = rowProps.values?.[propDef.id];
@@ -242,10 +247,8 @@ async function computeRollup(
   rollupConfig: RollupConfig,
   currentRow: { id: string; properties: unknown },
   schema: DatabaseSchema,
-  prismaClient: PrismaClient,
 ): Promise<RollupResult> {
   try {
-    // Find the relation property definition
     const relationPropDef = schema.properties.find((p) => p.id === rollupConfig.relationPropertyId);
     if (!relationPropDef || relationPropDef.type !== 'relation') {
       return { type: 'error', value: 'Relation property not found' };
@@ -254,7 +257,6 @@ async function computeRollup(
     const rowProps = currentRow.properties as DatabaseRowProperties;
     const relationValue = rowProps.values?.[rollupConfig.relationPropertyId];
     if (!relationValue || relationValue.type !== 'relation') {
-      // No related rows → return 0 for numeric aggregates
       return { type: 'number', value: 0 };
     }
 
@@ -263,20 +265,25 @@ async function computeRollup(
       return { type: 'number', value: 0 };
     }
 
-    // Fetch related rows
-    const relatedRows = await prismaClient.block.findMany({
-      where: { id: { in: relatedRowIds }, archived: false },
-    });
+    const relatedRows = await db
+      .select()
+      .from(blocks)
+      .where(and(inArray(blocks.id, relatedRowIds), eq(blocks.archived, false)));
 
-    // Extract target property values from the related database
     const relatedDbId = relationPropDef.relation?.relatedDatabaseId;
     if (!relatedDbId) {
       return { type: 'error', value: 'Missing relatedDatabaseId on relation property' };
     }
-    const relatedDb = await prismaClient.block.findUnique({ where: { id: relatedDbId, type: 'database' } });
+    const relatedDb = await db
+      .select()
+      .from(blocks)
+      .where(and(eq(blocks.id, relatedDbId), eq(blocks.type, 'database')))
+      .limit(1)
+      .then((r) => r[0]);
     if (!relatedDb) {
       return { type: 'error', value: 'Related database not found' };
     }
+
     const relatedSchema = (relatedDb.properties as unknown as DatabaseBlockProperties).schema;
     const targetPropDef = relatedSchema.properties.find((p) => p.id === rollupConfig.targetPropertyId);
     if (!targetPropDef) {
@@ -290,7 +297,6 @@ async function computeRollup(
 
     const fn = rollupConfig.function;
 
-    // Helpers
     const numValues = values
       .map((v) => {
         if (v === null || v === undefined) return null;
@@ -360,10 +366,14 @@ async function syncReverseRelation(
   rowAId: string,
   rowBId: string,
   reversePropertyId: string,
-  prismaClient: PrismaClient,
   add: boolean,
 ): Promise<void> {
-  const rowB = await prismaClient.block.findUnique({ where: { id: rowBId } });
+  const rowB = await db
+    .select()
+    .from(blocks)
+    .where(eq(blocks.id, rowBId))
+    .limit(1)
+    .then((r) => r[0]);
   if (!rowB) return;
   const bProps = rowB.properties as unknown as DatabaseRowProperties;
   const existing = bProps.values?.[reversePropertyId];
@@ -378,17 +388,15 @@ async function syncReverseRelation(
     ...bProps.values,
     [reversePropertyId]: { type: 'relation', value: newIds },
   };
-  await prismaClient.block.update({
-    where: { id: rowBId },
-    data: { properties: { values: updatedValues } as unknown as import('../generated/prisma/client.js').Prisma.InputJsonValue },
-  });
+  await db
+    .update(blocks)
+    .set({ properties: { values: updatedValues } as Record<string, unknown> })
+    .where(eq(blocks.id, rowBId));
 }
 
-/** Attach computed formula/rollup values to a row for GET responses */
 async function enrichRowWithComputedValues(
   row: { id: string; properties: unknown },
   schema: DatabaseSchema,
-  prismaClient: PrismaClient,
 ): Promise<{ id: string; properties: unknown }> {
   const rowProps = row.properties as DatabaseRowProperties;
   const computedValues: Record<string, PropertyValue> = {};
@@ -398,7 +406,7 @@ async function enrichRowWithComputedValues(
       const result = computeFormula(propDef.formula, row, schema);
       computedValues[propDef.id] = { type: 'formula', value: result };
     } else if (propDef.type === 'rollup' && propDef.rollup) {
-      const result = await computeRollup(propDef.rollup, row, schema, prismaClient);
+      const result = await computeRollup(propDef.rollup, row, schema);
       computedValues[propDef.id] = { type: 'rollup', value: result };
     }
   }
@@ -424,7 +432,6 @@ function evaluateCondition(condition: FilterCondition, rowProps: DatabaseRowProp
   const propValue = rowProps.values[condition.propertyId];
   const op = condition.operator;
 
-  // is_empty / is_not_empty work for all types
   if (op === 'is_empty') {
     if (!propValue) return true;
     const v = propValue.value;
@@ -604,7 +611,6 @@ function buildDefaultViewConfig(properties: PropertyDefinition[]): ViewConfig {
 // Database CRUD
 // ============================================================
 
-// POST / — Create database
 databases.post('/', async (c) => {
   const user = requireUser(c);
   if (!user) return c.json({ object: 'error', status: 401, code: 'unauthorized', message: 'Not authenticated' }, 401);
@@ -615,7 +621,6 @@ databases.post('/', async (c) => {
 
   const { title, parentId, workspaceId, icon, coverUrl, schema } = parsed.data;
 
-  // Always start with a title property
   const titleProp: PropertyDefinition = {
     id: randomUUID(),
     name: 'Name',
@@ -644,82 +649,90 @@ databases.post('/', async (c) => {
     schema: dbSchema,
   };
 
-  // Create the database block
-  const dbBlock = await prisma.block.create({
-    data: {
+  const dbBlock = await db
+    .insert(blocks)
+    .values({
       type: 'database',
       parentId: parentId ?? null,
-      pageId: '',
+      pageId: workspaceId, // placeholder, updated below
       workspaceId,
       createdBy: user.id,
-      properties: dbProperties as unknown as Prisma.InputJsonValue,
+      properties: dbProperties as unknown as Record<string, unknown>,
       content: {},
-    },
-  });
+    })
+    .returning()
+    .then((r) => r[0]!);
 
-  // Set pageId to self
-  const updatedBlock = await prisma.block.update({
-    where: { id: dbBlock.id },
-    data: { pageId: dbBlock.id },
-  });
+  const updatedBlock = await db
+    .update(blocks)
+    .set({ pageId: dbBlock.id })
+    .where(eq(blocks.id, dbBlock.id))
+    .returning()
+    .then((r) => r[0]!);
 
-  // Add to parent's childrenOrder if nested
   if (parentId) {
-    await prisma.$transaction(async (tx) => {
-      const parent = await tx.block.findUnique({
-        where: { id: parentId },
-        select: { childrenOrder: true },
-      });
+    await db.transaction(async (tx) => {
+      const parent = await tx
+        .select({ childrenOrder: blocks.childrenOrder })
+        .from(blocks)
+        .where(eq(blocks.id, parentId))
+        .limit(1)
+        .then((r) => r[0]);
       if (parent) {
-        await tx.block.update({
-          where: { id: parentId },
-          data: { childrenOrder: [...parent.childrenOrder, dbBlock.id] },
-        });
+        await tx
+          .update(blocks)
+          .set({ childrenOrder: [...parent.childrenOrder, dbBlock.id] })
+          .where(eq(blocks.id, parentId));
       }
     });
   }
 
-  // Auto-create default Table view
   const defaultViewConfig = buildDefaultViewConfig(allProperties);
-  const view = await prisma.databaseView.create({
-    data: {
+  const view = await db
+    .insert(databaseViews)
+    .values({
       databaseId: dbBlock.id,
       name: 'Default View',
-      type: 'table',
-      filters: { logic: 'and', conditions: [] } as unknown as Prisma.InputJsonValue,
-      sorts: [] as unknown as Prisma.InputJsonValue,
-      config: defaultViewConfig as unknown as Prisma.InputJsonValue,
+      type: 'table' as DbViewType,
+      filters: { logic: 'and', conditions: [] },
+      sorts: [],
+      config: defaultViewConfig,
       position: 0,
-    },
-  });
+    })
+    .returning()
+    .then((r) => r[0]!);
 
   return c.json({ ...updatedBlock, properties: updatedBlock.properties, view }, 201);
 });
 
-// GET /:databaseId — Get database with schema + views
+// GET /:databaseId
 databases.get('/:databaseId', async (c) => {
   const user = requireUser(c);
   if (!user) return c.json({ object: 'error', status: 401, code: 'unauthorized', message: 'Not authenticated' }, 401);
 
   const { databaseId } = c.req.param();
 
-  const db = await prisma.block.findUnique({
-    where: { id: databaseId, type: 'database' },
-  });
+  const dbBlock = await db
+    .select()
+    .from(blocks)
+    .where(and(eq(blocks.id, databaseId), eq(blocks.type, 'database')))
+    .limit(1)
+    .then((r) => r[0]);
 
-  if (!db || db.archived) {
+  if (!dbBlock || dbBlock.archived) {
     return c.json({ object: 'error', status: 404, code: 'not_found', message: 'Database not found' }, 404);
   }
 
-  const views = await prisma.databaseView.findMany({
-    where: { databaseId },
-    orderBy: { position: 'asc' },
-  });
+  const views = await db
+    .select()
+    .from(databaseViews)
+    .where(eq(databaseViews.databaseId, databaseId))
+    .orderBy(asc(databaseViews.position));
 
-  return c.json({ ...db, views });
+  return c.json({ ...dbBlock, views });
 });
 
-// PATCH /:databaseId — Update database metadata
+// PATCH /:databaseId
 databases.patch('/:databaseId', async (c) => {
   const user = requireUser(c);
   if (!user) return c.json({ object: 'error', status: 401, code: 'unauthorized', message: 'Not authenticated' }, 401);
@@ -729,7 +742,13 @@ databases.patch('/:databaseId', async (c) => {
   const parsed = UpdateDatabaseSchema.safeParse(body);
   if (!parsed.success) return c.json({ object: 'error', status: 400, code: 'validation_error', message: parsed.error.message }, 400);
 
-  const existing = await prisma.block.findUnique({ where: { id: databaseId, type: 'database' } });
+  const existing = await db
+    .select()
+    .from(blocks)
+    .where(and(eq(blocks.id, databaseId), eq(blocks.type, 'database')))
+    .limit(1)
+    .then((r) => r[0]);
+
   if (!existing || existing.archived) {
     return c.json({ object: 'error', status: 404, code: 'not_found', message: 'Database not found' }, 404);
   }
@@ -740,43 +759,54 @@ databases.patch('/:databaseId', async (c) => {
   if (parsed.data.icon !== undefined) updatedProps.icon = parsed.data.icon;
   if (parsed.data.coverUrl !== undefined) updatedProps.coverUrl = parsed.data.coverUrl;
 
-  const db = await prisma.block.update({
-    where: { id: databaseId },
-    data: {
-      properties: updatedProps as unknown as Prisma.InputJsonValue,
+  const dbBlock = await db
+    .update(blocks)
+    .set({
+      properties: updatedProps as unknown as Record<string, unknown>,
       archived: parsed.data.archived ?? existing.archived,
-    },
-  });
+      updatedAt: new Date(),
+    })
+    .where(eq(blocks.id, databaseId))
+    .returning()
+    .then((r) => r[0]!);
 
-  return c.json({ ...db });
+  return c.json({ ...dbBlock });
 });
 
-// DELETE /:databaseId — Soft delete (archive)
+// DELETE /:databaseId
 databases.delete('/:databaseId', async (c) => {
   const user = requireUser(c);
   if (!user) return c.json({ object: 'error', status: 401, code: 'unauthorized', message: 'Not authenticated' }, 401);
 
   const { databaseId } = c.req.param();
 
-  const existing = await prisma.block.findUnique({ where: { id: databaseId, type: 'database' } });
+  const existing = await db
+    .select()
+    .from(blocks)
+    .where(and(eq(blocks.id, databaseId), eq(blocks.type, 'database')))
+    .limit(1)
+    .then((r) => r[0]);
+
   if (!existing) return c.json({ object: 'error', status: 404, code: 'not_found', message: 'Database not found' }, 404);
 
-  await prisma.block.update({
-    where: { id: databaseId },
-    data: { archived: true },
-  });
+  await db
+    .update(blocks)
+    .set({ archived: true, updatedAt: new Date() })
+    .where(eq(blocks.id, databaseId));
 
   if (existing.parentId) {
-    await prisma.$transaction(async (tx) => {
-      const parent = await tx.block.findUnique({
-        where: { id: existing.parentId! },
-        select: { childrenOrder: true },
-      });
+    await db.transaction(async (tx) => {
+      const parent = await tx
+        .select({ childrenOrder: blocks.childrenOrder })
+        .from(blocks)
+        .where(eq(blocks.id, existing.parentId!))
+        .limit(1)
+        .then((r) => r[0]);
       if (parent) {
-        await tx.block.update({
-          where: { id: existing.parentId! },
-          data: { childrenOrder: parent.childrenOrder.filter((id) => id !== databaseId) },
-        });
+        await tx
+          .update(blocks)
+          .set({ childrenOrder: parent.childrenOrder.filter((id) => id !== databaseId) })
+          .where(eq(blocks.id, existing.parentId!));
       }
     });
   }
@@ -788,7 +818,6 @@ databases.delete('/:databaseId', async (c) => {
 // Property Management
 // ============================================================
 
-// POST /:databaseId/properties — Add property
 databases.post('/:databaseId/properties', async (c) => {
   const user = requireUser(c);
   if (!user) return c.json({ object: 'error', status: 401, code: 'unauthorized', message: 'Not authenticated' }, 401);
@@ -798,7 +827,13 @@ databases.post('/:databaseId/properties', async (c) => {
   const parsed = AddPropertySchema.safeParse(body);
   if (!parsed.success) return c.json({ object: 'error', status: 400, code: 'validation_error', message: parsed.error.message }, 400);
 
-  const existing = await prisma.block.findUnique({ where: { id: databaseId, type: 'database' } });
+  const existing = await db
+    .select()
+    .from(blocks)
+    .where(and(eq(blocks.id, databaseId), eq(blocks.type, 'database')))
+    .limit(1)
+    .then((r) => r[0]);
+
   if (!existing || existing.archived) {
     return c.json({ object: 'error', status: 404, code: 'not_found', message: 'Database not found' }, 404);
   }
@@ -823,11 +858,15 @@ databases.post('/:databaseId/properties', async (c) => {
     ...(parsed.data.rollup ? { rollup: parsed.data.rollup as RollupConfig } : {}),
   };
 
-  // Handle relation type: validate related DB and auto-create reverse property
   if (parsed.data.type === 'relation' && parsed.data.relation) {
     const { relatedDatabaseId, reversePropertyId: existingReverseId } = parsed.data.relation;
 
-    const relatedDb = await prisma.block.findUnique({ where: { id: relatedDatabaseId, type: 'database' } });
+    const relatedDb = await db
+      .select()
+      .from(blocks)
+      .where(and(eq(blocks.id, relatedDatabaseId), eq(blocks.type, 'database')))
+      .limit(1)
+      .then((r) => r[0]);
     if (!relatedDb || relatedDb.archived) {
       return c.json({ object: 'error', status: 400, code: 'validation_error', message: 'Related database not found' }, 400);
     }
@@ -835,7 +874,6 @@ databases.post('/:databaseId/properties', async (c) => {
     const relatedProps = relatedDb.properties as unknown as DatabaseBlockProperties;
     const reverseId = existingReverseId ?? randomUUID();
 
-    // Create the reverse relation property in the related database
     const reverseProp: PropertyDefinition = {
       id: reverseId,
       name: `${props.title} (reverse)`,
@@ -850,14 +888,13 @@ databases.post('/:databaseId/properties', async (c) => {
       properties: [...relatedProps.schema.properties, reverseProp],
     };
 
-    await prisma.block.update({
-      where: { id: relatedDatabaseId },
-      data: {
-        properties: { ...relatedProps, schema: updatedRelatedSchema } as unknown as Prisma.InputJsonValue,
-      },
-    });
+    await db
+      .update(blocks)
+      .set({
+        properties: { ...relatedProps, schema: updatedRelatedSchema } as unknown as Record<string, unknown>,
+      })
+      .where(eq(blocks.id, relatedDatabaseId));
 
-    // Set the relation config with the confirmed reversePropertyId
     newProp.relation = {
       relatedDatabaseId,
       reversePropertyId: reverseId,
@@ -870,17 +907,16 @@ databases.post('/:databaseId/properties', async (c) => {
     properties: [...props.schema.properties, newProp],
   };
 
-  await prisma.block.update({
-    where: { id: databaseId },
-    data: {
-      properties: { ...props, schema: updatedSchema } as unknown as Prisma.InputJsonValue,
-    },
-  });
+  await db
+    .update(blocks)
+    .set({
+      properties: { ...props, schema: updatedSchema } as unknown as Record<string, unknown>,
+    })
+    .where(eq(blocks.id, databaseId));
 
   return c.json({ property: newProp, schema: updatedSchema }, 201);
 });
 
-// PATCH /:databaseId/properties/:propertyId — Update property definition
 databases.patch('/:databaseId/properties/:propertyId', async (c) => {
   const user = requireUser(c);
   if (!user) return c.json({ object: 'error', status: 401, code: 'unauthorized', message: 'Not authenticated' }, 401);
@@ -890,7 +926,13 @@ databases.patch('/:databaseId/properties/:propertyId', async (c) => {
   const parsed = UpdatePropertySchema.safeParse(body);
   if (!parsed.success) return c.json({ object: 'error', status: 400, code: 'validation_error', message: parsed.error.message }, 400);
 
-  const existing = await prisma.block.findUnique({ where: { id: databaseId, type: 'database' } });
+  const existing = await db
+    .select()
+    .from(blocks)
+    .where(and(eq(blocks.id, databaseId), eq(blocks.type, 'database')))
+    .limit(1)
+    .then((r) => r[0]);
+
   if (!existing || existing.archived) {
     return c.json({ object: 'error', status: 404, code: 'not_found', message: 'Database not found' }, 404);
   }
@@ -924,24 +966,29 @@ databases.patch('/:databaseId/properties/:propertyId', async (c) => {
   updatedProperties[propIndex] = updatedProp;
   const updatedSchema: DatabaseSchema = { properties: updatedProperties };
 
-  await prisma.block.update({
-    where: { id: databaseId },
-    data: {
-      properties: { ...props, schema: updatedSchema } as unknown as Prisma.InputJsonValue,
-    },
-  });
+  await db
+    .update(blocks)
+    .set({
+      properties: { ...props, schema: updatedSchema } as unknown as Record<string, unknown>,
+    })
+    .where(eq(blocks.id, databaseId));
 
   return c.json({ property: updatedProp, schema: updatedSchema });
 });
 
-// DELETE /:databaseId/properties/:propertyId — Remove property
 databases.delete('/:databaseId/properties/:propertyId', async (c) => {
   const user = requireUser(c);
   if (!user) return c.json({ object: 'error', status: 401, code: 'unauthorized', message: 'Not authenticated' }, 401);
 
   const { databaseId, propertyId } = c.req.param();
 
-  const existing = await prisma.block.findUnique({ where: { id: databaseId, type: 'database' } });
+  const existing = await db
+    .select()
+    .from(blocks)
+    .where(and(eq(blocks.id, databaseId), eq(blocks.type, 'database')))
+    .limit(1)
+    .then((r) => r[0]);
+
   if (!existing || existing.archived) {
     return c.json({ object: 'error', status: 404, code: 'not_found', message: 'Database not found' }, 404);
   }
@@ -952,26 +999,29 @@ databases.delete('/:databaseId/properties/:propertyId', async (c) => {
     return c.json({ object: 'error', status: 404, code: 'not_found', message: 'Property not found' }, 404);
   }
 
-  // Title property cannot be deleted
   if (propToDelete.type === 'title') {
     return c.json({ object: 'error', status: 400, code: 'cannot_delete_title', message: 'The title property cannot be deleted' }, 400);
   }
 
-  // If deleting a relation property, also delete the reverse property in the related database
   if (propToDelete.type === 'relation' && propToDelete.relation?.relatedDatabaseId && propToDelete.relation.reversePropertyId) {
     const { relatedDatabaseId, reversePropertyId } = propToDelete.relation;
-    const relatedDb = await prisma.block.findUnique({ where: { id: relatedDatabaseId, type: 'database' } });
+    const relatedDb = await db
+      .select()
+      .from(blocks)
+      .where(and(eq(blocks.id, relatedDatabaseId), eq(blocks.type, 'database')))
+      .limit(1)
+      .then((r) => r[0]);
     if (relatedDb && !relatedDb.archived) {
       const relatedProps = relatedDb.properties as unknown as DatabaseBlockProperties;
       const filteredRelatedSchema: DatabaseSchema = {
         properties: relatedProps.schema.properties.filter((p) => p.id !== reversePropertyId),
       };
-      await prisma.block.update({
-        where: { id: relatedDatabaseId },
-        data: {
-          properties: { ...relatedProps, schema: filteredRelatedSchema } as unknown as Prisma.InputJsonValue,
-        },
-      });
+      await db
+        .update(blocks)
+        .set({
+          properties: { ...relatedProps, schema: filteredRelatedSchema } as unknown as Record<string, unknown>,
+        })
+        .where(eq(blocks.id, relatedDatabaseId));
     }
   }
 
@@ -979,12 +1029,12 @@ databases.delete('/:databaseId/properties/:propertyId', async (c) => {
     properties: props.schema.properties.filter((p) => p.id !== propertyId),
   };
 
-  await prisma.block.update({
-    where: { id: databaseId },
-    data: {
-      properties: { ...props, schema: updatedSchema } as unknown as Prisma.InputJsonValue,
-    },
-  });
+  await db
+    .update(blocks)
+    .set({
+      properties: { ...props, schema: updatedSchema } as unknown as Record<string, unknown>,
+    })
+    .where(eq(blocks.id, databaseId));
 
   return c.json({ object: 'property', id: propertyId, deleted: true });
 });
@@ -993,7 +1043,6 @@ databases.delete('/:databaseId/properties/:propertyId', async (c) => {
 // Row CRUD
 // ============================================================
 
-// GET /:databaseId/rows — Query rows
 databases.get('/:databaseId/rows', async (c) => {
   const user = requireUser(c);
   if (!user) return c.json({ object: 'error', status: 401, code: 'unauthorized', message: 'Not authenticated' }, 401);
@@ -1006,35 +1055,46 @@ databases.get('/:databaseId/rows', async (c) => {
   const parentRowId = c.req.query('parent_row_id');
   const includeSubItems = c.req.query('include_sub_items') === 'true';
 
-  const db = await prisma.block.findUnique({ where: { id: databaseId, type: 'database' } });
-  if (!db || db.archived) {
+  const dbBlock = await db
+    .select()
+    .from(blocks)
+    .where(and(eq(blocks.id, databaseId), eq(blocks.type, 'database')))
+    .limit(1)
+    .then((r) => r[0]);
+
+  if (!dbBlock || dbBlock.archived) {
     return c.json({ object: 'error', status: 404, code: 'not_found', message: 'Database not found' }, 404);
   }
 
-  const schema = (db.properties as unknown as DatabaseBlockProperties).schema;
+  const schema = (dbBlock.properties as unknown as DatabaseBlockProperties).schema;
 
-  // Load view for filters/sorts if view_id provided
   let filterGroup: FilterGroup = { logic: 'and', conditions: [] };
   let sorts: SortRule[] = [];
   if (viewId) {
-    const view = await prisma.databaseView.findUnique({ where: { id: viewId } });
+    const view = await db
+      .select()
+      .from(databaseViews)
+      .where(eq(databaseViews.id, viewId))
+      .limit(1)
+      .then((r) => r[0]);
     if (view) {
       filterGroup = view.filters as unknown as FilterGroup;
       sorts = view.sorts as unknown as SortRule[];
     }
   }
 
-  // Fetch all rows (cursor-based pagination applied after filtering/sorting)
-  const allRows = await prisma.block.findMany({
-    where: {
-      parentId: databaseId,
-      type: 'page',
-      archived: false,
-    },
-    orderBy: { createdAt: 'asc' },
-  });
+  const allRows = await db
+    .select()
+    .from(blocks)
+    .where(
+      and(
+        eq(blocks.parentId, databaseId),
+        eq(blocks.type, 'page'),
+        eq(blocks.archived, false),
+      ),
+    )
+    .orderBy(asc(blocks.createdAt));
 
-  // Filter by parentRowId if provided (sub-items query)
   const rowsForParent = parentRowId !== undefined
     ? allRows.filter((r) => {
         const rp = r.properties as unknown as DatabaseRowProperties;
@@ -1042,49 +1102,50 @@ databases.get('/:databaseId/rows', async (c) => {
         return storedParent === parentRowId;
       })
     : allRows.filter((r) => {
-        // Top-level rows only when no parentRowId specified (exclude sub-items)
         const rp = r.properties as unknown as DatabaseRowProperties;
         const storedParent = (rp.values as Record<string, unknown>)?.['__parentRowId'];
         return storedParent === undefined || storedParent === null;
       });
 
-  // Apply filters
   const filtered = applyFilters(rowsForParent, filterGroup, schema);
 
-  // Apply sorts
   const sorted = applySorts(
     filtered as Array<{ id: string; properties: unknown; createdAt: Date }>,
     sorts,
     schema,
   );
 
-  // Cursor-based pagination
   let startIndex = 0;
   if (cursor) {
     const idx = sorted.findIndex((r) => r.id === cursor);
     if (idx !== -1) startIndex = idx + 1;
   }
-  const page = sorted.slice(startIndex, startIndex + pageSize);
-  const hasMore = page.length === pageSize && startIndex + pageSize < sorted.length;
-  const nextCursor = hasMore && page[page.length - 1]
-    ? encodeCursor(page[page.length - 1]!.id)
+  const pageRows = sorted.slice(startIndex, startIndex + pageSize);
+  const hasMore = pageRows.length === pageSize && startIndex + pageSize < sorted.length;
+  const nextCursor = hasMore && pageRows[pageRows.length - 1]
+    ? encodeCursor(pageRows[pageRows.length - 1]!.id)
     : null;
 
-  // Enrich with computed formula/rollup values
   const enriched = await Promise.all(
-    page.map((row) => enrichRowWithComputedValues(row, schema, prisma)),
+    pageRows.map((row) => enrichRowWithComputedValues(row, schema)),
   );
 
-  // Nest sub-items if requested
   type RowWithSubItems = typeof enriched[number] & { subItems?: typeof enriched; parentRowId?: string | null };
   let results: RowWithSubItems[];
   if (includeSubItems) {
-    // Fetch all sub-item rows for these parent ids
     const pageIds = enriched.map((r) => r.id);
-    const allSubRows = await prisma.block.findMany({
-      where: { parentId: databaseId, type: 'page', archived: false },
-      orderBy: { createdAt: 'asc' },
-    });
+    const allSubRows = await db
+      .select()
+      .from(blocks)
+      .where(
+        and(
+          eq(blocks.parentId, databaseId),
+          eq(blocks.type, 'page'),
+          eq(blocks.archived, false),
+        ),
+      )
+      .orderBy(asc(blocks.createdAt));
+
     const subRowsByParent = new Map<string, typeof allSubRows>();
     for (const sub of allSubRows) {
       const rp = sub.properties as unknown as DatabaseRowProperties;
@@ -1099,7 +1160,7 @@ databases.get('/:databaseId/rows', async (c) => {
     results = await Promise.all(
       enriched.map(async (row): Promise<RowWithSubItems> => {
         const subRaw = subRowsByParent.get(row.id) ?? [];
-        const subEnriched = await Promise.all(subRaw.map((s) => enrichRowWithComputedValues(s, schema, prisma)));
+        const subEnriched = await Promise.all(subRaw.map((s) => enrichRowWithComputedValues(s, schema)));
         const rp = row.properties as DatabaseRowProperties;
         const pid = (rp.values as Record<string, unknown>)?.['__parentRowId'] ?? null;
         return { ...row, subItems: subEnriched, parentRowId: pid as string | null };
@@ -1121,7 +1182,6 @@ databases.get('/:databaseId/rows', async (c) => {
   });
 });
 
-// POST /:databaseId/rows — Create row
 databases.post('/:databaseId/rows', async (c) => {
   const user = requireUser(c);
   if (!user) return c.json({ object: 'error', status: 401, code: 'unauthorized', message: 'Not authenticated' }, 401);
@@ -1131,14 +1191,18 @@ databases.post('/:databaseId/rows', async (c) => {
   const parsed = CreateRowSchema.safeParse(body);
   if (!parsed.success) return c.json({ object: 'error', status: 400, code: 'validation_error', message: parsed.error.message }, 400);
 
-  const db = await prisma.block.findUnique({ where: { id: databaseId, type: 'database' } });
-  if (!db || db.archived) {
+  const dbBlock = await db
+    .select()
+    .from(blocks)
+    .where(and(eq(blocks.id, databaseId), eq(blocks.type, 'database')))
+    .limit(1)
+    .then((r) => r[0]);
+  if (!dbBlock || dbBlock.archived) {
     return c.json({ object: 'error', status: 404, code: 'not_found', message: 'Database not found' }, 404);
   }
 
   const now = new Date().toISOString();
 
-  // Reject client writes to auto-computed properties
   const clientValues = parsed.data.values;
   for (const [, val] of Object.entries(clientValues)) {
     if (AUTO_PROPERTIES.includes(val.type as typeof AUTO_PROPERTIES[number])) {
@@ -1146,29 +1210,42 @@ databases.post('/:databaseId/rows', async (c) => {
     }
   }
 
-  const schema = (db.properties as unknown as DatabaseBlockProperties).schema;
+  const schema = (dbBlock.properties as unknown as DatabaseBlockProperties).schema;
 
-  // Validate parentRowId if provided
   if (parsed.data.parentRowId) {
-    const parentRow = await prisma.block.findUnique({
-      where: { id: parsed.data.parentRowId, parentId: databaseId, type: 'page' },
-    });
+    const parentRow = await db
+      .select()
+      .from(blocks)
+      .where(
+        and(
+          eq(blocks.id, parsed.data.parentRowId),
+          eq(blocks.parentId, databaseId),
+          eq(blocks.type, 'page'),
+        ),
+      )
+      .limit(1)
+      .then((r) => r[0]);
     if (!parentRow || parentRow.archived) {
       return c.json({ object: 'error', status: 400, code: 'validation_error', message: 'Parent row not found in this database' }, 400);
     }
   }
 
-  // Validate relation values: all referenced row ids must exist in the related database
   for (const [propId, val] of Object.entries(clientValues)) {
     if (val.type === 'relation') {
       const propDef = schema.properties.find((p) => p.id === propId);
       if (propDef?.type === 'relation' && propDef.relation?.relatedDatabaseId) {
         const relatedIds = val.value as string[];
         if (relatedIds.length > 0) {
-          const found = await prisma.block.findMany({
-            where: { id: { in: relatedIds }, parentId: propDef.relation.relatedDatabaseId, archived: false },
-            select: { id: true },
-          });
+          const found = await db
+            .select({ id: blocks.id })
+            .from(blocks)
+            .where(
+              and(
+                inArray(blocks.id, relatedIds),
+                eq(blocks.parentId, propDef.relation.relatedDatabaseId),
+                eq(blocks.archived, false),
+              ),
+            );
           if (found.length !== relatedIds.length) {
             return c.json({ object: 'error', status: 400, code: 'validation_error', message: `Some relation row ids do not exist in the related database` }, 400);
           }
@@ -1177,7 +1254,6 @@ databases.post('/:databaseId/rows', async (c) => {
     }
   }
 
-  // Build initial values with auto properties
   const autoValues: Record<string, PropertyValue> = {};
   for (const prop of schema.properties) {
     if (prop.type === 'created_time') {
@@ -1191,7 +1267,6 @@ databases.post('/:databaseId/rows', async (c) => {
     }
   }
 
-  // Store parentRowId as a special key in values
   const parentRowValue: Record<string, unknown> = parsed.data.parentRowId
     ? { __parentRowId: parsed.data.parentRowId }
     : {};
@@ -1200,38 +1275,42 @@ databases.post('/:databaseId/rows', async (c) => {
     values: { ...autoValues, ...clientValues, ...parentRowValue } as Record<string, PropertyValue>,
   };
 
-  const row = await prisma.block.create({
-    data: {
-      type: 'page',
+  const row = await db
+    .insert(blocks)
+    .values({
+      type: 'page' as BlockType,
       parentId: databaseId,
-      pageId: '',
-      workspaceId: db.workspaceId,
+      pageId: databaseId, // placeholder, self-updated below
+      workspaceId: dbBlock.workspaceId,
       createdBy: user.id,
-      properties: rowProperties as unknown as Prisma.InputJsonValue,
+      properties: rowProperties as unknown as Record<string, unknown>,
       content: {},
-    },
-  });
+    })
+    .returning()
+    .then((r) => r[0]!);
 
-  const updatedRow = await prisma.block.update({
-    where: { id: row.id },
-    data: { pageId: row.id },
-  });
+  const updatedRow = await db
+    .update(blocks)
+    .set({ pageId: row.id })
+    .where(eq(blocks.id, row.id))
+    .returning()
+    .then((r) => r[0]!);
 
-  // Add to database's childrenOrder
-  await prisma.$transaction(async (tx) => {
-    const currentDb = await tx.block.findUnique({
-      where: { id: databaseId },
-      select: { childrenOrder: true },
-    });
+  await db.transaction(async (tx) => {
+    const currentDb = await tx
+      .select({ childrenOrder: blocks.childrenOrder })
+      .from(blocks)
+      .where(eq(blocks.id, databaseId))
+      .limit(1)
+      .then((r) => r[0]);
     if (currentDb) {
-      await tx.block.update({
-        where: { id: databaseId },
-        data: { childrenOrder: [...currentDb.childrenOrder, row.id] },
-      });
+      await tx
+        .update(blocks)
+        .set({ childrenOrder: [...currentDb.childrenOrder, row.id] })
+        .where(eq(blocks.id, databaseId));
     }
   });
 
-  // Sync reverse relations
   for (const [propId, val] of Object.entries(clientValues)) {
     if (val.type === 'relation') {
       const propDef = schema.properties.find((p) => p.id === propId);
@@ -1239,20 +1318,18 @@ databases.post('/:databaseId/rows', async (c) => {
         const relatedIds = val.value as string[];
         await Promise.all(
           relatedIds.map((relId) =>
-            syncReverseRelation(updatedRow.id, relId, propDef.relation!.reversePropertyId!, prisma, true),
+            syncReverseRelation(updatedRow.id, relId, propDef.relation!.reversePropertyId!, true),
           ),
         );
       }
     }
   }
 
-  // Fire automation checks asynchronously — do not block the response
   checkAutomationsOnCreate(databaseId, updatedRow.id).catch(() => {});
 
   return c.json({ ...updatedRow, parentRowId: parsed.data.parentRowId ?? null }, 201);
 });
 
-// PATCH /:databaseId/rows/:rowId — Update row property values
 databases.patch('/:databaseId/rows/:rowId', async (c) => {
   const user = requireUser(c);
   if (!user) return c.json({ object: 'error', status: 401, code: 'unauthorized', message: 'Not authenticated' }, 401);
@@ -1262,17 +1339,32 @@ databases.patch('/:databaseId/rows/:rowId', async (c) => {
   const parsed = UpdateRowSchema.safeParse(body);
   if (!parsed.success) return c.json({ object: 'error', status: 400, code: 'validation_error', message: parsed.error.message }, 400);
 
-  const db = await prisma.block.findUnique({ where: { id: databaseId, type: 'database' } });
-  if (!db || db.archived) {
+  const dbBlock = await db
+    .select()
+    .from(blocks)
+    .where(and(eq(blocks.id, databaseId), eq(blocks.type, 'database')))
+    .limit(1)
+    .then((r) => r[0]);
+  if (!dbBlock || dbBlock.archived) {
     return c.json({ object: 'error', status: 404, code: 'not_found', message: 'Database not found' }, 404);
   }
 
-  const row = await prisma.block.findUnique({ where: { id: rowId, parentId: databaseId, type: 'page' } });
+  const row = await db
+    .select()
+    .from(blocks)
+    .where(
+      and(
+        eq(blocks.id, rowId),
+        eq(blocks.parentId, databaseId),
+        eq(blocks.type, 'page'),
+      ),
+    )
+    .limit(1)
+    .then((r) => r[0]);
   if (!row || row.archived) {
     return c.json({ object: 'error', status: 404, code: 'not_found', message: 'Row not found' }, 404);
   }
 
-  // Reject client writes to auto-computed properties
   for (const [, val] of Object.entries(parsed.data.values)) {
     if (AUTO_PROPERTIES.includes(val.type as typeof AUTO_PROPERTIES[number])) {
       return c.json({ object: 'error', status: 400, code: 'validation_error', message: `Property type '${val.type}' is auto-computed and cannot be set by clients` }, 400);
@@ -1280,20 +1372,25 @@ databases.patch('/:databaseId/rows/:rowId', async (c) => {
   }
 
   const now = new Date().toISOString();
-  const schema = (db.properties as unknown as DatabaseBlockProperties).schema;
+  const schema = (dbBlock.properties as unknown as DatabaseBlockProperties).schema;
   const existingRowProps = row.properties as unknown as DatabaseRowProperties;
 
-  // Validate relation values
   for (const [propId, val] of Object.entries(parsed.data.values)) {
     if (val.type === 'relation') {
       const propDef = schema.properties.find((p) => p.id === propId);
       if (propDef?.type === 'relation' && propDef.relation?.relatedDatabaseId) {
         const relatedIds = val.value as string[];
         if (relatedIds.length > 0) {
-          const found = await prisma.block.findMany({
-            where: { id: { in: relatedIds }, parentId: propDef.relation.relatedDatabaseId, archived: false },
-            select: { id: true },
-          });
+          const found = await db
+            .select({ id: blocks.id })
+            .from(blocks)
+            .where(
+              and(
+                inArray(blocks.id, relatedIds),
+                eq(blocks.parentId, propDef.relation.relatedDatabaseId),
+                eq(blocks.archived, false),
+              ),
+            );
           if (found.length !== relatedIds.length) {
             return c.json({ object: 'error', status: 400, code: 'validation_error', message: `Some relation row ids do not exist in the related database` }, 400);
           }
@@ -1302,7 +1399,6 @@ databases.patch('/:databaseId/rows/:rowId', async (c) => {
     }
   }
 
-  // Update auto properties: last_edited_time, last_edited_by
   const autoUpdates: Record<string, PropertyValue> = {};
   for (const prop of schema.properties) {
     if (prop.type === 'last_edited_time') {
@@ -1312,18 +1408,18 @@ databases.patch('/:databaseId/rows/:rowId', async (c) => {
     }
   }
 
-  // Handle parentRowId update
   const parentRowUpdate: Record<string, unknown> = {};
   if (parsed.data.parentRowId !== undefined) {
     if (parsed.data.parentRowId === null) {
-      // Remove parent (promote to top-level) — we delete the key by not including it
       const existingValues = { ...existingRowProps.values } as Record<string, unknown>;
       delete existingValues['__parentRowId'];
       const mergedValues = { ...existingValues, ...autoUpdates, ...parsed.data.values } as Record<string, PropertyValue>;
-      const updatedRow = await prisma.block.update({
-        where: { id: rowId },
-        data: { properties: { values: mergedValues } as unknown as Prisma.InputJsonValue },
-      });
+      const updatedRow = await db
+        .update(blocks)
+        .set({ properties: { values: mergedValues } as Record<string, unknown> })
+        .where(eq(blocks.id, rowId))
+        .returning()
+        .then((r) => r[0]!);
       checkAutomations(databaseId, rowId, Object.fromEntries(
         Object.entries(parsed.data.values).map(([propId, newVal]) => [
           propId,
@@ -1332,9 +1428,18 @@ databases.patch('/:databaseId/rows/:rowId', async (c) => {
       )).catch(() => {});
       return c.json({ ...updatedRow, parentRowId: null });
     } else {
-      const parentRow = await prisma.block.findUnique({
-        where: { id: parsed.data.parentRowId, parentId: databaseId, type: 'page' },
-      });
+      const parentRow = await db
+        .select()
+        .from(blocks)
+        .where(
+          and(
+            eq(blocks.id, parsed.data.parentRowId),
+            eq(blocks.parentId, databaseId),
+            eq(blocks.type, 'page'),
+          ),
+        )
+        .limit(1)
+        .then((r) => r[0]);
       if (!parentRow || parentRow.archived) {
         return c.json({ object: 'error', status: 400, code: 'validation_error', message: 'Parent row not found in this database' }, 400);
       }
@@ -1349,14 +1454,15 @@ databases.patch('/:databaseId/rows/:rowId', async (c) => {
     ...parentRowUpdate,
   } as Record<string, PropertyValue>;
 
-  const updatedRow = await prisma.block.update({
-    where: { id: rowId },
-    data: {
-      properties: { values: mergedValues } as unknown as Prisma.InputJsonValue,
-    },
-  });
+  const updatedRow = await db
+    .update(blocks)
+    .set({
+      properties: { values: mergedValues } as Record<string, unknown>,
+    })
+    .where(eq(blocks.id, rowId))
+    .returning()
+    .then((r) => r[0]!);
 
-  // Sync reverse relations for changed relation properties
   for (const [propId, val] of Object.entries(parsed.data.values)) {
     if (val.type === 'relation') {
       const propDef = schema.properties.find((p) => p.id === propId);
@@ -1365,16 +1471,15 @@ databases.patch('/:databaseId/rows/:rowId', async (c) => {
         const oldVal = existingRowProps.values?.[propId];
         const oldIds: string[] = oldVal?.type === 'relation' ? (oldVal.value as string[]) : [];
 
-        // Remove from rows no longer related
         const removed = oldIds.filter((id) => !newIds.includes(id));
         const added = newIds.filter((id) => !oldIds.includes(id));
 
         await Promise.all([
           ...removed.map((relId) =>
-            syncReverseRelation(rowId, relId, propDef.relation!.reversePropertyId!, prisma, false),
+            syncReverseRelation(rowId, relId, propDef.relation!.reversePropertyId!, false),
           ),
           ...added.map((relId) =>
-            syncReverseRelation(rowId, relId, propDef.relation!.reversePropertyId!, prisma, true),
+            syncReverseRelation(rowId, relId, propDef.relation!.reversePropertyId!, true),
           ),
         ]);
       }
@@ -1383,7 +1488,6 @@ databases.patch('/:databaseId/rows/:rowId', async (c) => {
 
   const storedParentId = (mergedValues as Record<string, unknown>)['__parentRowId'] ?? null;
 
-  // Fire automation checks asynchronously — do not block the response
   checkAutomations(databaseId, rowId, Object.fromEntries(
     Object.entries(parsed.data.values).map(([propId, newVal]) => [
       propId,
@@ -1397,39 +1501,55 @@ databases.patch('/:databaseId/rows/:rowId', async (c) => {
   return c.json({ ...updatedRow, parentRowId: storedParentId });
 });
 
-// DELETE /:databaseId/rows/:rowId — Soft delete row
 databases.delete('/:databaseId/rows/:rowId', async (c) => {
   const user = requireUser(c);
   if (!user) return c.json({ object: 'error', status: 401, code: 'unauthorized', message: 'Not authenticated' }, 401);
 
   const { databaseId, rowId } = c.req.param();
 
-  const db = await prisma.block.findUnique({ where: { id: databaseId, type: 'database' } });
-  if (!db || db.archived) {
+  const dbBlock = await db
+    .select()
+    .from(blocks)
+    .where(and(eq(blocks.id, databaseId), eq(blocks.type, 'database')))
+    .limit(1)
+    .then((r) => r[0]);
+  if (!dbBlock || dbBlock.archived) {
     return c.json({ object: 'error', status: 404, code: 'not_found', message: 'Database not found' }, 404);
   }
 
-  const row = await prisma.block.findUnique({ where: { id: rowId, parentId: databaseId, type: 'page' } });
+  const row = await db
+    .select()
+    .from(blocks)
+    .where(
+      and(
+        eq(blocks.id, rowId),
+        eq(blocks.parentId, databaseId),
+        eq(blocks.type, 'page'),
+      ),
+    )
+    .limit(1)
+    .then((r) => r[0]);
   if (!row) {
     return c.json({ object: 'error', status: 404, code: 'not_found', message: 'Row not found' }, 404);
   }
 
-  await prisma.block.update({
-    where: { id: rowId },
-    data: { archived: true },
-  });
+  await db
+    .update(blocks)
+    .set({ archived: true, updatedAt: new Date() })
+    .where(eq(blocks.id, rowId));
 
-  // Remove from database's childrenOrder
-  await prisma.$transaction(async (tx) => {
-    const currentDb = await tx.block.findUnique({
-      where: { id: databaseId },
-      select: { childrenOrder: true },
-    });
+  await db.transaction(async (tx) => {
+    const currentDb = await tx
+      .select({ childrenOrder: blocks.childrenOrder })
+      .from(blocks)
+      .where(eq(blocks.id, databaseId))
+      .limit(1)
+      .then((r) => r[0]);
     if (currentDb) {
-      await tx.block.update({
-        where: { id: databaseId },
-        data: { childrenOrder: currentDb.childrenOrder.filter((id) => id !== rowId) },
-      });
+      await tx
+        .update(blocks)
+        .set({ childrenOrder: currentDb.childrenOrder.filter((id) => id !== rowId) })
+        .where(eq(blocks.id, databaseId));
     }
   });
 
@@ -1440,27 +1560,31 @@ databases.delete('/:databaseId/rows/:rowId', async (c) => {
 // View Management
 // ============================================================
 
-// GET /:databaseId/views — List views
 databases.get('/:databaseId/views', async (c) => {
   const user = requireUser(c);
   if (!user) return c.json({ object: 'error', status: 401, code: 'unauthorized', message: 'Not authenticated' }, 401);
 
   const { databaseId } = c.req.param();
 
-  const db = await prisma.block.findUnique({ where: { id: databaseId, type: 'database' } });
-  if (!db || db.archived) {
+  const dbBlock = await db
+    .select()
+    .from(blocks)
+    .where(and(eq(blocks.id, databaseId), eq(blocks.type, 'database')))
+    .limit(1)
+    .then((r) => r[0]);
+  if (!dbBlock || dbBlock.archived) {
     return c.json({ object: 'error', status: 404, code: 'not_found', message: 'Database not found' }, 404);
   }
 
-  const views = await prisma.databaseView.findMany({
-    where: { databaseId },
-    orderBy: { position: 'asc' },
-  });
+  const views = await db
+    .select()
+    .from(databaseViews)
+    .where(eq(databaseViews.databaseId, databaseId))
+    .orderBy(asc(databaseViews.position));
 
   return c.json({ object: 'list', results: views });
 });
 
-// POST /:databaseId/views — Create view
 databases.post('/:databaseId/views', async (c) => {
   const user = requireUser(c);
   if (!user) return c.json({ object: 'error', status: 401, code: 'unauthorized', message: 'Not authenticated' }, 401);
@@ -1470,38 +1594,45 @@ databases.post('/:databaseId/views', async (c) => {
   const parsed = CreateViewSchema.safeParse(body);
   if (!parsed.success) return c.json({ object: 'error', status: 400, code: 'validation_error', message: parsed.error.message }, 400);
 
-  const db = await prisma.block.findUnique({ where: { id: databaseId, type: 'database' } });
-  if (!db || db.archived) {
+  const dbBlock = await db
+    .select()
+    .from(blocks)
+    .where(and(eq(blocks.id, databaseId), eq(blocks.type, 'database')))
+    .limit(1)
+    .then((r) => r[0]);
+  if (!dbBlock || dbBlock.archived) {
     return c.json({ object: 'error', status: 404, code: 'not_found', message: 'Database not found' }, 404);
   }
 
-  // Get current max position
-  const maxView = await prisma.databaseView.findFirst({
-    where: { databaseId },
-    orderBy: { position: 'desc' },
-    select: { position: true },
-  });
+  const maxView = await db
+    .select({ position: databaseViews.position })
+    .from(databaseViews)
+    .where(eq(databaseViews.databaseId, databaseId))
+    .orderBy(desc(databaseViews.position))
+    .limit(1)
+    .then((r) => r[0]);
   const nextPosition = (maxView?.position ?? -1) + 1;
 
-  const schema = (db.properties as unknown as DatabaseBlockProperties).schema;
+  const schema = (dbBlock.properties as unknown as DatabaseBlockProperties).schema;
   const defaultConfig = parsed.data.config ?? buildDefaultViewConfig(schema.properties);
 
-  const view = await prisma.databaseView.create({
-    data: {
+  const view = await db
+    .insert(databaseViews)
+    .values({
       databaseId,
       name: parsed.data.name,
-      type: parsed.data.type,
-      filters: { logic: 'and', conditions: [] } as unknown as Prisma.InputJsonValue,
-      sorts: [] as unknown as Prisma.InputJsonValue,
-      config: defaultConfig as unknown as Prisma.InputJsonValue,
+      type: parsed.data.type as DbViewType,
+      filters: { logic: 'and', conditions: [] },
+      sorts: [],
+      config: defaultConfig,
       position: nextPosition,
-    },
-  });
+    })
+    .returning()
+    .then((r) => r[0]!);
 
   return c.json(view, 201);
 });
 
-// PATCH /:databaseId/views/:viewId — Update view
 databases.patch('/:databaseId/views/:viewId', async (c) => {
   const user = requireUser(c);
   if (!user) return c.json({ object: 'error', status: 401, code: 'unauthorized', message: 'Not authenticated' }, 401);
@@ -1511,48 +1642,70 @@ databases.patch('/:databaseId/views/:viewId', async (c) => {
   const parsed = UpdateViewSchema.safeParse(body);
   if (!parsed.success) return c.json({ object: 'error', status: 400, code: 'validation_error', message: parsed.error.message }, 400);
 
-  const db = await prisma.block.findUnique({ where: { id: databaseId, type: 'database' } });
-  if (!db || db.archived) {
+  const dbBlock = await db
+    .select()
+    .from(blocks)
+    .where(and(eq(blocks.id, databaseId), eq(blocks.type, 'database')))
+    .limit(1)
+    .then((r) => r[0]);
+  if (!dbBlock || dbBlock.archived) {
     return c.json({ object: 'error', status: 404, code: 'not_found', message: 'Database not found' }, 404);
   }
 
-  const existingView = await prisma.databaseView.findUnique({ where: { id: viewId, databaseId } });
+  const existingView = await db
+    .select()
+    .from(databaseViews)
+    .where(and(eq(databaseViews.id, viewId), eq(databaseViews.databaseId, databaseId)))
+    .limit(1)
+    .then((r) => r[0]);
   if (!existingView) {
     return c.json({ object: 'error', status: 404, code: 'not_found', message: 'View not found' }, 404);
   }
 
-  const updatedView = await prisma.databaseView.update({
-    where: { id: viewId },
-    data: {
-      ...(parsed.data.name !== undefined ? { name: parsed.data.name } : {}),
-      ...(parsed.data.filters !== undefined ? { filters: parsed.data.filters as unknown as Prisma.InputJsonValue } : {}),
-      ...(parsed.data.sorts !== undefined ? { sorts: parsed.data.sorts as unknown as Prisma.InputJsonValue } : {}),
-      ...(parsed.data.groupBy !== undefined ? { groupBy: parsed.data.groupBy as unknown as Prisma.InputJsonValue } : {}),
-      ...(parsed.data.config !== undefined ? { config: parsed.data.config as unknown as Prisma.InputJsonValue } : {}),
-    },
-  });
+  const updates: Partial<typeof databaseViews.$inferInsert> = { updatedAt: new Date() };
+  if (parsed.data.name !== undefined) updates.name = parsed.data.name;
+  if (parsed.data.filters !== undefined) updates.filters = parsed.data.filters;
+  if (parsed.data.sorts !== undefined) updates.sorts = parsed.data.sorts;
+  if (parsed.data.groupBy !== undefined) updates.groupBy = parsed.data.groupBy;
+  if (parsed.data.config !== undefined) updates.config = parsed.data.config;
+
+  const updatedView = await db
+    .update(databaseViews)
+    .set(updates)
+    .where(eq(databaseViews.id, viewId))
+    .returning()
+    .then((r) => r[0]!);
 
   return c.json(updatedView);
 });
 
-// DELETE /:databaseId/views/:viewId — Delete view
 databases.delete('/:databaseId/views/:viewId', async (c) => {
   const user = requireUser(c);
   if (!user) return c.json({ object: 'error', status: 401, code: 'unauthorized', message: 'Not authenticated' }, 401);
 
   const { databaseId, viewId } = c.req.param();
 
-  const db = await prisma.block.findUnique({ where: { id: databaseId, type: 'database' } });
-  if (!db || db.archived) {
+  const dbBlock = await db
+    .select()
+    .from(blocks)
+    .where(and(eq(blocks.id, databaseId), eq(blocks.type, 'database')))
+    .limit(1)
+    .then((r) => r[0]);
+  if (!dbBlock || dbBlock.archived) {
     return c.json({ object: 'error', status: 404, code: 'not_found', message: 'Database not found' }, 404);
   }
 
-  const existingView = await prisma.databaseView.findUnique({ where: { id: viewId, databaseId } });
+  const existingView = await db
+    .select()
+    .from(databaseViews)
+    .where(and(eq(databaseViews.id, viewId), eq(databaseViews.databaseId, databaseId)))
+    .limit(1)
+    .then((r) => r[0]);
   if (!existingView) {
     return c.json({ object: 'error', status: 404, code: 'not_found', message: 'View not found' }, 404);
   }
 
-  await prisma.databaseView.delete({ where: { id: viewId } });
+  await db.delete(databaseViews).where(eq(databaseViews.id, viewId));
 
   return c.json({ object: 'view', id: viewId, deleted: true });
 });
@@ -1589,27 +1742,31 @@ const UpdateTemplateSchema = z.object({
   isDefault: z.boolean().optional(),
 });
 
-// GET /:databaseId/templates — List templates
 databases.get('/:databaseId/templates', async (c) => {
   const user = requireUser(c);
   if (!user) return c.json({ object: 'error', status: 401, code: 'unauthorized', message: 'Not authenticated' }, 401);
 
   const { databaseId } = c.req.param();
 
-  const db = await prisma.block.findUnique({ where: { id: databaseId, type: 'database' } });
-  if (!db || db.archived) {
+  const dbBlock = await db
+    .select()
+    .from(blocks)
+    .where(and(eq(blocks.id, databaseId), eq(blocks.type, 'database')))
+    .limit(1)
+    .then((r) => r[0]);
+  if (!dbBlock || dbBlock.archived) {
     return c.json({ object: 'error', status: 404, code: 'not_found', message: 'Database not found' }, 404);
   }
 
-  const templates = await prisma.databaseTemplate.findMany({
-    where: { databaseId },
-    orderBy: { position: 'asc' },
-  });
+  const templates = await db
+    .select()
+    .from(databaseTemplates)
+    .where(eq(databaseTemplates.databaseId, databaseId))
+    .orderBy(asc(databaseTemplates.position));
 
   return c.json({ object: 'list', results: templates });
 });
 
-// POST /:databaseId/templates — Create template
 databases.post('/:databaseId/templates', async (c) => {
   const user = requireUser(c);
   if (!user) return c.json({ object: 'error', status: 401, code: 'unauthorized', message: 'Not authenticated' }, 401);
@@ -1619,35 +1776,43 @@ databases.post('/:databaseId/templates', async (c) => {
   const parsed = CreateTemplateSchema.safeParse(body);
   if (!parsed.success) return c.json({ object: 'error', status: 400, code: 'validation_error', message: parsed.error.message }, 400);
 
-  const db = await prisma.block.findUnique({ where: { id: databaseId, type: 'database' } });
-  if (!db || db.archived) {
+  const dbBlock = await db
+    .select()
+    .from(blocks)
+    .where(and(eq(blocks.id, databaseId), eq(blocks.type, 'database')))
+    .limit(1)
+    .then((r) => r[0]);
+  if (!dbBlock || dbBlock.archived) {
     return c.json({ object: 'error', status: 404, code: 'not_found', message: 'Database not found' }, 404);
   }
 
-  const maxTemplate = await prisma.databaseTemplate.findFirst({
-    where: { databaseId },
-    orderBy: { position: 'desc' },
-    select: { position: true },
-  });
+  const maxTemplate = await db
+    .select({ position: databaseTemplates.position })
+    .from(databaseTemplates)
+    .where(eq(databaseTemplates.databaseId, databaseId))
+    .orderBy(desc(databaseTemplates.position))
+    .limit(1)
+    .then((r) => r[0]);
   const nextPosition = (maxTemplate?.position ?? -1) + 1;
 
-  const template = await prisma.databaseTemplate.create({
-    data: {
+  const template = await db
+    .insert(databaseTemplates)
+    .values({
       databaseId,
       name: parsed.data.name,
       description: parsed.data.description,
       icon: parsed.data.icon,
-      content: parsed.data.content as unknown as Prisma.InputJsonValue,
-      values: parsed.data.values as unknown as Prisma.InputJsonValue,
+      content: parsed.data.content as unknown[],
+      values: parsed.data.values as Record<string, unknown>,
       isDefault: parsed.data.isDefault,
       position: nextPosition,
-    },
-  });
+    })
+    .returning()
+    .then((r) => r[0]!);
 
   return c.json(template, 201);
 });
 
-// PATCH /:databaseId/templates/:tid — Update template
 databases.patch('/:databaseId/templates/:tid', async (c) => {
   const user = requireUser(c);
   if (!user) return c.json({ object: 'error', status: 401, code: 'unauthorized', message: 'Not authenticated' }, 401);
@@ -1657,74 +1822,105 @@ databases.patch('/:databaseId/templates/:tid', async (c) => {
   const parsed = UpdateTemplateSchema.safeParse(body);
   if (!parsed.success) return c.json({ object: 'error', status: 400, code: 'validation_error', message: parsed.error.message }, 400);
 
-  const db = await prisma.block.findUnique({ where: { id: databaseId, type: 'database' } });
-  if (!db || db.archived) {
+  const dbBlock = await db
+    .select()
+    .from(blocks)
+    .where(and(eq(blocks.id, databaseId), eq(blocks.type, 'database')))
+    .limit(1)
+    .then((r) => r[0]);
+  if (!dbBlock || dbBlock.archived) {
     return c.json({ object: 'error', status: 404, code: 'not_found', message: 'Database not found' }, 404);
   }
 
-  const existing = await prisma.databaseTemplate.findUnique({ where: { id: tid, databaseId } });
+  const existing = await db
+    .select()
+    .from(databaseTemplates)
+    .where(and(eq(databaseTemplates.id, tid), eq(databaseTemplates.databaseId, databaseId)))
+    .limit(1)
+    .then((r) => r[0]);
   if (!existing) {
     return c.json({ object: 'error', status: 404, code: 'not_found', message: 'Template not found' }, 404);
   }
 
-  const updated = await prisma.databaseTemplate.update({
-    where: { id: tid },
-    data: {
-      ...(parsed.data.name !== undefined ? { name: parsed.data.name } : {}),
-      ...(parsed.data.description !== undefined ? { description: parsed.data.description } : {}),
-      ...(parsed.data.icon !== undefined ? { icon: parsed.data.icon } : {}),
-      ...(parsed.data.content !== undefined ? { content: parsed.data.content as unknown as Prisma.InputJsonValue } : {}),
-      ...(parsed.data.values !== undefined ? { values: parsed.data.values as unknown as Prisma.InputJsonValue } : {}),
-      ...(parsed.data.isDefault !== undefined ? { isDefault: parsed.data.isDefault } : {}),
-    },
-  });
+  const updates: Partial<typeof databaseTemplates.$inferInsert> = { updatedAt: new Date() };
+  if (parsed.data.name !== undefined) updates.name = parsed.data.name;
+  if (parsed.data.description !== undefined) updates.description = parsed.data.description;
+  if (parsed.data.icon !== undefined) updates.icon = parsed.data.icon;
+  if (parsed.data.content !== undefined) updates.content = parsed.data.content as unknown[];
+  if (parsed.data.values !== undefined) updates.values = parsed.data.values as Record<string, unknown>;
+  if (parsed.data.isDefault !== undefined) updates.isDefault = parsed.data.isDefault;
+
+  const updated = await db
+    .update(databaseTemplates)
+    .set(updates)
+    .where(eq(databaseTemplates.id, tid))
+    .returning()
+    .then((r) => r[0]);
 
   return c.json(updated);
 });
 
-// DELETE /:databaseId/templates/:tid — Delete template
 databases.delete('/:databaseId/templates/:tid', async (c) => {
   const user = requireUser(c);
   if (!user) return c.json({ object: 'error', status: 401, code: 'unauthorized', message: 'Not authenticated' }, 401);
 
   const { databaseId, tid } = c.req.param();
 
-  const db = await prisma.block.findUnique({ where: { id: databaseId, type: 'database' } });
-  if (!db || db.archived) {
+  const dbBlock = await db
+    .select()
+    .from(blocks)
+    .where(and(eq(blocks.id, databaseId), eq(blocks.type, 'database')))
+    .limit(1)
+    .then((r) => r[0]);
+  if (!dbBlock || dbBlock.archived) {
     return c.json({ object: 'error', status: 404, code: 'not_found', message: 'Database not found' }, 404);
   }
 
-  const existing = await prisma.databaseTemplate.findUnique({ where: { id: tid, databaseId } });
+  const existing = await db
+    .select()
+    .from(databaseTemplates)
+    .where(and(eq(databaseTemplates.id, tid), eq(databaseTemplates.databaseId, databaseId)))
+    .limit(1)
+    .then((r) => r[0]);
   if (!existing) {
     return c.json({ object: 'error', status: 404, code: 'not_found', message: 'Template not found' }, 404);
   }
 
-  await prisma.databaseTemplate.delete({ where: { id: tid } });
+  await db.delete(databaseTemplates).where(eq(databaseTemplates.id, tid));
 
   return c.json({ object: 'template', id: tid, deleted: true });
 });
 
-// POST /:databaseId/rows/from-template/:tid — Create row from template
+// POST /:databaseId/rows/from-template/:tid
 databases.post('/:databaseId/rows/from-template/:tid', async (c) => {
   const user = requireUser(c);
   if (!user) return c.json({ object: 'error', status: 401, code: 'unauthorized', message: 'Not authenticated' }, 401);
 
   const { databaseId, tid } = c.req.param();
 
-  const db = await prisma.block.findUnique({ where: { id: databaseId, type: 'database' } });
-  if (!db || db.archived) {
+  const dbBlock = await db
+    .select()
+    .from(blocks)
+    .where(and(eq(blocks.id, databaseId), eq(blocks.type, 'database')))
+    .limit(1)
+    .then((r) => r[0]);
+  if (!dbBlock || dbBlock.archived) {
     return c.json({ object: 'error', status: 404, code: 'not_found', message: 'Database not found' }, 404);
   }
 
-  const template = await prisma.databaseTemplate.findUnique({ where: { id: tid, databaseId } });
+  const template = await db
+    .select()
+    .from(databaseTemplates)
+    .where(and(eq(databaseTemplates.id, tid), eq(databaseTemplates.databaseId, databaseId)))
+    .limit(1)
+    .then((r) => r[0]);
   if (!template) {
     return c.json({ object: 'error', status: 404, code: 'not_found', message: 'Template not found' }, 404);
   }
 
   const now = new Date().toISOString();
-  const schema = (db.properties as unknown as DatabaseBlockProperties).schema;
+  const schema = (dbBlock.properties as unknown as DatabaseBlockProperties).schema;
 
-  // Build auto property values
   const autoValues: Record<string, PropertyValue> = {};
   for (const prop of schema.properties) {
     if (prop.type === 'created_time') {
@@ -1744,68 +1940,80 @@ databases.post('/:databaseId/rows/from-template/:tid', async (c) => {
     values: { ...autoValues, ...templateValues } as Record<string, PropertyValue>,
   };
 
-  const row = await prisma.block.create({
-    data: {
-      type: 'page',
+  const row = await db
+    .insert(blocks)
+    .values({
+      type: 'page' as BlockType,
       parentId: databaseId,
-      pageId: '',
-      workspaceId: db.workspaceId,
+      pageId: databaseId,
+      workspaceId: dbBlock.workspaceId,
       createdBy: user.id,
-      properties: rowProperties as unknown as Prisma.InputJsonValue,
+      properties: rowProperties as unknown as Record<string, unknown>,
       content: {},
-    },
-  });
+    })
+    .returning()
+    .then((r) => r[0]!);
 
-  const updatedRow = await prisma.block.update({
-    where: { id: row.id },
-    data: { pageId: row.id },
-  });
+  const updatedRow = await db
+    .update(blocks)
+    .set({ pageId: row.id })
+    .where(eq(blocks.id, row.id))
+    .returning()
+    .then((r) => r[0]!);
 
-  // Add to database's childrenOrder
-  await prisma.$transaction(async (tx) => {
-    const currentDb = await tx.block.findUnique({
-      where: { id: databaseId },
-      select: { childrenOrder: true },
-    });
+  await db.transaction(async (tx) => {
+    const currentDb = await tx
+      .select({ childrenOrder: blocks.childrenOrder })
+      .from(blocks)
+      .where(eq(blocks.id, databaseId))
+      .limit(1)
+      .then((r) => r[0]);
     if (currentDb) {
-      await tx.block.update({
-        where: { id: databaseId },
-        data: { childrenOrder: [...currentDb.childrenOrder, row.id] },
-      });
+      await tx
+        .update(blocks)
+        .set({ childrenOrder: [...currentDb.childrenOrder, row.id] })
+        .where(eq(blocks.id, databaseId));
     }
   });
 
-  // Create child blocks from template content
   type TemplateBlockItem = { type: string; properties: Record<string, unknown>; content: Record<string, unknown>; children?: TemplateBlockItem[] };
   const contentBlocks = template.content as unknown as TemplateBlockItem[];
-  const workspaceId = db.workspaceId;
+  const workspaceId = dbBlock.workspaceId;
   const createdBy = user.id;
 
   async function createContentBlocks(
-    blocks: TemplateBlockItem[],
+    blocksList: TemplateBlockItem[],
     parentBlockId: string,
   ): Promise<void> {
-    for (const blockDef of blocks) {
-      const childBlock = await prisma.block.create({
-        data: {
-          type: blockDef.type as import('../generated/prisma/client.js').BlockType,
+    for (const blockDef of blocksList) {
+      const childBlock = await db
+        .insert(blocks)
+        .values({
+          type: blockDef.type as BlockType,
           parentId: parentBlockId,
           pageId: updatedRow.id,
           workspaceId,
           createdBy,
-          properties: (blockDef.properties ?? {}) as unknown as Prisma.InputJsonValue,
-          content: (blockDef.content ?? {}) as unknown as Prisma.InputJsonValue,
-        },
-      });
-      // Add to parent's childrenOrder
-      await prisma.block.update({
-        where: { id: parentBlockId },
-        data: {
-          childrenOrder: {
-            push: childBlock.id,
-          },
-        },
-      });
+          properties: (blockDef.properties ?? {}) as Record<string, unknown>,
+          content: (blockDef.content ?? {}) as Record<string, unknown>,
+        })
+        .returning()
+        .then((r) => r[0]!);
+
+      // Append to parent's childrenOrder
+      const parentBlock = await db
+        .select({ childrenOrder: blocks.childrenOrder })
+        .from(blocks)
+        .where(eq(blocks.id, parentBlockId))
+        .limit(1)
+        .then((r) => r[0]);
+      if (parentBlock) {
+        await db
+          .update(blocks)
+          .set({ childrenOrder: [...parentBlock.childrenOrder, childBlock.id] })
+          .where(eq(blocks.id, parentBlockId));
+      }
+
       if (blockDef.children && blockDef.children.length > 0) {
         await createContentBlocks(blockDef.children, childBlock.id);
       }
@@ -1816,7 +2024,6 @@ databases.post('/:databaseId/rows/from-template/:tid', async (c) => {
     await createContentBlocks(contentBlocks, updatedRow.id);
   }
 
-  // Fire automation checks asynchronously — do not block the response
   checkAutomationsOnCreate(databaseId, updatedRow.id).catch(() => {});
 
   return c.json({ ...updatedRow, parentRowId: null }, 201);

@@ -11,6 +11,7 @@ import { blocks, pagePermissions, workspaceMembers } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { requireAuth } from '@/lib/auth/middleware';
 import { NextRequest, NextResponse } from 'next/server';
+import { onPageUpdated, onPageDeleted } from '@/lib/search/hooks';
 
 async function canAccess(
   userId: string,
@@ -84,6 +85,20 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     .where(eq(blocks.id, id))
     .returning();
 
+  // Best-effort reindex for global search
+  onPageUpdated({
+    id: updated.id,
+    type: 'page',
+    pageId: updated.id,
+    workspaceId: updated.workspaceId,
+    properties: updated.properties,
+    content: updated.content,
+    archived: updated.archived,
+    createdBy: updated.createdBy,
+    createdAt: updated.createdAt,
+    updatedAt: updated.updatedAt,
+  });
+
   return NextResponse.json(updated);
 }
 
@@ -106,8 +121,28 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   if (hard) {
     // ON DELETE CASCADE removes children + permissions + snapshots
     await db.delete(blocks).where(eq(blocks.id, id));
+    onPageDeleted(id);
   } else {
-    await db.update(blocks).set({ archived: true, updatedAt: new Date() }).where(eq(blocks.id, id));
+    const [updated] = await db
+      .update(blocks)
+      .set({ archived: true, updatedAt: new Date() })
+      .where(eq(blocks.id, id))
+      .returning();
+    if (updated) {
+      // Archived pages should still be searchable but marked — reindex with archived=true
+      onPageUpdated({
+        id: updated.id,
+        type: 'page',
+        pageId: updated.id,
+        workspaceId: updated.workspaceId,
+        properties: updated.properties,
+        content: updated.content,
+        archived: updated.archived,
+        createdBy: updated.createdBy,
+        createdAt: updated.createdAt,
+        updatedAt: updated.updatedAt,
+      });
+    }
   }
 
   return NextResponse.json({ success: true });

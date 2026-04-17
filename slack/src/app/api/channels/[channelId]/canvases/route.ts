@@ -1,18 +1,37 @@
 /**
  * GET /api/channels/:channelId/canvases
  *
- * Returns all canvases for a channel (multiple per channel, one per article),
- * sorted newest-first. Requires channel membership.
+ * Returns canvases for a channel with pagination and search.
+ * Query params: ?q=&limit=&cursor=
+ * Returns { canvases: [], nextCursor?: string }
  */
 
 import { db } from "@/lib/db";
 import { canvases, channelMembers, users } from "@/lib/db/schema";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, lt, or, ilike } from "drizzle-orm";
 import { requireAuth } from "@/lib/auth/middleware";
 import { NextRequest, NextResponse } from "next/server";
 
+function encodeCursor(updatedAt: Date, id: string): string {
+  return Buffer.from(`${updatedAt.toISOString()}:${id}`).toString("base64");
+}
+
+function decodeCursor(cursor: string): { updatedAt: Date; id: string } | null {
+  try {
+    const raw = Buffer.from(cursor, "base64").toString("utf8");
+    const colonIdx = raw.indexOf(":");
+    if (colonIdx === -1) return null;
+    const updatedAt = new Date(raw.slice(0, colonIdx));
+    const id = raw.slice(colonIdx + 1);
+    if (isNaN(updatedAt.getTime()) || !id) return null;
+    return { updatedAt, id };
+  } catch {
+    return null;
+  }
+}
+
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ channelId: string }> }
 ) {
   const auth = await requireAuth();
@@ -30,6 +49,35 @@ export async function GET(
     return NextResponse.json({ error: "Not a member" }, { status: 403 });
   }
 
+  const { searchParams } = new URL(request.url);
+  const q = searchParams.get("q")?.trim() ?? "";
+  const rawLimit = parseInt(searchParams.get("limit") ?? "20", 10);
+  const limit = Math.min(isNaN(rawLimit) ? 20 : rawLimit, 100);
+  const cursorParam = searchParams.get("cursor");
+
+  const conditions: ReturnType<typeof eq>[] = [eq(canvases.channelId, channelId)];
+
+  if (q) {
+    conditions.push(
+      or(
+        ilike(canvases.title, `%${q}%`),
+        ilike(canvases.topic, `%${q}%`)
+      ) as ReturnType<typeof eq>
+    );
+  }
+
+  if (cursorParam) {
+    const decoded = decodeCursor(cursorParam);
+    if (decoded) {
+      conditions.push(
+        or(
+          lt(canvases.updatedAt, decoded.updatedAt),
+          and(eq(canvases.updatedAt, decoded.updatedAt), lt(canvases.id, decoded.id))!
+        ) as ReturnType<typeof eq>
+      );
+    }
+  }
+
   const rows = await db
     .select({
       id: canvases.id,
@@ -42,9 +90,17 @@ export async function GET(
     })
     .from(canvases)
     .leftJoin(users, eq(canvases.updatedBy, users.id))
-    .where(eq(canvases.channelId, channelId))
+    .where(and(...conditions))
     .orderBy(desc(canvases.updatedAt))
-    .limit(50);
+    .limit(limit + 1);
 
-  return NextResponse.json(rows);
+  const hasMore = rows.length > limit;
+  const canvasList = hasMore ? rows.slice(0, limit) : rows;
+
+  const nextCursor =
+    hasMore && canvasList.length > 0
+      ? encodeCursor(canvasList[canvasList.length - 1].updatedAt, canvasList[canvasList.length - 1].id)
+      : undefined;
+
+  return NextResponse.json({ canvases: canvasList, ...(nextCursor ? { nextCursor } : {}) });
 }

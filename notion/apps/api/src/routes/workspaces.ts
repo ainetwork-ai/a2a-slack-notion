@@ -1,6 +1,12 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { prisma } from '../lib/prisma.js';
+import { eq } from 'drizzle-orm';
+import { db } from '../lib/db.js';
+import {
+  workspaces as workspacesTable,
+  workspaceMembers,
+  blocks,
+} from '../../../../slack/src/lib/db/schema';
 import type { AppVariables } from '../types/app.js';
 
 const workspaces = new Hono<{ Variables: AppVariables }>();
@@ -26,29 +32,36 @@ workspaces.post('/', async (c) => {
     return c.json({ object: 'error', status: 400, code: 'validation_error', message: parsed.error.message }, 400);
   }
 
-  const workspace = await prisma.workspace.create({
-    data: {
-      name: parsed.data.name,
-      icon: parsed.data.icon,
-      members: {
-        create: {
-          userId: user.id,
-          role: 'admin',
-        },
-      },
-    },
-  });
+  // Slack's workspaces table uses `iconText` (not `icon`) and does not have
+  // a unique `name` constraint handled here — we accept the first-wins insert.
+  const workspace = await db.transaction(async (tx) => {
+    const ws = await tx
+      .insert(workspacesTable)
+      .values({
+        name: parsed.data.name,
+        ...(parsed.data.icon ? { iconText: parsed.data.icon } : {}),
+        createdBy: user.id,
+      })
+      .returning()
+      .then((r) => r[0]!);
 
-  // Create a seed "Getting Started" page block
-  await prisma.block.create({
-    data: {
+    await tx.insert(workspaceMembers).values({
+      workspaceId: ws.id,
+      userId: user.id,
+      role: 'admin',
+    });
+
+    // Create a seed "Getting Started" page block
+    await tx.insert(blocks).values({
       type: 'page',
-      pageId: '', // will self-reference
-      workspaceId: workspace.id,
+      pageId: ws.id, // NOT NULL in slack schema — use workspace id as placeholder
+      workspaceId: ws.id,
       createdBy: user.id,
       properties: { title: 'Getting Started' },
       content: {},
-    },
+    });
+
+    return ws;
   });
 
   return c.json(workspace, 201);
@@ -59,12 +72,16 @@ workspaces.get('/', async (c) => {
   const user = c.get('user');
   if (!user) return c.json({ object: 'error', status: 401, code: 'unauthorized', message: 'Not authenticated' }, 401);
 
-  const memberships = await prisma.workspaceMember.findMany({
-    where: { userId: user.id },
-    include: { workspace: true },
-  });
+  const rows = await db
+    .select({
+      ws: workspacesTable,
+      role: workspaceMembers.role,
+    })
+    .from(workspaceMembers)
+    .innerJoin(workspacesTable, eq(workspacesTable.id, workspaceMembers.workspaceId))
+    .where(eq(workspaceMembers.userId, user.id));
 
-  return c.json(memberships.map((m) => ({ ...m.workspace, role: m.role })));
+  return c.json(rows.map((m) => ({ ...m.ws, role: m.role })));
 });
 
 // Get workspace members

@@ -1,8 +1,8 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, ArrowRight, Clock, HelpCircle, Search } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { ArrowLeft, ArrowRight, Clock, HelpCircle } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   DropdownMenu,
@@ -16,6 +16,7 @@ import { useWorkspaceStore } from '@/lib/stores/workspace-store';
 import { useAuth } from '@/lib/hooks/use-auth';
 import { usePresence, UserStatus } from '@/lib/realtime/use-presence';
 import { cn } from '@/lib/utils';
+import TopBarSearch from './TopBarSearch';
 
 function statusDotClass(status: UserStatus): string {
   switch (status) {
@@ -41,7 +42,6 @@ export default function TopBar() {
   const activeWorkspace = workspaces.find((w) => w.name === activeWorkspaceName);
   const [canBack, setCanBack] = useState(false);
   const [canForward, setCanForward] = useState(false);
-  const searchInputRef = useRef<HTMLInputElement>(null);
 
   // Approximate back/forward availability — browser exposes history.length
   // but not position, so we best-effort disable the arrows when clearly empty.
@@ -50,8 +50,9 @@ export default function TopBar() {
     setCanForward(false); // forward state is opaque in browsers; keep dim unless user clicked back
   }, []);
 
-  // `/` focuses the search input (matches Slack's global shortcut). Skip when
-  // the user is typing elsewhere.
+  // `/` focuses the inline search input. Dispatches a focus request via a
+  // custom event so we don't couple TopBar with TopBarSearch's ref. Skipped
+  // when the user is already typing elsewhere.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key !== '/') return;
@@ -59,7 +60,10 @@ export default function TopBar() {
       if (target && /INPUT|TEXTAREA|SELECT/.test(target.tagName)) return;
       if (target && target.isContentEditable) return;
       e.preventDefault();
-      setSearchOpen(true);
+      // Focus the first TopBar search input on the page.
+      document
+        .querySelector<HTMLInputElement>('[data-topbar-search] input')
+        ?.focus();
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -120,22 +124,14 @@ export default function TopBar() {
       </div>
 
       {/* Search — takes ~50% */}
-      <div className="flex-1 flex items-center justify-center">
-        <button
-          onClick={() => setSearchOpen(true)}
-          className="w-full max-w-[720px] flex items-center gap-2 h-8 px-3 rounded-md bg-black/15 hover:bg-black/25 border border-white/10 hover:border-white/20 text-left transition-colors group"
-          aria-label="Search"
-        >
-          <Search className="w-4 h-4 text-white/70 shrink-0" />
-          <span className="text-sm text-white/70 truncate flex-1">
-            Search {activeWorkspace?.name ?? 'workspace'}
-          </span>
-          <kbd className="hidden md:inline text-[11px] text-white/50 border border-white/15 rounded px-1 py-0.5 font-mono group-hover:text-white/70 transition-colors">
-            /
-          </kbd>
-        </button>
-        {/* Hidden native input for `/` shortcut handoff when user keeps typing */}
-        <input ref={searchInputRef} className="sr-only" tabIndex={-1} aria-hidden="true" />
+      <div
+        data-topbar-search
+        className="flex-1 flex items-center justify-center"
+      >
+        <TopBarSearch
+          workspaceId={activeWorkspace?.id ?? null}
+          placeholder={`Search ${activeWorkspace?.name ?? 'workspace'}`}
+        />
       </div>
 
       {/* Right cluster — help + user */}

@@ -9,6 +9,7 @@ import MessageList from '@/components/chat/MessageList';
 import MessageInput from '@/components/chat/MessageInput';
 import TypingIndicator from '@/components/chat/TypingIndicator';
 import ThreadPanel from '@/components/chat/ThreadPanel';
+import { pushRecentVisit } from '@/lib/hooks/use-recent-visits';
 import AgentSkillPicker from '@/components/agent/AgentSkillPicker';
 import { AgentSkill } from '@/components/agent/AgentSkillPicker';
 import { useMessages } from '@/lib/hooks/use-messages';
@@ -85,6 +86,17 @@ export default function DMPage({ params }: { params: Promise<{ conversationId: s
       setIsMuted(conversation.isMuted);
     }
   }, [conversation?.isMuted]);
+
+  // Track DM visits for Cmd+K switcher
+  useEffect(() => {
+    if (conversation?.otherUser?.displayName && conversationId) {
+      pushRecentVisit({
+        type: 'dm',
+        id: conversationId,
+        label: conversation.otherUser.displayName,
+      });
+    }
+  }, [conversationId, conversation?.otherUser?.displayName]);
 
   async function handleToggleMute() {
     if (togglingMute) return;

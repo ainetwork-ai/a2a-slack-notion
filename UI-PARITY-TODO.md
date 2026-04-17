@@ -7,45 +7,45 @@
 Slack: 화면 전체 맨 위에 어두운 보라색 띠. 우리 앱엔 없음 — 좌 sidebar + 메인
 컨텐츠로 바로 들어감.
 
-- [ ] **Top bar 컴포넌트 추가**. 높이 40~44px, workspace color 배경 (`#4a154b`)
-- [ ] **History 화살표** (←, →) 왼쪽. 방문 스택 기반 브라우저 이동
-- [ ] **시간 네비** (실제 slack에는 없지만 스택 있으면 최근 위치 하이라이트)
-- [ ] **검색 바** 정중앙, 넓이 ~700px (`border-white/20`, rounded-md,
+- [x] **Top bar 컴포넌트 추가**. 높이 40~44px, workspace color 배경 (`#4a154b`)
+- [x] **History 화살표** (←, →) 왼쪽. 방문 스택 기반 브라우저 이동
+- [x] **시간 네비** (실제 slack에는 없지만 스택 있으면 최근 위치 하이라이트)
+- [x] **검색 바** 정중앙, 넓이 ~700px (`border-white/20`, rounded-md,
       icon prefix, `Search <workspace-name>` placeholder)
   - 클릭 → 현재 `SearchModal` 열기
   - `/` 키로 포커스 (cmd+K도 병행)
   - 최근 검색어 prefill
-- [ ] **Help 메뉴** 오른쪽 (? 아이콘) — 단축키 모달 / 피드백 / 문서 링크
-- [ ] **현재 유저 아바타** 맨 오른쪽 with status dot — 클릭 시 drop-down
+- [x] **Help 메뉴** 오른쪽 (? 아이콘) — 단축키 모달 / 피드백 / 문서 링크
+- [x] **현재 유저 아바타** 맨 오른쪽 with status dot — 클릭 시 drop-down
       (status 바꾸기 / 프로필 / 로그아웃). 지금은 rail 하단에 있음.
 
 ## Left Rail (68px sidebar)
 
 Slack에선 `Home / DMs / Activity / Later / More` 기본 + 워크스페이스 스위처 하단.
 
-- [ ] **Rail 아이콘 순서** 정리: Home (house) · DMs · Activity · Later · More.
+- [x] **Rail 아이콘 순서** 정리: Home (house) · DMs · Activity · Later · More.
       현재 순서 확인 필요.
-- [ ] **Unread count 배지** 각 rail 아이콘 위 우측 상단 빨간 점
-- [ ] **Rail 아이콘 상단/하단 구분**: 네비 ↑ / 워크스페이스 스위처 + 유저 ↓
-- [ ] **"Create New" 플로팅 버튼** (Slack의 compose pencil) — 오른쪽 하단 원형
+- [x] **Unread count 배지** 각 rail 아이콘 위 우측 상단 빨간 점
+- [x] **Rail 아이콘 상단/하단 구분**: 네비 ↑ / 워크스페이스 스위처 + 유저 ↓
+- [x] **"Create New" 플로팅 버튼** (Slack의 compose pencil) — 오른쪽 하단 원형
 
 ## Channel Sidebar (가운데 컬럼)
 
-- [ ] **Workspace 헤더** — 이름 + `v` (클릭 시 Invite / Preferences / Admin 메뉴
+- [x] **Workspace 헤더** — 이름 + `v` (클릭 시 Invite / Preferences / Admin 메뉴
       드롭다운). 지금은 `v` 있고 modal 열리는데 slack은 메뉴가 먼저
-- [ ] **"New message" / "New canvas" 원 아이콘 버튼** — workspace 이름 오른쪽
-- [ ] **섹션 헤더**: `Channels` / `Direct messages` / `Apps` (Slack은 section
+- [x] **"New message" / "New canvas" 원 아이콘 버튼** — workspace 이름 오른쪽
+- [x] **섹션 헤더**: `Channels` / `Direct messages` / `Apps` (Slack은 section
       expand/collapse + `+`버튼 한 줄에). 우리는 `+` 버튼 위치·스타일 다름
-- [ ] **채널 이름 앞 prefix**: `#`, `🔒` (private), `🔊` (huddle). 현재 Hash icon만
-- [ ] **섹션 접기/펴기** 왼쪽 ▶ 아이콘 hover 시 나오게
-- [ ] **"Show more" / "Show less"** — 섹션 아이템 5개+ 일 때 접기
+- [x] **채널 이름 앞 prefix**: `#`, `🔒` (private), `🔊` (huddle). 현재 Hash icon만
+- [x] **섹션 접기/펴기** 왼쪽 ▶ 아이콘 hover 시 나오게
+- [x] **"Show more" / "Show less"** — 섹션 아이템 5개+ 일 때 접기
 
 ## Channel Header
 
 Slack: `# name | topic` + 우측에 member avatars (3–5 stacked) + 버튼들 (Huddle,
 Call, Files, Pin, Bookmark, Settings, Search).
 
-- [ ] **토픽 inline 편집** 채널명 옆 (우리는 description 필드로 대신)
+- [x] **토픽 inline 편집** 채널명 옆 (description 필드로 구현 — 클릭해서 바로 편집)
 - [x] **Member avatar 겹쳐 표시** (3~4명 + `+N`) 우측에, 클릭하면 멤버 패널 열기
 - [ ] **Huddle / Call 버튼** placeholder라도 자리 잡기
 - [x] **Bookmarks 바** 채널 헤더 아래 작게 — pinned files/canvases/URLs
@@ -71,21 +71,21 @@ Call, Files, Pin, Bookmark, Settings, Search).
 
 ## Right side panels
 
-- [ ] **Thread 패널 헤더** "Thread" 대신 `Thread in #channel` + X 버튼
-- [ ] **Canvas 패널** pinned preview UI — Slack은 상단 고정 카드, 우리는 already close
-- [ ] **Details panel** (Users/Pinned/Files 탭이 한 패널에 합쳐짐)
+- [x] **Thread 패널 헤더** "Thread" 대신 `Thread in #channel` + X 버튼
+- [x] **Canvas 패널** pinned preview UI — Slack은 상단 고정 카드, 우리는 already close
+- [x] **Details panel** (Users/Pinned/Files 탭이 한 패널에 합쳐짐)
 
 ## Quick switcher / Search
 
-- [ ] **Cmd+K** 퀵 스위처 — Slack은 채널/DM/유저 한 번에 검색하면서 최근 방문
+- [x] **Cmd+K** 퀵 스위처 — Slack은 채널/DM/유저 한 번에 검색하면서 최근 방문
       위에 보여줌. 우리는 SearchModal이지만 UX 다름
-- [ ] **Filter 칩** 검색 결과 상단 (From / In / With / Date)
-- [ ] **"Recent" 섹션** 검색 모달 열자마자 최근 채널 / DM 10개
+- [x] **Filter 칩** 검색 결과 상단 (From / In / With / Date)
+- [x] **"Recent" 섹션** 검색 모달 열자마자 최근 채널 / DM 10개
 
 ## Mobile
 
-- [ ] **Mobile top bar** 검색 아이콘 + 메뉴 + 워크스페이스 이름 가운데
-- [ ] **Bottom tabbar** Home / DMs / Mentions / You 네 개 (Slack iOS 참고)
+- [x] **Mobile top bar** 검색 아이콘 + 메뉴 + 워크스페이스 이름 가운데
+- [x] **Bottom tabbar** Home / DMs / Mentions / You 네 개 (Slack iOS 참고)
 - [ ] **Swipe actions** 메시지 왼쪽/오른쪽 swipe으로 reply / bookmark
 
 ## 우선순위 제안

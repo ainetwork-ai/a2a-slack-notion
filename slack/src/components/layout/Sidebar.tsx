@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 
 import {
-  Home, MessageSquare, Bell, Clock, Folder, Zap, MoreHorizontal,
+  Home, MessageSquare, Bell, Clock, Folder, FileText, Zap, MoreHorizontal,
   LogOut, Sun, Moon, Smile, BellOff, Volume2, VolumeX, User, Settings, Plus,
 } from 'lucide-react';
 import Image from 'next/image';
@@ -249,6 +249,12 @@ export default function Sidebar() {
           label="Files"
           onClick={() => router.push('/workspace/files')}
           active={pathname === '/workspace/files'}
+        />
+        <NavButton
+          icon={<FileText className="w-5 h-5" />}
+          label="Canvases"
+          onClick={() => router.push('/workspace/canvases')}
+          active={pathname === '/workspace/canvases'}
         />
         <NavButton
           icon={<Zap className="w-5 h-5" />}

@@ -1,12 +1,24 @@
 import { Hono } from 'hono';
 import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
 import { getAddress } from 'viem';
+import { eq } from 'drizzle-orm';
 import { COOKIE_NAME, COOKIE_OPTIONS } from '../lib/auth.js';
 import { signToken, verifyToken } from '../lib/jwt.js';
-import { prisma } from '../lib/prisma.js';
+import { db } from '../lib/db.js';
+import { users } from '../../../../slack/src/lib/db/schema';
 import type { AuthenticatedUser } from '../types/auth.js';
 
 const authRoutes = new Hono();
+
+function toAuthenticatedUser(u: typeof users.$inferSelect): AuthenticatedUser {
+  return {
+    id: u.id,
+    walletAddress: u.ainAddress,
+    name: u.displayName,
+    image: u.avatarUrl,
+    createdAt: u.createdAt,
+  };
+}
 
 // POST /api/auth/connect — wallet address만으로 로그인 (지갑 연결 = 인증)
 authRoutes.post('/connect', async (c) => {
@@ -19,26 +31,31 @@ authRoutes.post('/connect', async (c) => {
   try {
     const walletAddress = getAddress(rawAddress); // EIP-55 정규화
 
-    const user = await prisma.user.upsert({
-      where: { walletAddress },
-      update: {},
-      create: {
-        walletAddress,
-        name: `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`,
-      },
-    });
+    // Drizzle has no single-step upsert-by-unique-key helper. Try insert first;
+    // on conflict, read the existing row.
+    const existing = await db
+      .select()
+      .from(users)
+      .where(eq(users.ainAddress, walletAddress))
+      .limit(1)
+      .then((r) => r[0]);
 
-    const token = await signToken({ sub: user.id, walletAddress: user.walletAddress });
+    const user =
+      existing ??
+      (await db
+        .insert(users)
+        .values({
+          ainAddress: walletAddress,
+          displayName: `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`,
+        })
+        .returning()
+        .then((r) => r[0]!));
+
+    const token = await signToken({ sub: user.id, walletAddress: user.ainAddress });
     setCookie(c, COOKIE_NAME, token, COOKIE_OPTIONS);
 
     return c.json({
-      user: {
-        id: user.id,
-        walletAddress: user.walletAddress,
-        name: user.name,
-        image: user.image,
-        createdAt: user.createdAt,
-      } satisfies AuthenticatedUser,
+      user: toAuthenticatedUser(user) satisfies AuthenticatedUser,
     });
   } catch {
     return c.json({ error: 'Invalid wallet address' }, 400);
@@ -60,17 +77,19 @@ authRoutes.get('/session', async (c) => {
 
   try {
     const payload = await verifyToken(token);
-    const user = await prisma.user.findUnique({
-      where: { id: payload.sub },
-      select: { id: true, walletAddress: true, name: true, image: true, createdAt: true },
-    });
+    const user = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, payload.sub))
+      .limit(1)
+      .then((r) => r[0]);
 
     if (!user) {
       deleteCookie(c, COOKIE_NAME, { path: '/' });
       return c.json({ user: null }, 401);
     }
 
-    return c.json({ user: user as AuthenticatedUser });
+    return c.json({ user: toAuthenticatedUser(user) });
   } catch {
     deleteCookie(c, COOKIE_NAME, { path: '/' });
     return c.json({ user: null }, 401);

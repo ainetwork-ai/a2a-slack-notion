@@ -3,6 +3,7 @@ import { users } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { requireAuth } from "@/lib/auth/middleware";
 import { NextRequest, NextResponse } from "next/server";
+import { onUserUpdated } from "@/lib/search/hooks";
 
 export async function PATCH(request: NextRequest) {
   const auth = await requireAuth();
@@ -32,7 +33,17 @@ export async function PATCH(request: NextRequest) {
       displayName: users.displayName,
       avatarUrl: users.avatarUrl,
       timezone: users.timezone,
+      ainAddress: users.ainAddress,
+      isAgent: users.isAgent,
     });
+
+  // Update search index (best-effort)
+  onUserUpdated({
+    id: updated.id,
+    displayName: updated.displayName,
+    ainAddress: updated.ainAddress,
+    isAgent: updated.isAgent,
+  });
 
   return NextResponse.json({ user: updated });
 }

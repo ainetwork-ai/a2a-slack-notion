@@ -5,21 +5,18 @@
   "type": "module",
   "main": "src/index.ts",
   "scripts": {
-    "start": "tsx src/index.ts",
-    "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "dev": "tsx src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.56.0",
-    "@hono/node-server": "^1.19.14",
     "@modelcontextprotocol/sdk": "^1.12.1",
-    "hono": "^4.12.12",
     "zod": "^3.24.4"
   },
   "devDependencies": {
-    "@types/node": "^25.6.0",
+    "@types/node": "^22.10.5",
     "tsx": "^4.19.4",
-    "typescript": "^5.8.3",
-    "vitest": "^4.1.4"
+    "typescript": "^5.8.3"
   }
 }

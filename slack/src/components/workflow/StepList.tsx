@@ -25,6 +25,10 @@ function stepIcon(type: WorkflowStep['type']): string {
     parse_assignment: '🔍',
     parse_verdict: '⚖️',
     loop: '🔄',
+    notion_create_page: '📄',
+    notion_append_block: '📑',
+    notion_advance_status: '🚩',
+    notion_notify: '🔔',
   };
   return map[type] ?? '⚙️';
 }
@@ -47,6 +51,10 @@ function stepLabel(type: WorkflowStep['type']): string {
     parse_assignment: 'Parse assignment',
     parse_verdict: 'Parse verdict',
     loop: 'Loop until condition',
+    notion_create_page: 'Create Notion page',
+    notion_append_block: 'Append block to Notion page',
+    notion_advance_status: 'Advance page status',
+    notion_notify: 'Send Notion notification',
   };
   return map[type] ?? type;
 }

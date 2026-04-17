@@ -1,4 +1,6 @@
-import { prisma } from './prisma.js';
+import { and, asc, eq } from 'drizzle-orm';
+import { db } from './db.js';
+import { blocks } from '../../../../slack/src/lib/db/schema';
 
 // ---------------------------------------------------------------------------
 // Tiptap JSON → plain text
@@ -62,7 +64,7 @@ function blockToMarkdown(block: Block, indent: number, numberedCounters: Map<str
     case 'bulleted_list':
       return [`${pad}- ${text}`];
     case 'numbered_list': {
-      const parentKey = block.id; // counters are per-parent; handled by caller
+      const parentKey = block.id;
       const n = (numberedCounters.get(parentKey) ?? 0) + 1;
       numberedCounters.set(parentKey, n);
       return [`${pad}${n}. ${text}`];
@@ -101,7 +103,6 @@ function blockToMarkdown(block: Block, indent: number, numberedCounters: Map<str
       return [`${pad}[${title}](${url})`];
     }
     case 'table': {
-      // Table rows are stored as children blocks — handled at recursive level
       return [];
     }
     default:
@@ -119,18 +120,17 @@ async function renderBlocks(
   indent: number,
   numberedCounters: Map<string, number>,
 ): Promise<string[]> {
-  const children = await prisma.block.findMany({
-    where: { parentId, archived: false },
-    select: {
-      id: true,
-      type: true,
-      properties: true,
-      content: true,
-      childrenOrder: true,
-    },
-  });
+  const children = await db
+    .select({
+      id: blocks.id,
+      type: blocks.type,
+      properties: blocks.properties,
+      content: blocks.content,
+      childrenOrder: blocks.childrenOrder,
+    })
+    .from(blocks)
+    .where(and(eq(blocks.parentId, parentId), eq(blocks.archived, false)));
 
-  // Sort by childrenOrder if present, else by insertion order
   const ordered =
     childrenOrder.length > 0
       ? childrenOrder
@@ -139,7 +139,6 @@ async function renderBlocks(
       : children;
 
   const lines: string[] = [];
-  // Numbered list counters scoped to this parent
   const localCounters = new Map<string, number>();
   let listCounter = 0;
 
@@ -152,7 +151,6 @@ async function renderBlocks(
       childrenOrder: block.childrenOrder,
     };
 
-    // Track numbered list order within this parent
     if (block.type === 'numbered_list') {
       listCounter++;
       localCounters.set(block.id, listCounter);
@@ -162,16 +160,21 @@ async function renderBlocks(
 
     // Special case: table — render header row + separator + data rows from children
     if (block.type === 'table') {
-      const tableRows = await prisma.block.findMany({
-        where: { parentId: block.id, archived: false },
-        select: { id: true, type: true, properties: true, content: true, childrenOrder: true },
-        orderBy: { createdAt: 'asc' },
-      });
+      const tableRows = await db
+        .select({
+          id: blocks.id,
+          type: blocks.type,
+          properties: blocks.properties,
+          content: blocks.content,
+          childrenOrder: blocks.childrenOrder,
+        })
+        .from(blocks)
+        .where(and(eq(blocks.parentId, block.id), eq(blocks.archived, false)))
+        .orderBy(asc(blocks.createdAt));
 
       if (tableRows.length > 0) {
-        // Simplified: extract text from each row's properties
         const rows = tableRows.map((row) => {
-          const cells = (row.properties as Record<string, unknown>)['cells'];
+          const cells = ((row.properties ?? {}) as Record<string, unknown>)['cells'];
           if (Array.isArray(cells)) {
             return `| ${cells.map((c) => String(c ?? '')).join(' | ')} |`;
           }
@@ -182,7 +185,6 @@ async function renderBlocks(
         const firstRow = rows[0];
         if (firstRow !== undefined) {
           lines.push(firstRow);
-          // Separator
           const cellCount = firstRow.split('|').length - 2;
           if (cellCount > 0) {
             lines.push(`| ${Array(cellCount).fill('---').join(' | ')} |`);
@@ -198,18 +200,18 @@ async function renderBlocks(
       indent,
       localCounters,
     );
-    // Override numbered_list counter from localCounters
     if (block.type === 'numbered_list') {
       const n = localCounters.get(block.id) ?? 1;
-      // Re-render with correct number
       const pad = '  '.repeat(indent);
-      const text = contentToText(block.content) || ((block.properties as Record<string, unknown>)['text'] as string) || '';
+      const text =
+        contentToText(block.content) ||
+        (((block.properties ?? {}) as Record<string, unknown>)['text'] as string) ||
+        '';
       lines.push(`${pad}${n}. ${text}`);
     } else {
       lines.push(...blockLines);
     }
 
-    // Recurse into children
     if (block.childrenOrder.length > 0) {
       const childLines = await renderBlocks(
         block.id,
@@ -229,16 +231,18 @@ async function renderBlocks(
 // ---------------------------------------------------------------------------
 
 export async function pageToMarkdown(pageId: string): Promise<string> {
-  const page = await prisma.block.findUnique({
-    where: { id: pageId },
-    select: {
-      id: true,
-      type: true,
-      properties: true,
-      content: true,
-      childrenOrder: true,
-    },
-  });
+  const page = await db
+    .select({
+      id: blocks.id,
+      type: blocks.type,
+      properties: blocks.properties,
+      content: blocks.content,
+      childrenOrder: blocks.childrenOrder,
+    })
+    .from(blocks)
+    .where(eq(blocks.id, pageId))
+    .limit(1)
+    .then((r) => r[0]);
 
   if (!page) throw new Error('Page not found');
 

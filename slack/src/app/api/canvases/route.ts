@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { canvases, channels, channelMembers, workspaceMembers } from "@/lib/db/schema";
+import { canvases, channels, channelMembers, workspaceMembers, users } from "@/lib/db/schema";
 import { eq, and, ilike, or } from "drizzle-orm";
 import { requireAuth } from "@/lib/auth/middleware";
 import { NextRequest, NextResponse } from "next/server";
@@ -67,6 +67,9 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const workspaceRef = searchParams.get("workspaceId");
   const q = searchParams.get("q");
+  const statusFilter = searchParams.get("status");
+  const channelIdFilter = searchParams.get("channelId");
+  const ownerIdFilter = searchParams.get("ownerId");
 
   if (!workspaceRef) {
     return NextResponse.json({ error: "workspaceId is required" }, { status: 400 });
@@ -92,12 +95,35 @@ export async function GET(request: NextRequest) {
   if (q) {
     conditions.push(or(ilike(canvases.title, `%${q}%`), ilike(canvases.content, `%${q}%`))!);
   }
+  if (statusFilter) {
+    conditions.push(eq(canvases.pipelineStatus, statusFilter as "draft" | "edited" | "fact-checked" | "published"));
+  }
+  if (channelIdFilter) {
+    conditions.push(eq(canvases.channelId, channelIdFilter));
+  }
+  if (ownerIdFilter) {
+    conditions.push(eq(canvases.createdBy, ownerIdFilter));
+  }
 
   const results = await db
-    .select()
+    .select({
+      id: canvases.id,
+      title: canvases.title,
+      topic: canvases.topic,
+      content: canvases.content,
+      channelId: canvases.channelId,
+      channelName: channels.name,
+      pipelineStatus: canvases.pipelineStatus,
+      createdBy: canvases.createdBy,
+      ownerName: users.displayName,
+      updatedAt: canvases.updatedAt,
+      createdAt: canvases.createdAt,
+    })
     .from(canvases)
+    .leftJoin(channels, eq(canvases.channelId, channels.id))
+    .leftJoin(users, eq(canvases.createdBy, users.id))
     .where(and(...conditions))
-    .limit(50);
+    .limit(100);
 
   return NextResponse.json(results);
 }

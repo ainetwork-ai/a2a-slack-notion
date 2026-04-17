@@ -23,6 +23,7 @@ import ChannelDetailPanel from '@/components/chat/ChannelDetailPanel';
 import CanvasEditor from '@/components/canvas/CanvasEditor';
 import BookmarksBar from '@/components/channel/BookmarksBar';
 import MemberAvatarStack from '@/components/channel/MemberAvatarStack';
+import { pushRecentVisit } from '@/lib/hooks/use-recent-visits';
 import { useMessages, Message } from '@/lib/hooks/use-messages';
 import { useAuth } from '@/lib/hooks/use-auth';
 import { useTyping } from '@/lib/realtime/use-typing';
@@ -116,10 +117,13 @@ export default function ChannelPage({ params }: { params: Promise<{ channelName:
   );
   const channelId = channelData?.id ?? '';
 
-  const { data: canvasData } = useSWR<{ id: string; title: string; content: string } | null>(
-    channelId ? `/api/channels/${channelId}/canvas` : null,
+  interface CanvasSummary { id: string; title: string; topic?: string | null; updatedAt: string }
+  const { data: canvasListData } = useSWR<{ canvases: CanvasSummary[]; nextCursor?: string }>(
+    channelId ? `/api/channels/${channelId}/canvases` : null,
     fetcher
   );
+  // Use the first (newest) canvas for the pinned preview
+  const canvasData = canvasListData?.canvases?.[0] ?? null;
 
   const channel = channelData?.id
     ? { ...channelData, memberCount: channelData.members?.length }
@@ -136,6 +140,18 @@ export default function ChannelPage({ params }: { params: Promise<{ channelName:
   useEffect(() => {
     setActiveThread(null);
   }, [channelId, setActiveThread]);
+
+  // Track recent visits for Cmd+K switcher
+  useEffect(() => {
+    if (channel?.name) {
+      pushRecentVisit({
+        type: 'channel',
+        id: channel.name,
+        label: channel.name,
+        isPrivate: (channel as Channel & { isPrivate?: boolean }).isPrivate,
+      });
+    }
+  }, [channel?.name, channel]);
 
   useEffect(() => {
     if (!channelId) return;
@@ -425,9 +441,9 @@ export default function ChannelPage({ params }: { params: Promise<{ channelName:
               <FileText className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-semibold text-slate-300 truncate">{canvasData.title}</p>
-                {canvasData.content && (
+                {canvasData.topic && (
                   <p className="text-xs text-slate-500 line-clamp-1 mt-0.5">
-                    {canvasData.content.slice(0, 200)}
+                    {canvasData.topic.slice(0, 200)}
                   </p>
                 )}
               </div>
@@ -492,6 +508,7 @@ export default function ChannelPage({ params }: { params: Promise<{ channelName:
         {activeThread && (
           <ThreadPanel
             channelId={channelId}
+            channelName={channel?.name}
             parentMessageId={activeThread}
             parentMessageContent={activeMessage?.content}
           />

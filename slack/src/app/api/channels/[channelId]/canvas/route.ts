@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { canvases, channels, channelMembers, users } from "@/lib/db/schema";
-import { eq, and } from "drizzle-orm";
+import { eq, and, count } from "drizzle-orm";
 import { requireAuth } from "@/lib/auth/middleware";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -69,17 +69,6 @@ export async function POST(
     return NextResponse.json({ error: "Not a member" }, { status: 403 });
   }
 
-  // Return existing canvas if present
-  const [existing] = await db
-    .select()
-    .from(canvases)
-    .where(eq(canvases.channelId, channelId))
-    .limit(1);
-
-  if (existing) {
-    return NextResponse.json(existing);
-  }
-
   // Get workspaceId from channel
   const [ch] = await db
     .select({ workspaceId: channels.workspaceId, name: channels.name })
@@ -91,8 +80,15 @@ export async function POST(
     return NextResponse.json({ error: "Channel not found" }, { status: 404 });
   }
 
+  // Count existing canvases so each new one gets a unique default title (#channel canvas N)
+  const [{ value: existingCount }] = await db
+    .select({ value: count() })
+    .from(canvases)
+    .where(eq(canvases.channelId, channelId));
+
   const body = await request.json().catch(() => ({}));
-  const title = body.title?.trim() || `#${ch.name ?? 'channel'} canvas`;
+  const defaultTitle = `#${ch.name ?? 'channel'} canvas${existingCount > 0 ? ` ${existingCount + 1}` : ''}`;
+  const title = body.title?.trim() || defaultTitle;
 
   const [canvas] = await db
     .insert(canvases)

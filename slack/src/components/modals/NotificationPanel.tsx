@@ -12,6 +12,7 @@ import { Bell, AtSign, MessageSquare, Mail, ChevronDown, ChevronRight } from 'lu
 import { useNotifications, Notification } from '@/lib/hooks/use-notifications';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/components/ui/toast-provider';
+import NotionNotifications from '@/components/modals/NotionNotifications';
 
 function NotificationIcon({ type }: { type: string }) {
   switch (type) {
@@ -203,6 +204,11 @@ export default function NotificationPanel() {
               );
             })
           )}
+        </div>
+
+        {/* Pages / Notion notifications section */}
+        <div className="border-t border-white/10">
+          <NotionNotifications />
         </div>
       </DropdownMenuContent>
     </DropdownMenu>

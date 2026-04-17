@@ -1,6 +1,11 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { prisma } from '../lib/prisma.js';
+import { and, asc, eq, gt, isNull } from 'drizzle-orm';
+import { db } from '../lib/db.js';
+import {
+  blocks,
+  recentPages,
+} from '../../../../slack/src/lib/db/schema';
 import { requirePermission } from '../middleware/require-permission.js';
 import { encodeCursor, decodeCursor } from '../lib/pagination.js';
 import { indexPage } from '../lib/search.js';
@@ -27,7 +32,6 @@ const UpdatePageSchema = z.object({
   icon: z.string().optional(),
   coverUrl: z.string().optional(),
   archived: z.boolean().optional(),
-  content: z.record(z.string(), z.unknown()).optional(),
 });
 
 // List workspace pages (tree roots — pages without a page parent)
@@ -43,32 +47,47 @@ pages.get('/', async (c) => {
   const usePagination = startCursorEncoded !== undefined || pageSizeParam !== undefined;
   const pageSize = Math.min(Number(pageSizeParam ?? 50), 100);
 
-  // Decode cursor to get the block id
   const cursorId = startCursorEncoded ? decodeCursor(startCursorEncoded) : undefined;
 
-  const rootPages = await prisma.block.findMany({
-    where: {
-      workspaceId,
-      type: 'page',
-      archived: false,
-      parentId: null,
-    },
-    orderBy: { createdAt: 'asc' },
-    select: {
-      id: true,
-      properties: true,
-      createdBy: true,
-      createdAt: true,
-      updatedAt: true,
-      childrenOrder: true,
-    },
-    ...(usePagination
-      ? {
-          take: pageSize + 1, // fetch one extra to determine has_more
-          ...(cursorId ? { cursor: { id: cursorId }, skip: 1 } : {}),
-        }
-      : {}),
-  });
+  // Base where clause: workspace, page type, not archived, no parent
+  const baseWhere = and(
+    eq(blocks.workspaceId, workspaceId),
+    eq(blocks.type, 'page'),
+    eq(blocks.archived, false),
+    isNull(blocks.parentId),
+  );
+
+  // For cursor pagination we look up the cursor row's createdAt then filter by
+  // (createdAt > cursor) to emulate Prisma `cursor + skip: 1`.
+  let whereClause = baseWhere;
+  if (usePagination && cursorId) {
+    const cursorRow = await db
+      .select({ createdAt: blocks.createdAt })
+      .from(blocks)
+      .where(eq(blocks.id, cursorId))
+      .limit(1)
+      .then((r) => r[0]);
+    if (cursorRow) {
+      whereClause = and(baseWhere, gt(blocks.createdAt, cursorRow.createdAt));
+    }
+  }
+
+  const rootPagesQuery = db
+    .select({
+      id: blocks.id,
+      properties: blocks.properties,
+      createdBy: blocks.createdBy,
+      createdAt: blocks.createdAt,
+      updatedAt: blocks.updatedAt,
+      childrenOrder: blocks.childrenOrder,
+    })
+    .from(blocks)
+    .where(whereClause)
+    .orderBy(asc(blocks.createdAt));
+
+  const rootPages = usePagination
+    ? await rootPagesQuery.limit(pageSize + 1)
+    : await rootPagesQuery;
 
   const mapped = rootPages.map((p) => ({
     id: p.id,
@@ -80,7 +99,6 @@ pages.get('/', async (c) => {
   }));
 
   if (!usePagination) {
-    // Backwards compatible — return plain array
     return c.json(mapped);
   }
 
@@ -106,33 +124,49 @@ pages.get('/:pageId', requirePermission('can_view'), async (c) => {
 
   const { pageId } = c.req.param();
 
-  const page = await prisma.block.findUnique({
-    where: { id: pageId, type: 'page' },
-  });
+  const page = await db
+    .select()
+    .from(blocks)
+    .where(and(eq(blocks.id, pageId), eq(blocks.type, 'page')))
+    .limit(1)
+    .then((r) => r[0]);
 
   if (!page || page.archived) {
     return c.json({ object: 'error', status: 404, code: 'not_found', message: 'Page not found' }, 404);
   }
 
-  // Get direct children (blocks and sub-pages)
-  const children = await prisma.block.findMany({
-    where: { parentId: pageId, archived: false },
-    orderBy: { createdAt: 'asc' },
-  });
+  const children = await db
+    .select()
+    .from(blocks)
+    .where(and(eq(blocks.parentId, pageId), eq(blocks.archived, false)))
+    .orderBy(asc(blocks.createdAt));
 
-  // Sort by childrenOrder if present
   const ordered = page.childrenOrder.length > 0
     ? page.childrenOrder
         .map((id) => children.find((ch) => ch.id === id))
         .filter(Boolean)
     : children;
 
-  // Track recent visit
-  await prisma.recentPage.upsert({
-    where: { userId_pageId: { userId: user.id, pageId } },
-    create: { userId: user.id, workspaceId: page.workspaceId, pageId },
-    update: { visitedAt: new Date() },
-  });
+  // Track recent visit (upsert)
+  const existingRecent = await db
+    .select()
+    .from(recentPages)
+    .where(and(eq(recentPages.userId, user.id), eq(recentPages.pageId, pageId)))
+    .limit(1)
+    .then((r) => r[0]);
+
+  if (existingRecent) {
+    await db
+      .update(recentPages)
+      .set({ visitedAt: new Date() })
+      .where(eq(recentPages.id, existingRecent.id));
+  } else {
+    await db.insert(recentPages).values({
+      userId: user.id,
+      workspaceId: page.workspaceId,
+      pageId,
+    });
+  }
 
   return c.json({
     ...page,
@@ -141,38 +175,48 @@ pages.get('/:pageId', requirePermission('can_view'), async (c) => {
   });
 });
 
-// Get child pages (for sidebar lazy loading — Decision #31)
+// Get child pages (for sidebar lazy loading)
 pages.get('/:pageId/children', async (c) => {
   const user = requireUser(c);
   if (!user) return c.json({ object: 'error', status: 401, code: 'unauthorized', message: 'Not authenticated' }, 401);
 
   const { pageId } = c.req.param();
 
-  const page = await prisma.block.findUnique({
-    where: { id: pageId },
-    select: { childrenOrder: true },
-  });
+  const page = await db
+    .select({ childrenOrder: blocks.childrenOrder })
+    .from(blocks)
+    .where(eq(blocks.id, pageId))
+    .limit(1)
+    .then((r) => r[0]);
 
   if (!page) return c.json({ object: 'error', status: 404, code: 'not_found', message: 'Page not found' }, 404);
 
-  const childPages = await prisma.block.findMany({
-    where: { parentId: pageId, type: 'page', archived: false },
-    select: {
-      id: true,
-      properties: true,
-      childrenOrder: true,
-      createdAt: true,
-      updatedAt: true,
-    },
-  });
+  const childPages = await db
+    .select({
+      id: blocks.id,
+      properties: blocks.properties,
+      childrenOrder: blocks.childrenOrder,
+      createdAt: blocks.createdAt,
+      updatedAt: blocks.updatedAt,
+    })
+    .from(blocks)
+    .where(
+      and(
+        eq(blocks.parentId, pageId),
+        eq(blocks.type, 'page'),
+        eq(blocks.archived, false),
+      ),
+    );
 
-  return c.json(childPages.map((p) => ({
-    id: p.id,
-    ...(p.properties as Record<string, unknown>),
-    hasChildren: p.childrenOrder.length > 0,
-    createdAt: p.createdAt,
-    updatedAt: p.updatedAt,
-  })));
+  return c.json(
+    childPages.map((p) => ({
+      id: p.id,
+      ...(p.properties as Record<string, unknown>),
+      hasChildren: p.childrenOrder.length > 0,
+      createdAt: p.createdAt,
+      updatedAt: p.updatedAt,
+    })),
+  );
 });
 
 // Create page
@@ -189,42 +233,47 @@ pages.post('/', async (c) => {
 
   const { title, parentId, icon, coverUrl } = parsed.data;
 
-  // Create the page block
-  const page = await prisma.block.create({
-    data: {
+  // Create the page block — pageId is NOT NULL in slack schema; use workspaceId as placeholder and update after
+  const inserted = await db
+    .insert(blocks)
+    .values({
       type: 'page',
       parentId: parentId ?? null,
-      pageId: '', // self-reference, will update
+      pageId: workspaceId,
       workspaceId,
       createdBy: user.id,
       properties: { title, icon: icon ?? null, coverUrl: coverUrl ?? null },
       content: {},
-    },
-  });
+    })
+    .returning()
+    .then((r) => r[0]!);
 
   // Set pageId to self
-  const updated = await prisma.block.update({
-    where: { id: page.id },
-    data: { pageId: page.id },
-  });
+  const updated = await db
+    .update(blocks)
+    .set({ pageId: inserted.id })
+    .where(eq(blocks.id, inserted.id))
+    .returning()
+    .then((r) => r[0]!);
 
   // Add to parent's childrenOrder if nested
   if (parentId) {
-    await prisma.$transaction(async (tx) => {
-      const parent = await tx.block.findUnique({
-        where: { id: parentId },
-        select: { childrenOrder: true },
-      });
+    await db.transaction(async (tx) => {
+      const parent = await tx
+        .select({ childrenOrder: blocks.childrenOrder })
+        .from(blocks)
+        .where(eq(blocks.id, parentId))
+        .limit(1)
+        .then((r) => r[0]);
       if (parent) {
-        await tx.block.update({
-          where: { id: parentId },
-          data: { childrenOrder: [...parent.childrenOrder, page.id] },
-        });
+        await tx
+          .update(blocks)
+          .set({ childrenOrder: [...parent.childrenOrder, inserted.id] })
+          .where(eq(blocks.id, parentId));
       }
     });
   }
 
-  // Index in search
   void indexPage({
     id: updated.id,
     workspaceId,
@@ -235,7 +284,7 @@ pages.post('/', async (c) => {
     updatedAt: updated.updatedAt.toISOString(),
   });
 
-  return c.json({ id: updated.id, ...updated.properties as Record<string, unknown> }, 201);
+  return c.json({ id: updated.id, ...(updated.properties as Record<string, unknown>) }, 201);
 });
 
 // Update page (rename, icon, cover, archive)
@@ -248,25 +297,32 @@ pages.patch('/:pageId', requirePermission('can_edit'), async (c) => {
   const parsed = UpdatePageSchema.safeParse(body);
   if (!parsed.success) return c.json({ object: 'error', status: 400, code: 'validation_error', message: parsed.error.message }, 400);
 
-  const existing = await prisma.block.findUnique({ where: { id: pageId, type: 'page' } });
+  const existing = await db
+    .select()
+    .from(blocks)
+    .where(and(eq(blocks.id, pageId), eq(blocks.type, 'page')))
+    .limit(1)
+    .then((r) => r[0]);
+
   if (!existing) return c.json({ object: 'error', status: 404, code: 'not_found', message: 'Page not found' }, 404);
 
-  const props = existing.properties as Record<string, unknown>;
+  const props = (existing.properties ?? {}) as Record<string, unknown>;
   const updatedProps = { ...props };
   if (parsed.data.title !== undefined) updatedProps['title'] = parsed.data.title;
   if (parsed.data.icon !== undefined) updatedProps['icon'] = parsed.data.icon;
   if (parsed.data.coverUrl !== undefined) updatedProps['coverUrl'] = parsed.data.coverUrl;
 
-  const page = await prisma.block.update({
-    where: { id: pageId },
-    data: {
-      properties: updatedProps as Record<string, string | number | boolean | null>,
+  const page = await db
+    .update(blocks)
+    .set({
+      properties: updatedProps,
       archived: parsed.data.archived ?? existing.archived,
-      ...(parsed.data.content !== undefined && { content: parsed.data.content as object }),
-    },
-  });
+      updatedAt: new Date(),
+    })
+    .where(eq(blocks.id, pageId))
+    .returning()
+    .then((r) => r[0]!);
 
-  // Re-index in search when title changes
   if (parsed.data.title !== undefined) {
     void indexPage({
       id: page.id,
@@ -279,7 +335,7 @@ pages.patch('/:pageId', requirePermission('can_edit'), async (c) => {
     });
   }
 
-  return c.json({ id: page.id, ...page.properties as Record<string, unknown>, archived: page.archived });
+  return c.json({ id: page.id, ...(page.properties as Record<string, unknown>), archived: page.archived });
 });
 
 // Delete page (soft delete — archive)
@@ -289,27 +345,33 @@ pages.delete('/:pageId', requirePermission('full_access'), async (c) => {
 
   const { pageId } = c.req.param();
 
-  const existing = await prisma.block.findUnique({ where: { id: pageId, type: 'page' } });
+  const existing = await db
+    .select()
+    .from(blocks)
+    .where(and(eq(blocks.id, pageId), eq(blocks.type, 'page')))
+    .limit(1)
+    .then((r) => r[0]);
+
   if (!existing) return c.json({ object: 'error', status: 404, code: 'not_found', message: 'Page not found' }, 404);
 
-  // Soft delete — set archived
-  await prisma.block.update({
-    where: { id: pageId },
-    data: { archived: true },
-  });
+  await db
+    .update(blocks)
+    .set({ archived: true, updatedAt: new Date() })
+    .where(eq(blocks.id, pageId));
 
-  // Remove from parent's childrenOrder
   if (existing.parentId) {
-    await prisma.$transaction(async (tx) => {
-      const parent = await tx.block.findUnique({
-        where: { id: existing.parentId! },
-        select: { childrenOrder: true },
-      });
+    await db.transaction(async (tx) => {
+      const parent = await tx
+        .select({ childrenOrder: blocks.childrenOrder })
+        .from(blocks)
+        .where(eq(blocks.id, existing.parentId!))
+        .limit(1)
+        .then((r) => r[0]);
       if (parent) {
-        await tx.block.update({
-          where: { id: existing.parentId! },
-          data: { childrenOrder: parent.childrenOrder.filter((id) => id !== pageId) },
-        });
+        await tx
+          .update(blocks)
+          .set({ childrenOrder: parent.childrenOrder.filter((id) => id !== pageId) })
+          .where(eq(blocks.id, existing.parentId!));
       }
     });
   }
@@ -327,13 +389,25 @@ pages.get('/:pageId/breadcrumb', async (c) => {
 
   let currentId: string | null = pageId;
   while (currentId) {
-    const block: { id: string; properties: unknown; parentId: string | null; type: string } | null =
-      await prisma.block.findUnique({
-        where: { id: currentId },
-        select: { id: true, properties: true, parentId: true, type: true },
-      });
+    const block: {
+      id: string;
+      properties: unknown;
+      parentId: string | null;
+      type: string;
+    } | undefined = await db
+      .select({
+        id: blocks.id,
+        properties: blocks.properties,
+        parentId: blocks.parentId,
+        type: blocks.type,
+      })
+      .from(blocks)
+      .where(eq(blocks.id, currentId))
+      .limit(1)
+      .then((r) => r[0]);
+
     if (!block || block.type !== 'page') break;
-    const props = block.properties as Record<string, unknown>;
+    const props = (block.properties ?? {}) as Record<string, unknown>;
     ancestors.unshift({
       id: block.id,
       title: (props['title'] as string) ?? 'Untitled',

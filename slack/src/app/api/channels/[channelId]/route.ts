@@ -33,7 +33,7 @@ export async function GET(
 
   const members = await db
     .select({
-      userId: channelMembers.userId,
+      id: channelMembers.userId,
       role: channelMembers.role,
       joinedAt: channelMembers.joinedAt,
       displayName: users.displayName,

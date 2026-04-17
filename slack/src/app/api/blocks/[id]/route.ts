@@ -11,6 +11,7 @@ import { blocks, pagePermissions, workspaceMembers } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { requireAuth } from '@/lib/auth/middleware';
 import { NextRequest, NextResponse } from 'next/server';
+import { onBlockUpdated, onBlockDeleted } from '@/lib/search/hooks';
 
 async function canEdit(userId: string, block: typeof blocks.$inferSelect): Promise<boolean> {
   const [perm] = await db
@@ -67,6 +68,23 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (body.archived !== undefined) updates.archived = body.archived;
 
   const [updated] = await db.update(blocks).set(updates).where(eq(blocks.id, id)).returning();
+
+  // Best-effort reindex for global search
+  if (updated) {
+    onBlockUpdated({
+      id: updated.id,
+      type: updated.type,
+      pageId: updated.pageId,
+      workspaceId: updated.workspaceId,
+      properties: updated.properties,
+      content: updated.content,
+      archived: updated.archived,
+      createdBy: updated.createdBy,
+      createdAt: updated.createdAt,
+      updatedAt: updated.updatedAt,
+    });
+  }
+
   return NextResponse.json(updated);
 }
 
@@ -93,6 +111,9 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
     }
     await tx.delete(blocks).where(eq(blocks.id, id));
   });
+
+  // Best-effort delete from global search (fire-and-forget)
+  onBlockDeleted(id, block.type === 'page');
 
   return NextResponse.json({ success: true });
 }

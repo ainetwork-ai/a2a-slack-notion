@@ -1,14 +1,25 @@
 {
   "manifest_version": 3,
-  "name": "Notion Clone Clipper",
-  "version": "1.0",
-  "description": "Clip web pages to your Notion clone workspace",
-  "permissions": ["activeTab", "scripting", "storage"],
+  "name": "Slack-Notion Clipper",
+  "version": "0.1.0",
+  "description": "Clip web pages into a slack-a2a Notion workspace.",
+  "permissions": ["activeTab", "scripting", "storage", "contextMenus"],
+  "host_permissions": ["<all_urls>"],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
   "action": {
     "default_popup": "popup.html",
+    "default_title": "Clip this page to Notion",
     "default_icon": {
       "16": "icon16.png",
       "48": "icon48.png"
     }
+  },
+  "options_page": "options.html",
+  "icons": {
+    "16": "icon16.png",
+    "48": "icon48.png"
   }
 }
