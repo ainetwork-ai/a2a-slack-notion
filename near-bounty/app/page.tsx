@@ -23,11 +23,11 @@ interface AttestationBadge {
 }
 
 const STARTER_QUESTIONS = [
-  "Was any enrichment above 20% observed in the period?",
-  "What was the peak enrichment percentage observed, across all facilities and all months?",
-  "What was the total HEU-equivalent kg produced in the first half of 2025?",
-  "How many months recorded enrichment at or above 19%?",
-  "Give me the facility ID with the highest output.",
+  "Did they cross the red line toward bomb-grade material this year?",
+  "How close did they get to weapons-grade?",
+  "How much near-weapons-grade material was made in the first half of 2025?",
+  "How many months did they stay in the danger zone?",
+  "How big is the biggest facility?",
 ];
 
 export default function Page() {
@@ -88,16 +88,15 @@ export default function Page() {
             Sealed Witness · demo
           </p>
           <h1 className="mt-2 font-serif text-3xl leading-tight text-[color:var(--color-ink)] sm:text-4xl">
-            Ask the dataset. Never see it.
+            Ask the source. Don't expose them.
           </h1>
           <p className="mt-3 text-[color:var(--color-ink-soft)]">
-            A state nuclear authority has sealed twelve months of enrichment telemetry inside a
-            hardware enclave. Submit policy-permitted questions. You will get a precise answer and
-            a cryptographic receipt — and the raw data will never leave the enclave.
+            A source has locked a year of sensitive records from Iran's nuclear program inside a
+            hardware safe. Ask what you want to know. You get a straight answer and a cryptographic
+            receipt — and the raw records never leave the safe.
           </p>
           <p className="mt-2 text-xs text-[color:var(--color-ink-muted)]">
-            All data in this demo is fictional. No real facility, centrifuge, or person is
-            represented.
+            All data in this demo is made up. No real facility or person is represented.
           </p>
         </header>
 
@@ -142,7 +141,7 @@ export default function Page() {
               }
             }}
             rows={3}
-            placeholder="Your question. Aggregates and thresholds allowed. No identifying details."
+            placeholder="Ask a question. Totals and yes/no questions are fine. Names and locations will be refused."
             className="w-full resize-y rounded-2xl border border-[color:var(--color-line)] bg-[color:var(--color-paper-elevated)] px-4 py-3 text-[color:var(--color-ink)] outline-none focus:border-[color:var(--color-trust)]"
           />
           <div className="mt-3 flex flex-wrap items-center gap-3">
@@ -268,41 +267,42 @@ function PolicyPanel() {
   return (
     <div className="sticky top-8 space-y-4 rounded-2xl border border-[color:var(--color-line)] bg-[color:var(--color-paper-elevated)] p-5 text-sm">
       <div>
-        <h2 className="font-serif text-lg text-[color:var(--color-ink)]">What is sealed</h2>
+        <h2 className="font-serif text-lg text-[color:var(--color-ink)]">What's inside the safe</h2>
         <p className="mt-1 text-[color:var(--color-ink-soft)]">
-          Twelve months of enrichment telemetry from three facilities. Facility identities,
-          cascade groups, and personnel are redacted inside the enclave.
+          A year of monthly records from three sites: how much material was made, and how pure
+          (enriched) it was. The site names and the people who work there stay hidden — the
+          hardware never lets them out.
         </p>
       </div>
       <div>
         <h3 className="text-xs uppercase tracking-wider text-[color:var(--color-trust)]">
-          Allowed questions
+          You can ask
         </h3>
         <ul className="mt-1 list-disc pl-5 text-[color:var(--color-ink-soft)]">
-          <li>Aggregate totals over the period</li>
-          <li>Minimum / maximum across records</li>
-          <li>Counts above or below a threshold</li>
-          <li>Yes / no threshold compliance</li>
-          <li>Highest value observed anywhere</li>
+          <li>Totals over the year</li>
+          <li>Highest or lowest observed</li>
+          <li>How many months crossed a line</li>
+          <li>Yes / no: did they break a limit?</li>
+          <li>The single most alarming number</li>
         </ul>
       </div>
       <div>
         <h3 className="text-xs uppercase tracking-wider text-[color:var(--color-warn)]">
-          Disallowed (will be refused)
+          You can't ask (will be refused)
         </h3>
         <ul className="mt-1 list-disc pl-5 text-[color:var(--color-ink-soft)]">
-          <li>Specific facility or cascade identifiers</li>
-          <li>Personnel counts or identities</li>
-          <li>Geographic coordinates or regions</li>
-          <li>Equipment suppliers or origins</li>
-          <li>Any raw row of the dataset</li>
+          <li>Which specific site did what</li>
+          <li>Names or headcounts of people</li>
+          <li>Exact locations</li>
+          <li>Who sold them the equipment</li>
+          <li>Any raw row from the records</li>
         </ul>
       </div>
       <div className="rounded-lg bg-[color:var(--color-paper)] p-3 text-xs text-[color:var(--color-ink-muted)]">
         <p className="font-medium text-[color:var(--color-ink-soft)]">Why this matters</p>
         <p className="mt-1">
-          The data owner keeps sovereignty over raw records. The journalist gets verifiable answers.
-          Both trust the hardware, not each other.
+          The source keeps control of the raw records. The journalist still gets answers they can
+          verify. Neither side has to trust the other — the hardware is the referee.
         </p>
       </div>
     </div>

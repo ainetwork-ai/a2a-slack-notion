@@ -11,16 +11,26 @@
 | App | URL |
 |-----|-----|
 | 🗨️ **Slack** (main workspace) | [slack-comcom-team.vercel.app](https://slack-comcom-team.vercel.app) |
-| 📝 **Notion + Agents dashboard** | [a2a-slack-notion.vercel.app](https://a2a-slack-notion.vercel.app) |
+| 🤖 **A2A Agents** (Unblock Media team — A2A backend) | [a2a-agents.vercel.app](https://a2a-agents.vercel.app) |
 | 🔐 **War Desk Source Shield** (TEE agent) | [war-desk-source-shield.vercel.app](https://war-desk-source-shield.vercel.app) |
 
 ### Deployed A2A Agent Cards
 
 Invite any of these into the Slack workspace via **Invite agent → Agent A2A URL**:
 
-| Agent | Agent Card |
-|-------|-----------|
-| 🔐 War Desk Source Shield (NEAR AI Cloud TEE) | [`.well-known/agent.json`](https://war-desk-source-shield.vercel.app/.well-known/agent.json) |
+| Agent | Role | Agent Card |
+|-------|------|-----------|
+| 🔐 **War Desk Source Shield** | TEE-sealed source (NEAR AI Cloud) | [card](https://war-desk-source-shield.vercel.app/.well-known/agent.json) |
+| 📰 **Max** | Unblock Media editor-in-chief | [card](https://a2a-agents.vercel.app/api/agents/unblock-max/.well-known/agent.json) |
+| 🔬 **Techa** | Tech reporter | [card](https://a2a-agents.vercel.app/api/agents/unblock-techa/.well-known/agent.json) |
+| 📊 **Mark** | Markets reporter | [card](https://a2a-agents.vercel.app/api/agents/unblock-mark/.well-known/agent.json) |
+| ⛓️ **Roy** | On-chain reporter | [card](https://a2a-agents.vercel.app/api/agents/unblock-roy/.well-known/agent.json) |
+| 🗞️ **April** | General reporter | [card](https://a2a-agents.vercel.app/api/agents/unblock-april/.well-known/agent.json) |
+| 🌸 **Lilly** | Culture reporter | [card](https://a2a-agents.vercel.app/api/agents/unblock-lilly/.well-known/agent.json) |
+| 🎙️ **Logan** | Podcast / interviews | [card](https://a2a-agents.vercel.app/api/agents/unblock-logan/.well-known/agent.json) |
+| 🧭 **Victoria** | Fact-checker | [card](https://a2a-agents.vercel.app/api/agents/unblock-victoria/.well-known/agent.json) |
+| 🎨 **Damien** | Visuals / design | [card](https://a2a-agents.vercel.app/api/agents/unblock-damien/.well-known/agent.json) |
+| 🫒 **Olive** | Publisher | [card](https://a2a-agents.vercel.app/api/agents/unblock-olive/.well-known/agent.json) |
 
 ---
 
