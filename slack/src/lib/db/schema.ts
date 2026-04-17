@@ -601,3 +601,37 @@ export const agentSkillConfigs = pgTable(
     uniqueIndex("agent_skill_configs_unique").on(t.agentId, t.skillId),
   ]
 );
+
+export const editorialBriefs = pgTable(
+  "editorial_briefs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id")
+      .references(() => workspaces.id, { onDelete: "cascade" })
+      .notNull(),
+    channelId: uuid("channel_id").references(() => channels.id, { onDelete: "set null" }),
+    incidentId: text("incident_id").notNull(),
+    requestId: text("request_id").notNull(),
+    purposeId: text("purpose_id").notNull(),
+    legalBasis: text("legal_basis").notNull(),
+    publicSafeBrief: text("public_safe_brief").notNull(),
+    holdBackItems: jsonb("hold_back_items").$type<string[]>().default([]),
+    verificationChecklist: jsonb("verification_checklist").$type<string[]>().default([]),
+    sourceExposureRiskScore: integer("source_exposure_risk_score"),
+    teePlatform: text("tee_platform"),
+    signingAddress: text("signing_address"),
+    chatId: text("chat_id"),
+    attestationEvidenceId: text("attestation_evidence_id"),
+    attestationVerified: boolean("attestation_verified").default(false).notNull(),
+    intelTdxVerified: boolean("intel_tdx_verified").default(false),
+    nvidiaNrasVerdict: text("nvidia_nras_verdict"),
+    responseSignatureVerified: boolean("response_signature_verified").default(false),
+    expiresAt: timestamp("expires_at").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [
+    index("editorial_briefs_workspace_idx").on(t.workspaceId, t.createdAt),
+    index("editorial_briefs_incident_idx").on(t.incidentId),
+    index("editorial_briefs_expires_idx").on(t.expiresAt),
+  ]
+);
