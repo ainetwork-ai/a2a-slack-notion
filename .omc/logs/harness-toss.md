@@ -1,3 +1,32 @@
+# Harness Toss Log
+
+---
+
+## 새 사이클 시작: Notion Canvas iframe-mounted subroute (2026-04-17)
+
+대상 spec: `docs/superpowers/specs/2026-04-17-notion-canvas-iframe-design.md`
+EVAL_CRITERIA: 스펙이 요구한 노션 기능들(callout/columns/toggle/comment/drag-handle, 패널↔풀 morph, iframe DOM 식별 유지, Y.js WS 보존, 흰 배경 가독성, 5초 로드 타임아웃 + markdown 폴백, /pages/[id] 직접 진입)이 dogfooding 단계에서 실제 동작 + slack workspace `npm run build` 통과.
+
+피처 분해:
+- F1 iframe registry · F2 NotionCanvasFrame · F3 /notion-embed/* 서브라우트 · F4 CanvasEditor 패널 + handleExpand · F5 /pages/[id] 풀모드 · F6 보안 헤더 · F7 markdown 폴백 · F8 빌드 그린
+
+(이하 Orchestrator 사이클 로그는 가장 최신 항목이 파일 끝에 append)
+
+---
+
+## 이전 사이클 (Canvas/Notion 복구) — 2026-04-17 PASS 완료, 아카이브 below.
+
+---
+
+## 새 사이클 시작: Canvas/Notion 복구 (2026-04-17)
+
+대상: `dogfood-output/report.md` 의 ISSUE-001 / ISSUE-002 / ISSUE-003 해결
+EVAL_CRITERIA: 3종 이슈 해결 + `/dogfood` 실사용 재검증 통과
+
+(이하 신규 Orchestrator 사이클 로그는 가장 최신 항목이 파일 끝에 append 된다)
+
+---
+
 # Harness Toss Log — Inline Comment Agent Revision
 
 ## [Task 1] 2026-04-16
@@ -133,3 +162,73 @@ Evaluator: notion-hover(table-view/filter-toolbar) + shadow-card/shadow-menu(boa
 
 ### Result: SUCCESS
 - page.tsx: notion-hover applied to breadcrumb + action buttons, CSS variable colors
+
+## feat-A — Canvas empty-channelId guard (2026-04-17)
+
+### Summary
+Fixes ISSUE-001 (critical, frontend). CanvasEditor was mounting with `channelId=''` while the parent page's SWR channel lookup was still pending, producing `GET /api/channels//canvases 404` + `POST /api/channels//canvas 405`. Silent failure with no toast.
+
+### Changes
+- `slack/src/app/workspace/channel/[channelName]/page.tsx` (L510): gated mount on `canvasOpen && channelId` instead of just `canvasOpen`. Single highest-leverage fix.
+- `slack/src/components/canvas/CanvasEditor.tsx`: defense-in-depth — each of the three `channelId`-interpolating fetches (loadList, role lookup effect, handleCreateCanvas) early-returns with `console.error('canvas: channelId missing, skipping fetch')` when `!channelId`.
+- `handleCreateCanvas`: on non-2xx, read body via `.json().catch(()=>null)`, call `showToast` with server error or fallback `"Failed to create canvas (status <code>)"`, plus `console.error` with status + body.
+
+### Errors
+None. `npx tsc --noEmit -p tsconfig.json` → 0 errors.
+
+### Lesson
+When a parent resolves an ID async via SWR, defaulting the unresolved value to `''` and passing it to a child that unconditionally fetches is a footgun. Always gate the child mount on the resolved ID AND guard the child's own fetches. "Unreachable" defense still fires when the parent contract changes.
+
+## feat-B — Canvas 500 backend fix (2026-04-17)
+
+### Summary
+Fixes ISSUE-002 (critical, backend). Both `GET /api/channels/:id/canvases` and `POST /api/channels/:id/canvas` were returning 500 with empty body. Root cause: schema declares `canvases.pageId` (migration 0010) but the live DB wasn't guaranteed to have the column; drizzle's bare `.select()` / `.returning()` emit every schema column, so runtime SQL references `page_id` and Postgres errors with `column "page_id" does not exist`. Empty body resulted because Next.js' default 500 path produces no JSON.
+
+### Changes
+- `slack/src/app/api/channels/[channelId]/canvas/route.ts`:
+  - Added module-level `canvasColumns` const — explicit projection that omits `page_id`.
+  - GET: swapped bare `.select()` on canvases for `.select(canvasColumns)`; wrapped whole handler in try/catch returning `{ error, detail }` 500 on failure.
+  - POST: kept prior explicit `.returning({...})` but replaced with `.returning(canvasColumns)` (same shape, single source of truth); wrapped whole handler in try/catch.
+- `slack/src/app/api/channels/[channelId]/canvases/route.ts`:
+  - GET: already used explicit column list, added outer try/catch returning `{ error, detail }` 500.
+
+### Errors encountered
+None. `npx tsc --noEmit` → exit 0.
+
+### Lesson
+Drizzle's bare `.select()` and `.returning()` silently project every column declared in the schema. When schema and DB drift (new columns added in a recent migration not yet applied in some env), these produce opaque 500s. Two defenses: (1) always project an explicit column set for reads that don't need the whole row, (2) wrap every route handler's outer boundary in try/catch that serializes the error — empty 500 bodies make frontend debugging guesswork.
+
+## F3 — /notion-embed/* subroute verification (2026-04-17)
+
+### Summary
+Verified all three F3 deliverables already meet spec; no code changes required.
+- `slack/src/app/notion-embed/layout.tsx`: minimal wrapper, only imports `./globals-notion.css`. Does NOT pull in slack's `ThemeProvider`, `ToastProvider`, or `Web3Provider` (root `slack/src/app/layout.tsx` confirmed as the source of those providers — none leak into the embed subtree). Renders a `<div className="notion-embed-root min-h-screen bg-white text-neutral-900">` so the iframe shows Notion's white background even though slack's root `<html>` carries `dark`.
+- `slack/src/app/notion-embed/pages/[id]/page.tsx`: uses Next 16 App Router promise-params pattern (`params: Promise<{ id: string }>` + `const { id } = await params;`), renders `<NotionPage pageId={id} mode="full" />` inside `h-screen w-screen`. Spec mentions "rsync from notion/apps/web", but slack's existing `slack/src/components/notion/NotionPage` (with matching `mode='full'` support, line 14: `export type NotionPageMode = 'panel' | 'full';`) is the right target — confirmed exported.
+- `slack/src/app/notion-embed/globals-notion.css`: 462 lines, full token set + prose / block / menu / modal styles. Not empty.
+- No auth guard inside `layout.tsx`. Spec test #6 expects 401/redirect, but enforcement lives at API/WS layer per spec. Did not add or remove any guard here.
+
+### TS check
+`cd slack && npx tsc --noEmit -p tsconfig.json 2>&1 | grep -E "notion-embed"` → no matches (0 errors in F3 surface).
+
+### Result
+PASS — F3 already implemented correctly. Marked done in todo.md; no source files modified.
+
+---
+
+## feat-C — resolveChannelParam consistency (2026-04-17)
+
+### Summary
+Fixes ISSUE-003. The top-level `/api/channels/[channelId]/route.ts` already used `resolveChannelParam` (accepts UUID *or* channel name), but the 5 sub-routes (`messages`, `members`, `canvas`, `canvases`, `mcp`) used the raw URL param directly in `eq(channels.id, ...)` / `eq(channelMembers.channelId, ...)` queries. Result: name-based URLs like `/api/channels/test/mcp` produced opaque 500s (Postgres UUID cast failure) or stuck 403 "Not a member" (UUID-shaped query on a non-UUID string silently returning no rows). Every sub-route now resolves the param to a concrete channel row first and returns structured JSON 404 when the channel is unknown.
+
+### Changes
+- `slack/src/app/api/channels/[channelId]/messages/route.ts`: GET + POST now call `resolveChannelParam(param, user.id)` at handler start; 404 on null; reassign `channelId = channel.id`; wrapped both handlers in outer try/catch returning `{ error, detail }` 500.
+- `slack/src/app/api/channels/[channelId]/members/route.ts`: GET + POST + PATCH + DELETE all call `resolveChannelParam`. POST reuses the resolved row's `isPrivate`/`name`/`workspaceId` instead of refetching channel columns. DELETE reuses resolved `name` for the system message. All wrapped in outer try/catch.
+- `slack/src/app/api/channels/[channelId]/canvas/route.ts`: GET + POST call `resolveChannelParam`; POST reuses resolved `workspaceId`/`name` instead of an extra channel fetch. Dropped now-unused `channels` schema import. `workspaceId` extracted to a narrowed local so TS accepts it inside the transaction callback. Existing try/catch preserved.
+- `slack/src/app/api/channels/[channelId]/canvases/route.ts`: GET calls `resolveChannelParam`. Existing try/catch preserved.
+- `slack/src/app/api/channels/[channelId]/mcp/route.ts`: GET + POST + PATCH + DELETE all call `resolveChannelParam`; added outer try/catch with `{ error, detail }` 500 envelopes — this route previously had none, so a thrown DB error surfaced as empty Next.js 500.
+
+### Errors encountered
+One round of TS2769 errors on canvas/route.ts: the resolved channel's `workspaceId` is typed `string | null`, and destructuring it into an intermediate object (`ch.workspaceId`) didn't narrow inside the nested `db.transaction` callback. Fixed by assigning to a bare local `const workspaceId = resolvedChannel.workspaceId;` after the null check. `npx tsc --noEmit` → exit 0 after fix.
+
+### Lesson
+When a URL param is polymorphic (UUID | slug | name), the resolver pattern belongs at the *handler boundary*, not scattered inside DB queries. Passing a non-UUID string into `eq(uuidColumn, ...)` is a silent footgun: Postgres raises a cast error surfaced as a plain 500, and in the membership-lookup path it can even return an empty result (read as "not a member") instead of throwing. Every sub-route under a polymorphic segment must resolve first and branch on the resolved-or-null result.
