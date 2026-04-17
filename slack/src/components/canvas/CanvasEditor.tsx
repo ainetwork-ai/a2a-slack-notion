@@ -845,18 +845,7 @@ export default function CanvasEditor({ channelId, onClose }: CanvasEditorProps) 
               )}
             </div>
 
-            {/* Fix #8: Topic field (edit mode only) */}
-            {mode === 'edit' && (
-              <div className="px-3.5 pb-1 shrink-0">
-                <input
-                  value={topic}
-                  onChange={e => { setTopic(e.target.value); scheduleSave(title, content, e.target.value); }}
-                  onBlur={handleBlur}
-                  className="w-full bg-transparent text-slate-400 text-[13px] focus:outline-none border-b border-transparent focus:border-white/10 pb-0.5 placeholder-slate-700"
-                  placeholder="Add a topic…"
-                />
-              </div>
-            )}
+            {/* Topic field hidden — workflow canvases get topic from pipeline */}
 
             {/* Fix #5: "Saved ✓" / "Saving…" / "Last edited" status line */}
             <div className="px-3.5 pb-2 shrink-0">
