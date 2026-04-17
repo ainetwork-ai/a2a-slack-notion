@@ -15,70 +15,70 @@ import type { AgentSkill } from '@a2a-js/sdk';
 export const reporterSkills = (specialty: string): AgentSkill[] => [
   {
     id: 'report',
-    name: '시장 조사 리포트',
-    description: `${specialty} 관점에서 편집장 지시와 원본 자료를 바탕으로 웹 검색 기반 시장 조사 리포트 작성`,
+    name: 'Market Research Report',
+    description: `Write a web-search-based market research report from the ${specialty} perspective, following editor-in-chief instructions and source materials`,
     tags: ['report', 'research', 'crypto'],
     examples: [
-      '이 소스로 리포트 써줘',
-      '오늘 공개된 비트코인 ETF 관련 시장 조사해줘',
+      'Write a report using this source',
+      'Research the Bitcoin ETF announced today',
     ],
   },
   {
     id: 'writing',
-    name: '기사 초안 작성',
-    description: `${specialty} 관점에서 마켓 리서치와 팀장 가이드를 바탕으로 기사 초안 작성`,
+    name: 'Article Draft Writing',
+    description: `Write an article draft from the ${specialty} perspective, based on market research and team lead guidance`,
     tags: ['writing', 'article', 'draft'],
-    examples: ['이 리서치와 가이드로 기사 초안 작성해줘'],
+    examples: ['Write an article draft using this research and guide'],
   },
   {
     id: 'revision',
-    name: '기사 수정',
-    description: '팀장 피드백을 반영해 기존 기사 분량을 유지하면서 수정',
+    name: 'Article Revision',
+    description: 'Revise the article incorporating team lead feedback while maintaining the original length',
     tags: ['revision', 'edit'],
-    examples: ['이 피드백 반영해서 고쳐줘'],
+    examples: ['Revise incorporating this feedback'],
   },
 ];
 
 export const managerSkills = (specialty: string): AgentSkill[] => [
   {
     id: 'guide',
-    name: '기사 작성 가이드',
-    description: `${specialty} 관점에서 기자가 기사를 쓰기 전에 가이드 제공`,
+    name: 'Article Writing Guide',
+    description: `Provide guidance from the ${specialty} perspective before the reporter writes an article`,
     tags: ['guide', 'direction', 'management'],
-    examples: ['이 마켓리서치 기반으로 기자에게 가이드 줘'],
+    examples: ['Give the reporter a guide based on this market research'],
   },
   {
     id: 'feedback',
-    name: '기사 피드백',
-    description: `${specialty} 관점에서 기자가 쓴 기사에 대해 종합 피드백 제공`,
+    name: 'Article Feedback',
+    description: `Provide comprehensive feedback on the reporter's article from the ${specialty} perspective`,
     tags: ['feedback', 'review', 'edit'],
-    examples: ['이 기사에 대해 피드백 줘'],
+    examples: ['Give feedback on this article'],
   },
 ];
 
 export const editorInChiefSkills: AgentSkill[] = [
   {
     id: 'assignment',
-    name: '기자 배정',
-    description: '원본 자료를 기반으로 주제에 적합한 기자를 선정하고 업무 할당',
+    name: 'Reporter Assignment',
+    description: 'Select a reporter suitable for the topic based on source materials and assign the task',
     tags: ['assignment', 'editorial', 'management'],
-    examples: ['이 자료에 어울리는 기자에게 할당해줘'],
+    examples: ['Assign this to a reporter who fits the material'],
   },
   {
     id: 'confirm',
-    name: '기사 최종 승인/반려',
-    description: '수정된 기사의 구성/정확성을 검토하고 승인 또는 반려 결정',
+    name: 'Final Article Approval/Rejection',
+    description: 'Review the revised article for structure and accuracy, and decide to approve or reject',
     tags: ['confirm', 'approval', 'editorial'],
-    examples: ['이 기사 최종 검토하고 승인 여부 판단해줘'],
+    examples: ['Do a final review and decide whether to approve this article'],
   },
 ];
 
 export const designerSkills: AgentSkill[] = [
   {
     id: 'drawing',
-    name: '커버 이미지 제작',
-    description: '편집국장의 요청에 따라 기사 커버 이미지 제작 응답 생성',
+    name: 'Cover Image Creation',
+    description: 'Generate an article cover image response per the editor-in-chief request',
     tags: ['drawing', 'design', 'cover'],
-    examples: ['이 기사에 어울리는 커버 만들어줘'],
+    examples: ['Create a cover that fits this article'],
   },
 ];
