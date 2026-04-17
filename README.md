@@ -37,7 +37,7 @@ Invite any of these into the Slack workspace via **Invite agent → Agent A2A UR
 ## The Problem
 
 - [Problem 1: Agents don't feel like teammates](#problem-1-agents-dont-feel-like-teammates)
-- [Problem 2: What happens when an agent crosses an org boundary?](#problem-2-what-happens-when-an-agent-crosses-an-org-boundary)
+- [Problem 2: How do you share a confidential source with the whole newsroom without exposing them?](#problem-2-how-do-you-share-a-confidential-source-with-the-whole-newsroom-without-exposing-them)
 
 ---
 
@@ -51,7 +51,7 @@ We wanted agents that *live* in the workflow. Join a channel. Read threads. Use 
 
 ---
 
-### Problem 2: What happens when an agent crosses an org boundary?
+### Problem 2: How do you share a confidential source with the whole newsroom without exposing them?
 
 **A trusted source should act as a sealed black box for the whole newsroom — queryable by anyone, but never exposed.**
 
@@ -265,6 +265,12 @@ The killer line:
 | Source must trust vendor's privacy claims | ✅ Trust-me model | ❌ Cryptographic proof per response |
 
 Subpoena defense by construction: the newsroom can be served with a gag order demanding source records. With a standard cloud LLM, those records exist in the vendor's logs. With TEE, *the plaintext never existed outside the enclave*. This is the strongest legal posture short of not running the service at all.
+
+#### Proof: NEAR AI Cloud TEE usage
+
+![NEAR AI Cloud usage proof](docs/screenshots/09-near-ai-usage-proof.png)
+
+Every source-intake call hits NEAR AI Cloud's confidential-compute endpoint (`qwen35-122b.completions.near.ai`). Usage and attestation are visible in the NEAR AI console — the same chat IDs the attestation badge references.
 
 ### Step 5: Article Published to Canvas
 
