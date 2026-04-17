@@ -20,7 +20,7 @@ import TypingIndicator from '@/components/chat/TypingIndicator';
 import ThreadPanel from '@/components/chat/ThreadPanel';
 import InviteMemberModal from '@/components/modals/InviteMemberModal';
 import ChannelDetailPanel from '@/components/chat/ChannelDetailPanel';
-import CanvasEditor from '@/components/canvas/CanvasEditor';
+import CanvasEditor from '@/components/notion/NotionCanvasEditor';
 import BookmarksBar from '@/components/channel/BookmarksBar';
 import MemberAvatarStack from '@/components/channel/MemberAvatarStack';
 import { pushRecentVisit } from '@/lib/hooks/use-recent-visits';

@@ -838,6 +838,31 @@ async function executeStep(
       const rows = (result as unknown as { rows: { id: string }[] }).rows ?? result;
       const canvasId = Array.isArray(rows) ? rows[0]?.id : undefined;
 
+      // Create a Notion page block and link it to the canvas via pageId.
+      // This enables the NotionCanvasEditor to render the Tiptap editor.
+      if (canvasId) {
+        try {
+          const pageResult = await db.execute(rawSql`
+            INSERT INTO blocks (id, type, parent_id, page_id, workspace_id, properties, content, created_by, created_at, updated_at)
+            VALUES (gen_random_uuid(), 'page', NULL, NULL, ${workspaceId},
+              ${JSON.stringify({ title, topic: title })}::jsonb,
+              ${JSON.stringify({ tiptapDoc: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: content }] }] } })}::jsonb,
+              ${canvasAgentId!}, now(), now())
+            RETURNING id
+          `);
+          const pageRows = (pageResult as unknown as { rows: { id: string }[] }).rows ?? pageResult;
+          const pageId = Array.isArray(pageRows) ? pageRows[0]?.id : undefined;
+          if (pageId) {
+            // Self-reference: page block's page_id = its own id
+            await db.execute(rawSql`UPDATE blocks SET page_id = ${pageId} WHERE id = ${pageId}`);
+            // Link canvas to the page
+            await db.execute(rawSql`UPDATE canvases SET page_id = ${pageId} WHERE id = ${canvasId}`);
+          }
+        } catch {
+          // Non-fatal: canvas still works in legacy mode without pageId
+        }
+      }
+
       // Post canvas notification under the agent's name with a link to the canvas
       const silentAgent = vars._lastSilentAgent as { id: string; name: string; skillId: string } | undefined;
       const triggerForCanvas = vars.trigger as { channelId?: string } | undefined;
