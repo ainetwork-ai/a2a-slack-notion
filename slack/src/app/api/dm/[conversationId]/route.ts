@@ -1,8 +1,9 @@
 import { db } from "@/lib/db";
-import { users, dmConversations, dmMembers } from "@/lib/db/schema";
+import { users, dmMembers } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
 import { requireAuth } from "@/lib/auth/middleware";
 import { NextRequest, NextResponse } from "next/server";
+import { resolveDmParam } from "@/lib/resolve";
 
 export async function PATCH(
   request: NextRequest,
@@ -12,14 +13,19 @@ export async function PATCH(
   if ("error" in auth) return auth.error;
   const { user } = auth;
 
-  const { conversationId } = await params;
+  const { conversationId: param } = await params;
+  const conv = await resolveDmParam(param, user.id);
+  if (!conv) {
+    return NextResponse.json({ error: "Conversation not found" }, { status: 404 });
+  }
+
   const body = await request.json();
 
   if (body.action === "markRead") {
     await db
       .update(dmMembers)
       .set({ lastReadAt: new Date() })
-      .where(and(eq(dmMembers.conversationId, conversationId), eq(dmMembers.userId, user.id)));
+      .where(and(eq(dmMembers.conversationId, conv.id), eq(dmMembers.userId, user.id)));
 
     return NextResponse.json({ success: true });
   }
@@ -35,43 +41,37 @@ export async function GET(
   if ("error" in auth) return auth.error;
   const { user } = auth;
 
-  const { conversationId } = await params;
+  const { conversationId: param } = await params;
+  const conv = await resolveDmParam(param, user.id);
+  if (!conv) {
+    return NextResponse.json({ error: "Conversation not found" }, { status: 404 });
+  }
 
-  // Verify membership and get mute state
   const [membership] = await db
     .select({ lastReadAt: dmMembers.lastReadAt, isMuted: dmMembers.isMuted })
     .from(dmMembers)
-    .where(and(eq(dmMembers.conversationId, conversationId), eq(dmMembers.userId, user.id)))
+    .where(and(eq(dmMembers.conversationId, conv.id), eq(dmMembers.userId, user.id)))
     .limit(1);
 
   if (!membership) {
     return NextResponse.json({ error: "Not a member" }, { status: 403 });
   }
 
-  const [conv] = await db
-    .select()
-    .from(dmConversations)
-    .where(eq(dmConversations.id, conversationId))
-    .limit(1);
-
-  if (!conv) {
-    return NextResponse.json({ error: "Conversation not found" }, { status: 404 });
-  }
-
-  // Get all members
   const members = await db
     .select({
       id: users.id,
       displayName: users.displayName,
       avatarUrl: users.avatarUrl,
       isAgent: users.isAgent,
+      status: users.status,
+      ainAddress: users.ainAddress,
+      a2aId: users.a2aId,
     })
     .from(dmMembers)
     .innerJoin(users, eq(dmMembers.userId, users.id))
-    .where(eq(dmMembers.conversationId, conversationId));
+    .where(eq(dmMembers.conversationId, conv.id));
 
   const otherMembers = members.filter((m) => m.id !== user.id);
-  // For 1-on-1 DMs keep otherUser for compat; for group DMs it's null
   const otherUser = otherMembers.length === 1 ? otherMembers[0] : null;
   const isGroup = members.length > 2;
 

@@ -39,7 +39,7 @@ async function seed() {
   const [existingWs] = await db
     .select()
     .from(schema.workspaces)
-    .where(eq(schema.workspaces.slug, "slack-a2a"))
+    .where(eq(schema.workspaces.name, "Slack-A2A"))
     .limit(1);
 
   if (existingWs) {
@@ -50,7 +50,6 @@ async function seed() {
       .insert(schema.workspaces)
       .values({
         name: "Slack-A2A",
-        slug: "slack-a2a",
         iconText: "A2A",
         description: "Agent-to-Agent communication on AIN blockchain",
       })

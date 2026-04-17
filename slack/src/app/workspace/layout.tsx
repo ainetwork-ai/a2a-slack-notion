@@ -4,6 +4,7 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/hooks/use-auth';
 import Sidebar from '@/components/layout/Sidebar';
+import TopBar from '@/components/layout/TopBar';
 import MobileNav from '@/components/layout/MobileNav';
 import { requestPermission } from '@/lib/notifications/browser-notify';
 import ChannelList from '@/components/layout/ChannelList';
@@ -11,19 +12,30 @@ import { useWorkspaceStore } from '@/lib/stores/workspace-store';
 import { useAppStore } from '@/lib/stores/app-store';
 import DMList from '@/components/layout/DMList';
 import AgentList from '@/components/layout/AgentList';
+import ConnectionsList from '@/components/layout/ConnectionsList';
 import McpList from '@/components/layout/McpList';
+import NotionNav from '@/components/notion/NotionNav';
 import McpTestbed from '@/components/mcp/McpTestbed';
 import AgentTestPane from '@/components/mcp/AgentTestPane';
 import SearchModal from '@/components/modals/SearchModal';
+import ComposeButton from '@/components/layout/ComposeButton';
 import CreateChannelModal from '@/components/modals/CreateChannelModal';
 import BrowseChannelsModal from '@/components/modals/BrowseChannelsModal';
 import AgentInviteModal from '@/components/agent/AgentInviteModal';
+import ConnectionInviteModal from '@/components/modals/ConnectionInviteModal';
 import AgentBuildModal from '@/components/agent/AgentBuildModal';
 import WorkspaceModal from '@/components/modals/WorkspaceModal';
 import KeyboardShortcutsModal from '@/components/modals/KeyboardShortcutsModal';
 import ConnectionStatus from '@/components/layout/ConnectionStatus';
 import { useKeyboardShortcuts } from '@/lib/hooks/use-keyboard-shortcuts';
-import { Loader2, Menu, X, ChevronDown } from 'lucide-react';
+import { Loader2, Menu, X, ChevronDown, UserPlus, Settings as SettingsIcon, Users } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from '@/components/ui/dropdown-menu';
 import { Separator } from '@/components/ui/separator';
 
 const SIDEBAR_MIN = 200;
@@ -42,7 +54,7 @@ export default function WorkspaceLayout({
   const [workspaceModalOpen, setWorkspaceModalOpen] = useState(false);
   const [mcpTestbedServer, setMcpTestbedServer] = useState<string | null>(null);
   const { testAgent, setTestAgent } = useAppStore();
-  const { activeWorkspaceId, workspaces } = useWorkspaceStore();
+  const { activeWorkspaceName, workspaces } = useWorkspaceStore();
 
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
     if (typeof window === 'undefined') return SIDEBAR_DEFAULT;
@@ -139,7 +151,13 @@ export default function WorkspaceLayout({
   if (!user) return null;
 
   return (
-    <div className="flex h-full overflow-hidden main-content">
+    <div className="flex flex-col h-full overflow-hidden main-content">
+      {/* Top bar — search + history + user */}
+      <div className="hidden md:block">
+        <TopBar />
+      </div>
+
+    <div className="flex flex-1 min-h-0 overflow-hidden">
       {/* Icon Sidebar */}
       <Sidebar />
 
@@ -163,14 +181,35 @@ export default function WorkspaceLayout({
         ].join(' ')}
       >
         {/* Workspace name */}
-        <div className="flex items-center justify-between px-4 h-12 border-b shrink-0 channel-header">
-          <button onClick={() => setWorkspaceModalOpen(true)} className="flex items-center gap-1 font-bold text-base truncate hover:bg-white/10 rounded px-1 -mx-1 transition-colors" style={{ color: 'var(--slack-text-primary)' }}>
-            {workspaces.find((w) => w.id === activeWorkspaceId)?.name ?? 'Slack-A2A'}
-            <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
-          </button>
+        <div className="flex items-center justify-between px-4 h-12 border-b shrink-0 channel-header gap-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger className="flex items-center gap-1 font-bold text-base truncate hover:bg-white/10 rounded px-1 -mx-1 transition-colors flex-1 min-w-0 focus:outline-none" style={{ color: 'var(--slack-text-primary)' }}>
+              <span className="truncate">{workspaces.find((w) => w.name === activeWorkspaceName)?.name ?? 'Slack-A2A'}</span>
+              <ChevronDown className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-60 bg-[#222529] border-white/10 text-white">
+              <DropdownMenuItem onClick={() => setWorkspaceModalOpen(true)} className="cursor-pointer">
+                <UserPlus className="w-4 h-4 mr-2 text-slate-400" />
+                Invite people
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => router.push('/workspace/settings')} className="cursor-pointer">
+                <SettingsIcon className="w-4 h-4 mr-2 text-slate-400" />
+                Preferences
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => router.push('/workspace/settings')} className="cursor-pointer">
+                <Users className="w-4 h-4 mr-2 text-slate-400" />
+                Manage members
+              </DropdownMenuItem>
+              <DropdownMenuSeparator className="bg-white/10" />
+              <DropdownMenuItem onClick={() => setWorkspaceModalOpen(true)} className="cursor-pointer text-slate-400">
+                Workspace details…
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <ComposeButton variant="inline" />
           {/* Close button — mobile only */}
           <button
-            className="md:hidden text-slate-400 hover:text-white p-1"
+            className="md:hidden text-slate-400 hover:text-white p-1 shrink-0"
             onClick={() => setSidebarOpen(false)}
             aria-label="Close sidebar"
           >
@@ -186,13 +225,24 @@ export default function WorkspaceLayout({
             }
           }}
         >
-          <ChannelList workspaceId={activeWorkspaceId ?? undefined} />
+          <ChannelList workspaceId={activeWorkspaceName ?? undefined} />
           <Separator className="my-2 bg-white/5" />
           <DMList />
           <Separator className="my-2 bg-white/5" />
           <AgentList />
           <Separator className="my-2 bg-white/5" />
+          <ConnectionsList />
+          <Separator className="my-2 bg-white/5" />
           <McpList onServerClick={(id) => setMcpTestbedServer(id)} />
+          {(() => {
+            const ws = workspaces.find((w) => w.name === activeWorkspaceName);
+            return ws?.id ? (
+              <>
+                <Separator className="my-2 bg-white/5" />
+                <NotionNav workspaceId={ws.id} />
+              </>
+            ) : null;
+          })()}
         </div>
 
         {/* E4: Drag handle */}
@@ -218,7 +268,7 @@ export default function WorkspaceLayout({
             <Menu className="w-5 h-5" />
           </button>
           <span className="ml-2 text-white font-semibold text-sm">
-            {workspaces.find((w) => w.id === activeWorkspaceId)?.name ?? 'Slack-A2A'}
+            {workspaces.find((w) => w.name === activeWorkspaceName)?.name ?? 'Slack-A2A'}
           </span>
         </div>
 
@@ -241,15 +291,20 @@ export default function WorkspaceLayout({
           )}
         </div>
       </div>
+    </div>
 
       {/* Global modals */}
       <SearchModal />
       <CreateChannelModal />
       <BrowseChannelsModal />
       <AgentInviteModal />
+      <ConnectionInviteModal />
       <AgentBuildModal />
       <WorkspaceModal open={workspaceModalOpen} onOpenChange={setWorkspaceModalOpen} />
       <KeyboardShortcutsModal />
+
+      {/* Compose floating button (Slack's pencil) */}
+      <ComposeButton variant="floating" />
 
       {/* Mobile bottom navigation */}
       <MobileNav onOpenSidebar={() => setSidebarOpen(true)} />

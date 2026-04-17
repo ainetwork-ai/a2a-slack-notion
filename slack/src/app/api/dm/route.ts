@@ -3,6 +3,7 @@ import { users, channels, channelMembers, messages, reactions, mentions, files, 
 import { eq, and, desc, lt, sql, inArray, or, ilike } from "drizzle-orm";
 import { requireAuth } from "@/lib/auth/middleware";
 import { NextRequest, NextResponse } from "next/server";
+import { resolveUserParam } from "@/lib/resolve";
 
 export async function GET() {
   const auth = await requireAuth();
@@ -38,6 +39,8 @@ export async function GET() {
           avatarUrl: users.avatarUrl,
           status: users.status,
           isAgent: users.isAgent,
+          ainAddress: users.ainAddress,
+          a2aId: users.a2aId,
         })
         .from(dmMembers)
         .innerJoin(users, eq(dmMembers.userId, users.id))
@@ -63,6 +66,8 @@ export async function GET() {
         avatarUrl: otherMembers[0].avatarUrl,
         isAgent: otherMembers[0].isAgent,
         status: otherMembers[0].status,
+        ainAddress: otherMembers[0].ainAddress,
+        a2aId: otherMembers[0].a2aId,
       } : null;
 
       // Compute unread count for the current user
@@ -102,15 +107,32 @@ export async function POST(request: NextRequest) {
   if ("error" in auth) return auth.error;
   const { user } = auth;
 
-  const body = await request.json();
-  const { userIds } = body as { userIds: string[] };
+  const body = (await request.json()) as {
+    userIds?: string[];
+    participantId?: string;
+  };
+  const rawRefs =
+    body.userIds ?? (body.participantId ? [body.participantId] : []);
 
-  if (!Array.isArray(userIds) || userIds.length === 0) {
+  if (!Array.isArray(rawRefs) || rawRefs.length === 0) {
     return NextResponse.json({ error: "userIds array is required" }, { status: 400 });
   }
 
-  // Always include the current user
-  const allUserIds = Array.from(new Set([user.id, ...userIds])).sort();
+  // Accept UUIDs, AIN addresses (0x…), or a2aIds. Resolve every ref before
+  // using it as a dm member id.
+  const resolvedIds: string[] = [];
+  for (const ref of rawRefs) {
+    const u = await resolveUserParam(ref);
+    if (!u) {
+      return NextResponse.json(
+        { error: `User not found: ${ref}` },
+        { status: 404 }
+      );
+    }
+    resolvedIds.push(u.id);
+  }
+
+  const allUserIds = Array.from(new Set([user.id, ...resolvedIds])).sort();
 
   // Find existing conversation with exact same members
   // Get all conversations where current user is a member
@@ -118,6 +140,36 @@ export async function POST(request: NextRequest) {
     .select({ conversationId: dmMembers.conversationId })
     .from(dmMembers)
     .where(eq(dmMembers.userId, user.id));
+
+  async function enrich(conv: typeof dmConversations.$inferSelect, existing: boolean) {
+    const partnerIds = allUserIds.filter((id) => id !== user.id);
+    let dmKey: string | null = null;
+    let otherUser: {
+      id: string;
+      displayName: string;
+      ainAddress: string;
+      a2aId: string | null;
+      isAgent: boolean;
+    } | null = null;
+    if (partnerIds.length === 1) {
+      const [p] = await db
+        .select({
+          id: users.id,
+          displayName: users.displayName,
+          ainAddress: users.ainAddress,
+          a2aId: users.a2aId,
+          isAgent: users.isAgent,
+        })
+        .from(users)
+        .where(eq(users.id, partnerIds[0]))
+        .limit(1);
+      if (p) {
+        otherUser = p;
+        dmKey = p.a2aId || p.ainAddress;
+      }
+    }
+    return { ...conv, existing, otherUser, dmKey };
+  }
 
   for (const { conversationId } of userConvIds) {
     const members = await db
@@ -130,22 +182,20 @@ export async function POST(request: NextRequest) {
       memberIds.length === allUserIds.length &&
       memberIds.every((id, i) => id === allUserIds[i])
     ) {
-      // Found existing conversation
       const [conv] = await db
         .select()
         .from(dmConversations)
         .where(eq(dmConversations.id, conversationId))
         .limit(1);
-      return NextResponse.json({ ...conv, existing: true });
+      return NextResponse.json(await enrich(conv, true));
     }
   }
 
-  // Create new conversation
   const [conversation] = await db.insert(dmConversations).values({}).returning();
 
   await db.insert(dmMembers).values(
     allUserIds.map((uid) => ({ conversationId: conversation.id, userId: uid }))
   );
 
-  return NextResponse.json({ ...conversation, existing: false }, { status: 201 });
+  return NextResponse.json(await enrich(conversation, false), { status: 201 });
 }

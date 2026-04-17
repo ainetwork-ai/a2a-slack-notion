@@ -93,18 +93,154 @@ export default function StepEditor({ step, onChange, onDone }: StepEditorProps) 
     <p className="text-xs text-slate-500 mt-1">Use {'{{varName}}'} to insert variables from previous steps.</p>
   ) : null;
 
+  const inputs = (s.inputs as Record<string, string>) || {};
+  const inputEntries = Object.entries(inputs);
+
+  function setInput(key: string, value: string) {
+    onChange({ ...step, inputs: { ...inputs, [key]: value } } as WorkflowStep);
+  }
+  function removeInput(key: string) {
+    const next = { ...inputs };
+    delete next[key];
+    onChange({ ...step, inputs: next } as WorkflowStep);
+  }
+  function renameInput(oldKey: string, newKey: string) {
+    if (!newKey || newKey === oldKey) return;
+    const next: Record<string, string> = {};
+    for (const [k, v] of inputEntries) next[k === oldKey ? newKey : k] = v;
+    onChange({ ...step, inputs: next } as WorkflowStep);
+  }
+
   return (
     <div className="space-y-4">
+      {step.type === 'invoke_skill' && (
+        <>
+          <div>
+            <label className="text-xs text-slate-400 mb-1 block">Agent</label>
+            <EntityPicker
+              kind="agent"
+              value={(s.agent as string) || ''}
+              onChange={(v) => {
+                onChange({ ...step, agent: v, skillId: '' } as WorkflowStep);
+              }}
+            />
+          </div>
+          <div>
+            <label className="text-xs text-slate-400 mb-1 block">Skill</label>
+            <EntityPicker
+              kind="skill"
+              agentId={(s.agent as string) || ''}
+              value={(s.skillId as string) || ''}
+              onChange={(v) => set('skillId', v)}
+            />
+            {!(s.agent as string) && (
+              <p className="text-xs text-slate-500 mt-1">Pick an agent first to see its skills.</p>
+            )}
+          </div>
+          <div>
+            <label className="text-xs text-slate-400 mb-1 block">Inputs</label>
+            <div className="space-y-2">
+              {inputEntries.map(([k, v]) => (
+                <div key={k} className="flex gap-2">
+                  <Input
+                    placeholder="name"
+                    defaultValue={k}
+                    onBlur={(e) => renameInput(k, e.target.value)}
+                    className={`${inputCls()} w-32`}
+                  />
+                  <Input
+                    placeholder="value (supports {{var}})"
+                    value={v}
+                    onChange={(e) => setInput(k, e.target.value)}
+                    className={`${inputCls()} flex-1`}
+                  />
+                  <button
+                    onClick={() => removeInput(k)}
+                    className="text-slate-500 hover:text-red-400 p-1"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={() => {
+                  let name = 'input';
+                  let i = 1;
+                  while (inputs[name]) name = `input${++i}`;
+                  setInput(name, '');
+                }}
+                className="text-xs text-slate-400 hover:text-white flex items-center gap-1"
+              >
+                <Plus className="w-3 h-3" />
+                Add input
+              </button>
+            </div>
+            {varHint}
+          </div>
+          <div>
+            <label className="text-xs text-slate-400 mb-1 block">Save result as</label>
+            <Input
+              placeholder="e.g. draft (access later as {{draft}})"
+              value={(s.saveAs as string) || ''}
+              onChange={(e) => set('saveAs', e.target.value)}
+              className={inputCls()}
+            />
+          </div>
+        </>
+      )}
+
+      {step.type === 'write_canvas' && (
+        <>
+          <div>
+            <label className="text-xs text-slate-400 mb-1 block">Channel</label>
+            <EntityPicker
+              kind="channel"
+              value={(s.channel as string) || ''}
+              onChange={(v) => set('channel', v)}
+            />
+          </div>
+          <div>
+            <label className="text-xs text-slate-400 mb-1 block">Title (optional)</label>
+            <Input
+              placeholder="Canvas title (supports {{var}})"
+              value={(s.title as string) || ''}
+              onChange={(e) => set('title', e.target.value)}
+              className={inputCls()}
+            />
+          </div>
+          <div>
+            <label className="text-xs text-slate-400 mb-1 block">Content (markdown)</label>
+            <Textarea
+              placeholder="# Heading\n\nBody with {{variables}}"
+              value={(s.content as string) || ''}
+              onChange={(e) => set('content', e.target.value)}
+              rows={6}
+              className={`${inputCls()} resize-none font-mono`}
+            />
+            {varHint}
+          </div>
+          <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={Boolean(s.append)}
+              onChange={(e) => set('append', e.target.checked)}
+            />
+            Append to existing canvas (instead of replacing)
+          </label>
+        </>
+      )}
+
       {step.type === 'ask_agent' && (
         <>
           <div>
             <label className="text-xs text-slate-400 mb-1 block">Agent</label>
             <EntityPicker
               kind="agent"
-              value={(s.agentId as string) || ''}
+              value={(s.agent as string) || ''}
               onChange={(v) => {
                 // Changing the agent invalidates the previously selected skill.
-                onChange({ ...step, agentId: v, skillId: undefined } as WorkflowStep);
+                onChange({ ...step, agent: v, skillId: undefined } as WorkflowStep);
               }}
             />
           </div>
@@ -112,7 +248,7 @@ export default function StepEditor({ step, onChange, onDone }: StepEditorProps) 
             <label className="text-xs text-slate-400 mb-1 block">Skill (optional)</label>
             <EntityPicker
               kind="skill"
-              agentId={(s.agentId as string) || ''}
+              agentId={(s.agent as string) || ''}
               value={(s.skillId as string) || ''}
               onChange={(v) => set('skillId', v || undefined)}
               clearable
@@ -147,8 +283,8 @@ export default function StepEditor({ step, onChange, onDone }: StepEditorProps) 
             <label className="text-xs text-slate-400 mb-1 block">Channel</label>
             <EntityPicker
               kind="channel"
-              value={(s.channelId as string) || ''}
-              onChange={(v) => set('channelId', v)}
+              value={(s.channel as string) || ''}
+              onChange={(v) => set('channel', v)}
             />
           </div>
           <div>
@@ -171,8 +307,8 @@ export default function StepEditor({ step, onChange, onDone }: StepEditorProps) 
             <label className="text-xs text-slate-400 mb-1 block">User</label>
             <EntityPicker
               kind="user"
-              value={(s.userId as string) || ''}
-              onChange={(v) => set('userId', v)}
+              value={(s.user as string) || ''}
+              onChange={(v) => set('user', v)}
             />
           </div>
           <div>
@@ -195,16 +331,16 @@ export default function StepEditor({ step, onChange, onDone }: StepEditorProps) 
             <label className="text-xs text-slate-400 mb-1 block">Channel</label>
             <EntityPicker
               kind="channel"
-              value={(s.channelId as string) || ''}
-              onChange={(v) => set('channelId', v)}
+              value={(s.channel as string) || ''}
+              onChange={(v) => set('channel', v)}
             />
           </div>
           <div>
             <label className="text-xs text-slate-400 mb-1 block">User</label>
             <EntityPicker
               kind="user"
-              value={(s.userId as string) || ''}
-              onChange={(v) => set('userId', v)}
+              value={(s.user as string) || ''}
+              onChange={(v) => set('user', v)}
             />
           </div>
         </>
@@ -216,8 +352,8 @@ export default function StepEditor({ step, onChange, onDone }: StepEditorProps) 
             <label className="text-xs text-slate-400 mb-1 block">Approver</label>
             <EntityPicker
               kind="user"
-              value={(s.approverUserId as string) || ''}
-              onChange={(v) => set('approverUserId', v)}
+              value={(s.approver as string) || ''}
+              onChange={(v) => set('approver', v)}
             />
           </div>
           <div>
@@ -310,8 +446,8 @@ export default function StepEditor({ step, onChange, onDone }: StepEditorProps) 
             <label className="text-xs text-slate-400 mb-1 block">Post to channel (optional)</label>
             <EntityPicker
               kind="channel"
-              value={(s.submitToChannelId as string) || ''}
-              onChange={(v) => set('submitToChannelId', v || undefined)}
+              value={(s.submitToChannel as string) || ''}
+              onChange={(v) => set('submitToChannel', v || undefined)}
               clearable
             />
           </div>

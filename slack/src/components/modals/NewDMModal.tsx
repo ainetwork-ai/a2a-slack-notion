@@ -73,7 +73,8 @@ export default function NewDMModal({ open, onOpenChange }: NewDMModalProps) {
       setSelected([]);
       setQuery('');
       mutate('/api/dm'); // Refresh DM list
-      router.push(`/workspace/dm/${data.id}`);
+      const key = data.dmKey || data.id;
+      router.push(`/workspace/dm/${encodeURIComponent(key)}`);
     } catch {
       // silently fail
     } finally {

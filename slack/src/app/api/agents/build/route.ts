@@ -8,6 +8,7 @@ import {
   channelMembers,
 } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
+import type { AgentCard } from "@a2a-js/sdk";
 
 export interface AgentSkillDef {
   id: string;
@@ -43,20 +44,21 @@ async function createSingleAgent(agentDef: AgentDefinition, userId: string) {
     })
   );
 
+  const appUrl = (process.env.NEXT_PUBLIC_APP_URL || "").replace(/\/$/, "");
+  const slug = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-");
+
   // Always include slack in mcpAccess (agents need workspace awareness)
   const mcpAccessList: string[] = Array.from(
     new Set([...(mcpAccess || []), "slack"])
   );
 
-  const agentCard: Record<string, unknown> = {
+  const agentCard: AgentCard & { systemPrompt?: string; mcpAccess?: string[]; builtBy?: string } = {
     name: name.trim(),
     description: description?.trim() || `Custom agent: ${name.trim()}`,
-    systemPrompt: systemPrompt?.trim() || "",
-    mcpAccess: mcpAccessList,
-    skills: agentSkills,
-    builtBy: userId,
-    provider: { organization: "Slack-A2A" },
-    version: "2.0.0",
+    url: appUrl ? `${appUrl}/api/a2a/${slug}` : `/api/a2a/${slug}`,
+    protocolVersion: "0.3.0",
+    version: "1.0.0",
+    provider: { organization: "Slack-A2A", url: appUrl || "" },
     defaultInputModes: ["text/plain"],
     defaultOutputModes: ["text/plain"],
     capabilities: {
@@ -69,6 +71,17 @@ async function createSingleAgent(agentDef: AgentDefinition, userId: string) {
         { uri: "urn:a2a:ext:tool-use", description: "LLM-driven MCP tool invocation", required: false },
       ],
     },
+    skills: agentSkills.map((s) => ({
+      id: s.id,
+      name: s.name,
+      description: s.description,
+      tags: [],
+      examples: [],
+    })),
+    // Internal (non-A2A) fields for our backend — ignored by standard A2A clients
+    systemPrompt: systemPrompt?.trim() || "",
+    mcpAccess: mcpAccessList,
+    builtBy: userId,
   };
 
   const [agent] = await db
@@ -79,6 +92,8 @@ async function createSingleAgent(agentDef: AgentDefinition, userId: string) {
       isAgent: true,
       status: "online",
       agentCardJson: agentCard,
+      agentInvitedBy: userId,
+      agentVisibility: "private",
     })
     .returning();
 

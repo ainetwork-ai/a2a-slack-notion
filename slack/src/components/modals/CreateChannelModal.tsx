@@ -15,8 +15,8 @@ import { cn } from '@/lib/utils';
 export default function CreateChannelModal() {
   const router = useRouter();
   const { createChannelOpen, setCreateChannelOpen } = useAppStore();
-  const { activeWorkspaceId } = useWorkspaceStore();
-  const { createChannel } = useChannels(activeWorkspaceId ?? undefined);
+  const { activeWorkspaceName } = useWorkspaceStore();
+  const { createChannel } = useChannels(activeWorkspaceName ?? undefined);
 
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -51,13 +51,13 @@ export default function CreateChannelModal() {
     setIsLoading(true);
     setError(null);
     try {
-      const result = await createChannel({ name: slugName, description, isPrivate, workspaceId: activeWorkspaceId ?? undefined });
+      const result = await createChannel({ name: slugName, description, isPrivate, workspaceId: activeWorkspaceName ?? undefined });
       setCreateChannelOpen(false);
       setName('');
       setDescription('');
       setIsPrivate(false);
-      if (result?.channel?.id) {
-        router.push(`/workspace/channel/${result.channel.id}`);
+      if (result?.channel?.name) {
+        router.push(`/workspace/channel/${encodeURIComponent(result.channel.name)}`);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create channel');

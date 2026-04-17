@@ -433,6 +433,7 @@ export async function canvas_write(params: {
   channelId: string;
   title?: string;
   content: string;
+  agentId?: string;
 }): Promise<string> {
   if (!params.channelId) return "channelId is required.";
   if (params.content === undefined) return "content is required.";
@@ -450,16 +451,19 @@ export async function canvas_write(params: {
       .select()
       .from(canvases)
       .where(eq(canvases.channelId, params.channelId))
+      .orderBy(desc(canvases.updatedAt))
       .limit(1);
 
-    // Get a system user id (channel creator as fallback) for agentless writes
-    const [firstMember] = await db
-      .select({ userId: channelMembers.userId })
-      .from(channelMembers)
-      .where(eq(channelMembers.channelId, params.channelId))
-      .limit(1);
-
-    const actorId = firstMember?.userId;
+    // Prefer the calling agent; fall back to first channel member
+    let actorId = params.agentId;
+    if (!actorId) {
+      const [firstMember] = await db
+        .select({ userId: channelMembers.userId })
+        .from(channelMembers)
+        .where(eq(channelMembers.channelId, params.channelId))
+        .limit(1);
+      actorId = firstMember?.userId;
+    }
     if (!actorId) return "Cannot determine actor for canvas write.";
 
     if (existing) {
@@ -501,6 +505,7 @@ export async function canvas_write(params: {
 export async function canvas_append(params: {
   channelId: string;
   content: string;
+  agentId?: string;
 }): Promise<string> {
   if (!params.channelId) return "channelId is required.";
   if (!params.content) return "content is required.";
@@ -510,20 +515,22 @@ export async function canvas_append(params: {
       .select()
       .from(canvases)
       .where(eq(canvases.channelId, params.channelId))
+      .orderBy(desc(canvases.updatedAt))
       .limit(1);
 
     if (!existing) {
-      // Create via canvas_write
-      return canvas_write({ channelId: params.channelId, content: params.content });
+      return canvas_write({ channelId: params.channelId, content: params.content, agentId: params.agentId });
     }
 
-    const [firstMember] = await db
-      .select({ userId: channelMembers.userId })
-      .from(channelMembers)
-      .where(eq(channelMembers.channelId, params.channelId))
-      .limit(1);
-
-    const actorId = firstMember?.userId;
+    let actorId = params.agentId;
+    if (!actorId) {
+      const [firstMember] = await db
+        .select({ userId: channelMembers.userId })
+        .from(channelMembers)
+        .where(eq(channelMembers.channelId, params.channelId))
+        .limit(1);
+      actorId = firstMember?.userId;
+    }
     if (!actorId) return "Cannot determine actor for canvas append.";
 
     const newContent = existing.content
@@ -545,5 +552,133 @@ export async function canvas_append(params: {
     return `Appended to canvas: **${updated.title}**`;
   } catch (err) {
     return `Failed to append to canvas: ${err instanceof Error ? err.message : "Unknown error"}`;
+  }
+}
+
+// ─── Section-aware canvas tools (for multi-agent newsroom pipelines) ─────────
+
+const SECTION_RE = (name: string) =>
+  new RegExp(
+    `<!-- section:${name}[^>]*-->([\\s\\S]*?)<!-- /section:${name} -->`,
+    "i"
+  );
+
+/**
+ * Update a named section inside a canvas (by canvasId).
+ * Section anchors look like:
+ *   <!-- section:draft owner:Reporter status:complete -->
+ *   ...content...
+ *   <!-- /section:draft -->
+ *
+ * If the section doesn't exist yet it is appended to the canvas.
+ */
+export async function canvas_update_section(params: {
+  canvasId: string;
+  section: string;
+  content: string;
+  status?: string;
+  agentId?: string;
+}): Promise<string> {
+  if (!params.canvasId) return "canvasId is required.";
+  if (!params.section) return "section is required.";
+  if (params.content === undefined) return "content is required.";
+
+  try {
+    const [canvas] = await db
+      .select()
+      .from(canvases)
+      .where(eq(canvases.id, params.canvasId))
+      .limit(1);
+    if (!canvas) return "Canvas not found.";
+
+    let actorId = params.agentId;
+    if (!actorId && canvas.channelId) {
+      const [m] = await db
+        .select({ userId: channelMembers.userId })
+        .from(channelMembers)
+        .where(eq(channelMembers.channelId, canvas.channelId))
+        .limit(1);
+      actorId = m?.userId;
+    }
+    if (!actorId) return "Cannot determine actor.";
+
+    const statusAttr = params.status ? ` status:${params.status}` : "";
+    const ownerAttr = params.agentId ? "" : ""; // injected via agentId param, omit in anchor
+    const openTag = `<!-- section:${params.section}${ownerAttr}${statusAttr} -->`;
+    const closeTag = `<!-- /section:${params.section} -->`;
+    const block = `${openTag}\n${params.content}\n${closeTag}`;
+
+    let newContent: string;
+    if (SECTION_RE(params.section).test(canvas.content)) {
+      newContent = canvas.content.replace(SECTION_RE(params.section), block);
+    } else {
+      newContent = canvas.content ? `${canvas.content}\n\n${block}` : block;
+    }
+
+    // Save revision
+    if (newContent !== canvas.content) {
+      await db.insert(canvasRevisions).values({
+        canvasId: canvas.id,
+        content: canvas.content,
+        editedBy: actorId,
+      });
+    }
+
+    await db
+      .update(canvases)
+      .set({ content: newContent, updatedAt: new Date(), updatedBy: actorId })
+      .where(eq(canvases.id, canvas.id));
+
+    return `Section "${params.section}" updated in canvas "${canvas.title}".`;
+  } catch (err) {
+    return `Failed to update section: ${err instanceof Error ? err.message : "Unknown error"}`;
+  }
+}
+
+/** Read a named section from a canvas (by canvasId). Returns the section body only. */
+export async function canvas_read_section(params: {
+  canvasId: string;
+  section: string;
+}): Promise<string> {
+  if (!params.canvasId) return "canvasId is required.";
+  if (!params.section) return "section is required.";
+
+  try {
+    const [canvas] = await db
+      .select({ content: canvases.content, title: canvases.title })
+      .from(canvases)
+      .where(eq(canvases.id, params.canvasId))
+      .limit(1);
+    if (!canvas) return "Canvas not found.";
+
+    const match = canvas.content.match(SECTION_RE(params.section));
+    if (!match) return `Section "${params.section}" not found in canvas "${canvas.title}".`;
+
+    return match[1].trim();
+  } catch (err) {
+    return `Failed to read section: ${err instanceof Error ? err.message : "Unknown error"}`;
+  }
+}
+
+/** Update the pipeline status of a canvas (e.g. draft → edited → fact-checked → published). */
+export async function canvas_set_status(params: {
+  canvasId: string;
+  status: "draft" | "edited" | "fact-checked" | "published";
+  agentId?: string;
+}): Promise<string> {
+  if (!params.canvasId) return "canvasId is required.";
+  if (!params.status) return "status is required.";
+
+  try {
+    const [updated] = await db
+      .update(canvases)
+      .set({ pipelineStatus: params.status, updatedAt: new Date(), ...(params.agentId ? { updatedBy: params.agentId } : {}) })
+      .where(eq(canvases.id, params.canvasId))
+      .returning({ title: canvases.title });
+
+    if (!updated) return "Canvas not found.";
+    return `Canvas "${updated.title}" status set to "${params.status}".`;
+  } catch (err) {
+    return `Failed to set status: ${err instanceof Error ? err.message : "Unknown error"}`;
   }
 }

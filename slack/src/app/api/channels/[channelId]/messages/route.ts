@@ -68,8 +68,9 @@ export async function GET(
   }
 
   const messageIds = msgs.map((m) => m.id);
+  const parentIdsWithReplies = msgs.filter((m) => (m.threadCount ?? 0) > 0).map((m) => m.id);
 
-  const [msgReactions, msgFiles] = await Promise.all([
+  const [msgReactions, msgFiles, threadReplies] = await Promise.all([
     db
       .select({ messageId: reactions.messageId, emoji: reactions.emoji, userId: reactions.userId, displayName: users.displayName })
       .from(reactions)
@@ -79,7 +80,48 @@ export async function GET(
       .select()
       .from(files)
       .where(inArray(files.messageId, messageIds)),
+    parentIdsWithReplies.length > 0
+      ? db
+          .select({
+            parentId: messages.parentId,
+            createdAt: messages.createdAt,
+            userId: messages.userId,
+            displayName: users.displayName,
+            avatarUrl: users.avatarUrl,
+            isAgent: users.isAgent,
+          })
+          .from(messages)
+          .innerJoin(users, eq(messages.userId, users.id))
+          .where(inArray(messages.parentId, parentIdsWithReplies))
+          .orderBy(desc(messages.createdAt))
+      : Promise.resolve([] as Array<{
+          parentId: string | null;
+          createdAt: Date;
+          userId: string;
+          displayName: string;
+          avatarUrl: string | null;
+          isAgent: boolean;
+        }>),
   ]);
+
+  const threadPreviewByParent = threadReplies.reduce<
+    Record<string, { lastReplyAt: string; participants: Array<{ id: string; displayName: string; avatarUrl: string | null; isAgent: boolean }> }>
+  >((acc, r) => {
+    if (!r.parentId) return acc;
+    if (!acc[r.parentId]) {
+      acc[r.parentId] = { lastReplyAt: r.createdAt.toISOString(), participants: [] };
+    }
+    const seen = acc[r.parentId].participants.some((p) => p.id === r.userId);
+    if (!seen && acc[r.parentId].participants.length < 4) {
+      acc[r.parentId].participants.push({
+        id: r.userId,
+        displayName: r.displayName,
+        avatarUrl: r.avatarUrl,
+        isAgent: r.isAgent,
+      });
+    }
+    return acc;
+  }, {});
 
   const reactionsByMessage = msgReactions.reduce<Record<string, Record<string, { userId: string; displayName: string }[]>>>(
     (acc, r) => {
@@ -104,6 +146,8 @@ export async function GET(
     ...m,
     reactions: reactionsByMessage[m.id] || {},
     files: filesByMessage[m.id] || [],
+    threadLastReplyAt: threadPreviewByParent[m.id]?.lastReplyAt ?? null,
+    threadParticipants: threadPreviewByParent[m.id]?.participants ?? [],
   }));
 
   const nextCursor =
@@ -234,8 +278,13 @@ export async function POST(
             continue;
           }
         }
+        // Strip the trigger pattern from the message so downstream steps
+        // get only the article source / topic, not the command keyword.
+        const body = config?.pattern
+          ? content.replace(new RegExp(config.pattern), "").trim()
+          : content;
         runWorkflow(wf.id, {
-          trigger: { message: content, userId: user.id, channelId },
+          trigger: { message: content, body, userId: user.id, channelId },
         }).catch(() => {
           // Fire-and-forget
         });

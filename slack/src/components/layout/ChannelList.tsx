@@ -93,8 +93,10 @@ export default function ChannelList({ workspaceId }: ChannelListProps) {
   const channelsByFolder = (folderId: string) =>
     visibleChannels.filter((c) => c.folderId === folderId);
 
-  function isActive(channelId: string) {
-    return pathname.startsWith(`/workspace/channel/${channelId}`);
+  function isActive(channelName: string) {
+    return pathname.startsWith(
+      `/workspace/channel/${encodeURIComponent(channelName)}`
+    );
   }
 
   function toggleFolder(folderId: string) {
@@ -143,7 +145,7 @@ export default function ChannelList({ workspaceId }: ChannelListProps) {
   }
 
   function ChannelItem({ channel, indent = false }: { channel: Channel; indent?: boolean }) {
-    const active = isActive(channel.id);
+    const active = isActive(channel.name);
     const isMoving = movingChannelId === channel.id;
 
     return (
@@ -151,7 +153,7 @@ export default function ChannelList({ workspaceId }: ChannelListProps) {
         <button
           role="option"
           aria-selected={active}
-          onClick={() => router.push(`/workspace/channel/${channel.id}`)}
+          onClick={() => router.push(`/workspace/channel/${encodeURIComponent(channel.name)}`)}
           className={cn(
             'w-full flex items-center gap-2 px-2 py-1.5 rounded text-[15px] transition-colors text-left',
             indent && 'pl-5',
@@ -414,7 +416,7 @@ export default function ChannelList({ workspaceId }: ChannelListProps) {
               {archivedChannels.map((channel) => (
                 <button
                   key={channel.id}
-                  onClick={() => router.push(`/workspace/channel/${channel.id}`)}
+                  onClick={() => router.push(`/workspace/channel/${encodeURIComponent(channel.name)}`)}
                   className={cn(
                     'w-full flex items-center gap-2 px-2 py-1.5 rounded text-[15px] transition-colors text-left opacity-60',
                     isActive(channel.id)

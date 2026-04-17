@@ -28,6 +28,7 @@ interface ConversationMember {
   displayName: string;
   avatarUrl?: string;
   isAgent?: boolean;
+  status?: string;
 }
 
 interface Conversation {
@@ -41,11 +42,12 @@ interface Conversation {
 }
 
 export default function DMPage({ params }: { params: Promise<{ conversationId: string }> }) {
-  const { conversationId } = use(params);
+  const { conversationId: urlParam } = use(params);
+  const dmParam = decodeURIComponent(urlParam);
   const { user: authUser } = useAuth();
   const { activeThread } = useAppStore();
-  const { workspaces, activeWorkspaceId } = useWorkspaceStore();
-  const activeWorkspace = workspaces.find(w => w.id === activeWorkspaceId);
+  const { workspaces, activeWorkspaceName } = useWorkspaceStore();
+  const activeWorkspace = workspaces.find(w => w.name === activeWorkspaceName);
   const isWorkspaceOwner = activeWorkspace?.role === 'owner';
   const [selectedSkill, setSelectedSkill] = useState<AgentSkill | null>(null);
   const lastReadAtRef = useRef<string | null>(null);
@@ -56,8 +58,16 @@ export default function DMPage({ params }: { params: Promise<{ conversationId: s
   const [isOwner, setIsOwner] = useState(false);
   const [cardUrlCopied, setCardUrlCopied] = useState(false);
 
+  const { data: convoData, mutate: mutateConvo } = useSWR<{ conversation: Conversation }>(
+    `/api/dm/${encodeURIComponent(dmParam)}`,
+    fetcher
+  );
+
+  const conversation = convoData?.conversation;
+  const conversationId = conversation?.id ?? '';
+
   useEffect(() => {
-    // Mark as read and capture the previous lastReadAt in one call
+    if (!conversationId) return;
     fetch(`/api/dm/${conversationId}/read`, { method: 'PATCH' })
       .then(r => r.json())
       .then((data: { previousLastReadAt?: string | null }) => {
@@ -69,13 +79,6 @@ export default function DMPage({ params }: { params: Promise<{ conversationId: s
       })
       .catch(() => {});
   }, [conversationId]);
-
-  const { data: convoData, mutate: mutateConvo } = useSWR<{ conversation: Conversation }>(
-    `/api/dm/${conversationId}`,
-    fetcher
-  );
-
-  const conversation = convoData?.conversation;
 
   useEffect(() => {
     if (conversation?.isMuted !== undefined) {
@@ -130,7 +133,10 @@ export default function DMPage({ params }: { params: Promise<{ conversationId: s
 
   const { typingUsers } = useTyping(undefined, conversationId);
   const { isOnline } = usePresence();
-  const online = otherUser ? isOnline(otherUser.id) : false;
+  // For agents, use the DB status field; for humans, use real-time presence
+  const online = otherUser
+    ? (isAgent ? otherUser.status === "online" : isOnline(otherUser.id))
+    : false;
   const agentStream = useAgentStream();
 
   // Inject a synthetic typing entry for the agent while waiting for a response

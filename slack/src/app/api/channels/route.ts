@@ -4,13 +4,18 @@ import { eq, and, desc, sql } from "drizzle-orm";
 import { requireAuth } from "@/lib/auth/middleware";
 import { NextRequest, NextResponse } from "next/server";
 import { logAudit } from "@/lib/audit";
+import { resolveWorkspaceParam } from "@/lib/resolve";
 
 export async function GET(request: NextRequest) {
   const auth = await requireAuth();
   if ("error" in auth) return auth.error;
   const { user } = auth;
 
-  const workspaceId = request.nextUrl.searchParams.get("workspaceId");
+  const workspaceRef = request.nextUrl.searchParams.get("workspaceId");
+  const workspace = workspaceRef
+    ? await resolveWorkspaceParam(workspaceRef)
+    : null;
+  const workspaceId = workspace?.id ?? null;
   const archivedOnly = request.nextUrl.searchParams.get("archived") === "true";
 
   const query = db
@@ -63,11 +68,16 @@ export async function POST(request: NextRequest) {
   const { user } = auth;
 
   const body = await request.json();
-  const { name, description, isPrivate, workspaceId } = body;
+  const { name, description, isPrivate, workspaceId: workspaceRef } = body;
 
   if (!name || typeof name !== "string") {
     return NextResponse.json({ error: "Channel name is required" }, { status: 400 });
   }
+
+  const workspaceRow = workspaceRef
+    ? await resolveWorkspaceParam(String(workspaceRef))
+    : null;
+  const workspaceId = workspaceRow?.id ?? null;
 
   const trimmed = name.trim();
 

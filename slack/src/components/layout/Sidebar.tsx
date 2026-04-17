@@ -69,7 +69,7 @@ export default function Sidebar() {
   const { unreadCount } = useNotifications();
   const { toggleNotificationPanel, notificationPanelOpen } = useAppStore();
   const { theme, toggleTheme } = useThemeStore();
-  const { workspaces, activeWorkspaceId, setActive, fetchWorkspaces } = useWorkspaceStore();
+  const { workspaces, activeWorkspaceName, setActive, fetchWorkspaces } = useWorkspaceStore();
   const { myStatus, setDnd, isDndEnabled } = usePresence();
   const [dndActive, setDndActive] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
@@ -111,8 +111,8 @@ export default function Sidebar() {
     ? user.displayName.split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2)
     : '?';
 
-  const activeWorkspace = workspaces.find((w) => w.id === activeWorkspaceId);
-  const otherWorkspaces = workspaces.filter((w) => w.id !== activeWorkspaceId);
+  const activeWorkspace = workspaces.find((w) => w.name === activeWorkspaceName);
+  const otherWorkspaces = workspaces.filter((w) => w.name !== activeWorkspaceName);
 
   return (
     <>
@@ -154,7 +154,7 @@ export default function Sidebar() {
           <Tooltip>
             <TooltipTrigger
               className="flex items-center justify-center w-10 h-10 rounded-xl bg-[#222529] cursor-pointer hover:bg-[#4a154b]/60 transition-colors border border-white/10 overflow-hidden"
-              onClick={() => setActive(ws.id)}
+              onClick={() => setActive(ws.name)}
             >
               {ws.iconUrl ? (
                 <Image

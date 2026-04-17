@@ -11,7 +11,14 @@ export async function GET(request: NextRequest) {
   const q = new URL(request.url).searchParams.get("q") || "";
 
   const results = await db
-    .select({ id: users.id, displayName: users.displayName, avatarUrl: users.avatarUrl, isAgent: users.isAgent })
+    .select({
+      id: users.id,
+      displayName: users.displayName,
+      avatarUrl: users.avatarUrl,
+      isAgent: users.isAgent,
+      agentCategory: users.agentCategory,
+      statusMessage: users.statusMessage,
+    })
     .from(users)
     .where(ilike(users.displayName, `%${q}%`))
     .limit(20);

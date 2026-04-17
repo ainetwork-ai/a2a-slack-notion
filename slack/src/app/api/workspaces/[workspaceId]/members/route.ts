@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { workspaceMembers, users, channels } from "@/lib/db/schema";
 import { eq, and, sql } from "drizzle-orm";
 import { logAudit } from "@/lib/audit";
+import { resolveWorkspaceParam } from "@/lib/resolve";
 
 export async function GET(
   _req: NextRequest,
@@ -12,7 +13,12 @@ export async function GET(
   const auth = await requireAuth();
   if ("error" in auth) return auth.error;
 
-  const { workspaceId } = await params;
+  const { workspaceId: param } = await params;
+  const ws = await resolveWorkspaceParam(param);
+  if (!ws) {
+    return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
+  }
+  const workspaceId = ws.id;
 
   // Verify caller is a member
   const [membership] = await db
@@ -62,7 +68,12 @@ export async function DELETE(
   const auth = await requireAuth();
   if ("error" in auth) return auth.error;
 
-  const { workspaceId } = await params;
+  const { workspaceId: param } = await params;
+  const ws = await resolveWorkspaceParam(param);
+  if (!ws) {
+    return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
+  }
+  const workspaceId = ws.id;
 
   // Check caller's role
   const [callerMembership] = await db
@@ -126,7 +137,12 @@ export async function PATCH(
   const auth = await requireAuth();
   if ("error" in auth) return auth.error;
 
-  const { workspaceId } = await params;
+  const { workspaceId: param } = await params;
+  const ws = await resolveWorkspaceParam(param);
+  if (!ws) {
+    return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
+  }
+  const workspaceId = ws.id;
 
   // Only owner can change roles
   const [callerMembership] = await db

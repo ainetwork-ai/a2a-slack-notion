@@ -11,6 +11,7 @@ function stepIcon(type: WorkflowStep['type']): string {
   const map: Record<WorkflowStep['type'], string> = {
     send_message: '💬',
     post_to_channel: '↩️',
+    invoke_skill: '⚡',
     ask_agent: '🤖',
     condition: '🔀',
     wait: '⏱️',
@@ -19,6 +20,11 @@ function stepIcon(type: WorkflowStep['type']): string {
     approval: '✅',
     dm_user: '👤',
     add_to_channel: '➕',
+    write_canvas: '📄',
+    create_canvas: '🗒️',
+    parse_assignment: '🔍',
+    parse_verdict: '⚖️',
+    loop: '🔄',
   };
   return map[type] ?? '⚙️';
 }
@@ -27,7 +33,8 @@ function stepLabel(type: WorkflowStep['type']): string {
   const map: Record<WorkflowStep['type'], string> = {
     send_message: 'Send a message',
     post_to_channel: 'Post to channel',
-    ask_agent: 'Ask an agent',
+    invoke_skill: 'Invoke agent skill',
+    ask_agent: 'Ask an agent (legacy)',
     condition: 'If/else condition',
     wait: 'Wait for time',
     create_channel: 'Create channel',
@@ -35,6 +42,11 @@ function stepLabel(type: WorkflowStep['type']): string {
     approval: 'Request approval',
     dm_user: 'Send a DM',
     add_to_channel: 'Add user to channel',
+    write_canvas: 'Write to canvas',
+    create_canvas: 'Create per-article canvas',
+    parse_assignment: 'Parse assignment',
+    parse_verdict: 'Parse verdict',
+    loop: 'Loop until condition',
   };
   return map[type] ?? type;
 }
@@ -44,23 +56,33 @@ function stepPreview(step: WorkflowStep): string {
   switch (step.type) {
     case 'send_message':
     case 'post_to_channel': {
-      const ch = (s.channelId as string) || '?';
+      const ch = (s.channel as string) || '?';
       const msg = (s.message as string) || '';
       return `in #${ch}${msg ? `: "${msg.slice(0, 40)}${msg.length > 40 ? '…' : ''}"` : ''}`;
     }
+    case 'invoke_skill': {
+      const agent = (s.agent as string) || '?';
+      const skill = (s.skillId as string) || '?';
+      return `${agent}.${skill}`;
+    }
+    case 'write_canvas': {
+      const ch = (s.channel as string) || '?';
+      const title = (s.title as string) || '';
+      return `#${ch}${title ? ` — "${title}"` : ''}${s.append ? ' (append)' : ''}`;
+    }
     case 'ask_agent': {
-      const agent = (s.agentId as string) || '?';
+      const agent = (s.agent as string) || '?';
       const prompt = (s.prompt as string) || '';
       return `${agent}${prompt ? `: "${prompt.slice(0, 40)}${prompt.length > 40 ? '…' : ''}"` : ''}`;
     }
     case 'dm_user': {
-      const user = (s.userId as string) || '?';
+      const user = (s.user as string) || '?';
       return `to ${user}`;
     }
     case 'add_to_channel':
-      return `${(s.userId as string) || '?'} → #${(s.channelId as string) || '?'}`;
+      return `${(s.user as string) || '?'} → #${(s.channel as string) || '?'}`;
     case 'approval':
-      return `Approver: ${(s.approverUserId as string) || '?'}`;
+      return `Approver: ${(s.approver as string) || '?'}`;
     case 'wait':
       return `${(s.durationMs as number) ?? 1000}ms`;
     case 'create_channel':
@@ -76,17 +98,19 @@ function stepPreview(step: WorkflowStep): string {
 
 function defaultStep(type: WorkflowStep['type']): WorkflowStep {
   switch (type) {
-    case 'ask_agent': return { type, agentId: '', prompt: '', saveAs: '' };
-    case 'send_message': return { type, channelId: '', message: '' };
-    case 'post_to_channel': return { type, channelId: '', message: '' };
-    case 'dm_user': return { type, userId: '', message: '' };
-    case 'add_to_channel': return { type, channelId: '', userId: '' };
-    case 'approval': return { type, approverUserId: '', message: '', saveAs: '' };
+    case 'invoke_skill': return { type, agent: '', skillId: '', inputs: {}, saveAs: '' };
+    case 'write_canvas': return { type, channel: '', content: '', append: false, saveAs: '' };
+    case 'ask_agent': return { type, agent: '', prompt: '', saveAs: '' };
+    case 'send_message': return { type, channel: '', message: '' };
+    case 'post_to_channel': return { type, channel: '', message: '' };
+    case 'dm_user': return { type, user: '', message: '' };
+    case 'add_to_channel': return { type, channel: '', user: '' };
+    case 'approval': return { type, approver: '', message: '', saveAs: '' };
     case 'condition': return { type, if: '', then: [] };
     case 'wait': return { type, durationMs: 1000 };
     case 'create_channel': return { type, name: '' };
     case 'form': return { type, title: '', fields: [] };
-    default: return { type: 'send_message', channelId: '', message: '' };
+    default: return { type: 'send_message', channel: '', message: '' };
   }
 }
 
@@ -150,9 +174,9 @@ export default function StepList({ steps, onChange, onContinue, onBack }: StepLi
                 }`}
               >
                 {/* Step header row */}
-                <div className="flex items-center gap-3 px-4 py-3">
+                <div className="flex items-center gap-3 px-4 py-2">
                   <span className="text-xl w-7 text-center">{stepIcon(step.type)}</span>
-                  <div className="flex-1 min-w-0">
+                  <div className="flex-1 min-w-0 truncate">
                     <span className="text-white text-sm font-medium">{stepLabel(step.type)}</span>
                     {stepPreview(step) && (
                       <span className="text-slate-400 text-sm ml-2">{stepPreview(step)}</span>
@@ -204,8 +228,8 @@ export default function StepList({ steps, onChange, onContinue, onBack }: StepLi
 
               {/* Connector line between steps */}
               {i < steps.length - 1 && (
-                <div className="flex justify-center py-1">
-                  <div className="w-px h-4 bg-white/10" />
+                <div className="flex justify-center">
+                  <div className="w-px h-2 bg-white/10" />
                 </div>
               )}
             </div>

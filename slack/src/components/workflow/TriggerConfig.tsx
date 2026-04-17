@@ -15,11 +15,11 @@ export interface TriggerConfigData {
   scheduleTime?: string;
   scheduleDays?: string[];
   // channel_message
-  channelId?: string;
+  channel?: string;
   keyword?: string;
   keywordEnabled?: boolean;
   // channel_join
-  joinChannelId?: string;
+  joinChannel?: string;
   // webhook — no extra config needed
   // form — no extra config needed
   // mapped back to API triggerType
@@ -57,10 +57,10 @@ export default function TriggerConfig({ triggerType, onContinue, onBack }: Trigg
   const [scheduleTime, setScheduleTime] = useState('09:00');
   const [specificDays, setSpecificDays] = useState(false);
   const [scheduleDays, setScheduleDays] = useState<string[]>(['Mon', 'Tue', 'Wed', 'Thu', 'Fri']);
-  const [channelId, setChannelId] = useState('');
+  const [channel, setChannel] = useState('');
   const [keyword, setKeyword] = useState('');
   const [keywordEnabled, setKeywordEnabled] = useState(false);
-  const [joinChannelId, setJoinChannelId] = useState('');
+  const [joinChannel, setJoinChannel] = useState('');
 
   function toggleDay(day: string) {
     setScheduleDays((prev) =>
@@ -75,7 +75,13 @@ export default function TriggerConfig({ triggerType, onContinue, onBack }: Trigg
           shortcutName,
           shortcutChannel,
           triggerType: 'shortcut',
-          triggerConfig: { label: shortcutName, channelId: shortcutChannel !== 'all channels' ? shortcutChannel : undefined },
+          triggerConfig: {
+            label: shortcutName,
+            channel:
+              shortcutChannel && shortcutChannel !== 'all channels'
+                ? shortcutChannel
+                : undefined,
+          },
         };
       case 'schedule': {
         // Build a cron expression from the UI
@@ -95,17 +101,20 @@ export default function TriggerConfig({ triggerType, onContinue, onBack }: Trigg
       }
       case 'channel_message':
         return {
-          channelId,
+          channel,
           keyword: keywordEnabled ? keyword : undefined,
           keywordEnabled,
           triggerType: 'channel_message',
-          triggerConfig: { channelId, pattern: keywordEnabled && keyword ? keyword : undefined },
+          triggerConfig: {
+            channel,
+            pattern: keywordEnabled && keyword ? keyword : undefined,
+          },
         };
       case 'channel_join':
         return {
-          joinChannelId,
+          joinChannel,
           triggerType: 'channel_join',
-          triggerConfig: { channelId: joinChannelId },
+          triggerConfig: { channel: joinChannel },
         };
       case 'webhook':
         return { triggerType: 'manual', triggerConfig: {} };
@@ -118,8 +127,8 @@ export default function TriggerConfig({ triggerType, onContinue, onBack }: Trigg
 
   const isValid = () => {
     if (triggerType === 'shortcut') return shortcutName.trim().length > 0;
-    if (triggerType === 'channel_message') return channelId.trim().length > 0;
-    if (triggerType === 'channel_join') return joinChannelId.trim().length > 0;
+    if (triggerType === 'channel_message') return channel.trim().length > 0;
+    if (triggerType === 'channel_join') return joinChannel.trim().length > 0;
     return true;
   };
 
@@ -218,8 +227,8 @@ export default function TriggerConfig({ triggerType, onContinue, onBack }: Trigg
               <span>When a message is posted in</span>
               <EntityPicker
                 kind="channel"
-                value={channelId}
-                onChange={setChannelId}
+                value={channel}
+                onChange={setChannel}
               />
             </div>
             <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
@@ -247,8 +256,8 @@ export default function TriggerConfig({ triggerType, onContinue, onBack }: Trigg
             <span>When someone joins</span>
             <EntityPicker
               kind="channel"
-              value={joinChannelId}
-              onChange={setJoinChannelId}
+              value={joinChannel}
+              onChange={setJoinChannel}
             />
           </div>
         )}

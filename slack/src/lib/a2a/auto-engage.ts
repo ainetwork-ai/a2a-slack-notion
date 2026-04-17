@@ -20,6 +20,11 @@ const DAILY_LIMITS: Record<number, number> = {
 
 const COOLDOWN_MS = 30 * 1000; // 30 seconds — short enough for iterative workflows
 
+// Level-3 (proactive) agents bypass LLM analysis for casual group greetings.
+// These patterns are language-agnostic and intentionally broad.
+const PROACTIVE_GREETING_RE =
+  /얘들아|야들아|여러분|다들|모두|뭐해|뭐하니|뭐하고있|안녕|하이|ㅎㅇ|hey\b|hi\b|hello\b|sup\b|yo\b|guys|everyone|what('s| is) up/i;
+
 const VLLM_BASE_URL = process.env.VLLM_URL || "http://localhost:8100";
 const VLLM_MODEL = process.env.VLLM_MODEL || "gemma-4-31B-it";
 
@@ -148,7 +153,10 @@ export async function checkAutoEngagement(params: {
     let shouldRespond = false;
     let suggestedSkillId: string | undefined;
 
-    if (rpcUrl) {
+    // Level-3 proactive: casual group greetings always get a response
+    if (level >= 3 && PROACTIVE_GREETING_RE.test(messageContent)) {
+      shouldRespond = true;
+    } else if (rpcUrl) {
       const result = await analyzeIntent(rpcUrl, messageContent, {
         channel: channelId,
         recentMessages,

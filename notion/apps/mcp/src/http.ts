@@ -1,58 +1,76 @@
-import { Hono } from 'hono';
-import { serve } from '@hono/node-server';
-import type { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
-import { handleA2A } from './a2a.js';
+/**
+ * Thin HTTP client that proxies MCP tool calls to the Slack workspace REST API.
+ *
+ * Contract:
+ *   - Base URL: env SLACK_BASE_URL (default http://localhost:3000)
+ *   - Auth: env SLACK_API_KEY sent as `Authorization: Bearer …` when present
+ *   - All calls return parsed JSON (or raw text if the response is not JSON)
+ *   - Non-2xx responses throw with status + body, letting the tool handler
+ *     surface a clean error back to the MCP client
+ */
 
-const AGENT_CARD = {
-  name: 'Notion Writer',
-  description: 'Reads and writes Notion pages and blocks via MCP tools',
-  version: '0.1.0',
-  url: `http://localhost:${process.env['MCP_HTTP_PORT'] ?? 3002}`,
-  capabilities: { streaming: true },
-  skills: [
-    {
-      id: 'write_page',
-      name: 'Write Page',
-      description: 'Creates or updates a Notion page with content',
-    },
-    {
-      id: 'search_docs',
-      name: 'Search Documents',
-      description: 'Searches across the workspace',
-    },
-  ],
-};
+const DEFAULT_BASE = 'http://localhost:3000';
 
-// Takes a factory so each HTTP request gets a fresh Server instance
-// (MCP SDK forbids reconnecting the same Server to multiple transports)
-export function createHonoApp(serverFactory: () => Server) {
-  const app = new Hono();
-
-  app.get('/health', (c) => c.json({ status: 'ok' }));
-  app.get('/.well-known/agent.json', (c) => c.json(AGENT_CARD));
-
-  app.all('/mcp', async (c) => {
-    const transport = new WebStandardStreamableHTTPServerTransport({
-      sessionIdGenerator: undefined,
-    });
-    const server = serverFactory(); // New Server per request (stateless HTTP mode)
-    await server.connect(transport);
-    return transport.handleRequest(c.req.raw);
-  });
-
-  app.post('/a2a', (c) => handleA2A(c));
-
-  return app;
+export function baseUrl(): string {
+  return process.env['SLACK_BASE_URL'] ?? DEFAULT_BASE;
 }
 
-export function startHttpServer(serverFactory: () => Server) {
-  const app = createHonoApp(serverFactory);
-  const port = Number(process.env['MCP_HTTP_PORT'] ?? 3002);
+export function apiKey(): string | undefined {
+  const key = process.env['SLACK_API_KEY'];
+  return key && key.length > 0 ? key : undefined;
+}
 
-  serve({ fetch: app.fetch, port }, () => {
-    process.stderr.write(
-      `Notion MCP HTTP server listening on port ${port}\n`,
-    );
+export type HttpMethod = 'GET' | 'POST' | 'PATCH' | 'DELETE';
+
+export interface CallOptions {
+  method: HttpMethod;
+  path: string;
+  body?: unknown;
+  query?: Record<string, string | number | boolean | undefined>;
+}
+
+export async function callSlack<T = unknown>(opts: CallOptions): Promise<T> {
+  const { method, path, body, query } = opts;
+
+  let url = `${baseUrl()}${path}`;
+  if (query) {
+    const qs = new URLSearchParams();
+    for (const [k, v] of Object.entries(query)) {
+      if (v === undefined) continue;
+      qs.set(k, String(v));
+    }
+    const s = qs.toString();
+    if (s) url += (path.includes('?') ? '&' : '?') + s;
+  }
+
+  const headers: Record<string, string> = { 'content-type': 'application/json' };
+  const key = apiKey();
+  if (key) headers['authorization'] = `Bearer ${key}`;
+
+  const res = await fetch(url, {
+    method,
+    headers,
+    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
   });
+
+  const raw = await res.text();
+  let parsed: unknown;
+  try {
+    parsed = raw.length === 0 ? null : JSON.parse(raw);
+  } catch {
+    parsed = raw;
+  }
+
+  if (!res.ok) {
+    const snippet = typeof parsed === 'string' ? parsed : JSON.stringify(parsed);
+    throw new Error(`Slack API ${method} ${path} → ${res.status}: ${snippet}`);
+  }
+
+  return parsed as T;
+}
+
+/** Wrap a result in an MCP CallToolResult text payload. */
+export function textResult(data: unknown): { content: Array<{ type: 'text'; text: string }> } {
+  const text = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+  return { content: [{ type: 'text', text }] };
 }

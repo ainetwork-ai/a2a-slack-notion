@@ -37,6 +37,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import random
 import re
 import sys
 import time
@@ -92,6 +93,41 @@ ALL_AGENT_IDS: list[str] = (
 
 
 # ─────────────────────────────────────────────────────────────
+# JSON 이벤트 스트림 (대시보드 연동용)
+# ─────────────────────────────────────────────────────────────
+# --json-events 플래그가 켜지면 사람이 읽는 print 출력과 별도로 stdout에
+# `__EVENT__<JSON>` 줄을 한 줄씩 추가로 방출한다. 대시보드는 이 prefix 줄만
+# 파싱해서 에이전트 호출 카드로 렌더링한다.
+
+_JSON_EVENTS_ENABLED = False
+
+# 현재 진행 중인 step 메타를 이벤트에 동봉하기 위한 스레드-단순 상태.
+_CURRENT_STEP: dict[str, Any] = {"step": None, "name": None}
+
+
+def _emit_event(event: str, **payload: Any) -> None:
+    if not _JSON_EVENTS_ENABLED:
+        return
+    body: dict[str, Any] = {
+        "event": event,
+        "ts": datetime.utcnow().isoformat(timespec="milliseconds") + "Z",
+    }
+    if _CURRENT_STEP.get("step") is not None and "step" not in payload:
+        body["step"] = _CURRENT_STEP["step"]
+    if _CURRENT_STEP.get("name") and "step_name" not in payload:
+        body["step_name"] = _CURRENT_STEP["name"]
+    body.update(payload)
+    sys.stdout.write("__EVENT__" + json.dumps(body, ensure_ascii=False) + "\n")
+    sys.stdout.flush()
+
+
+def _set_current_step(step: Any, name: str) -> None:
+    _CURRENT_STEP["step"] = step
+    _CURRENT_STEP["name"] = name
+    _emit_event("step-start", step=step, step_name=name)
+
+
+# ─────────────────────────────────────────────────────────────
 # 기본 샘플 원문 (오늘 날짜 기준 기사용)
 # ─────────────────────────────────────────────────────────────
 
@@ -143,23 +179,75 @@ def call_agent(
         "method": "message/send",
         "params": {"message": msg},
     }
+    _emit_event(
+        "agent-request",
+        agent_id=agent_id,
+        agent_name=_agent_display_name(agent_id),
+        skill=skill_id,
+        url=url,
+        prompt=user_text,
+        variables=variables or {},
+    )
     req = urllib.request.Request(
         url,
         data=json.dumps(body).encode("utf-8"),
         headers={"Content-Type": "application/json"},
         method="POST",
     )
+    t0 = time.time()
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             raw = resp.read().decode("utf-8")
     except urllib.error.URLError as e:
+        _emit_event(
+            "agent-response",
+            agent_id=agent_id,
+            agent_name=_agent_display_name(agent_id),
+            skill=skill_id,
+            ok=False,
+            error=str(e),
+            duration_ms=int((time.time() - t0) * 1000),
+        )
         raise RuntimeError(f"A2A 호출 실패 ({agent_id} / {skill_id}): {e}") from e
 
+    duration_ms = int((time.time() - t0) * 1000)
     data = json.loads(raw)
     if "error" in data:
+        _emit_event(
+            "agent-response",
+            agent_id=agent_id,
+            agent_name=_agent_display_name(agent_id),
+            skill=skill_id,
+            ok=False,
+            error=str(data["error"]),
+            duration_ms=duration_ms,
+        )
         raise RuntimeError(f"A2A 에러 ({agent_id}): {data['error']}")
     text = _extract_text(data.get("result") or {})
+    _emit_event(
+        "agent-response",
+        agent_id=agent_id,
+        agent_name=_agent_display_name(agent_id),
+        skill=skill_id,
+        ok=True,
+        text=text,
+        duration_ms=duration_ms,
+    )
     return text, data
+
+
+def _agent_display_name(agent_id: str) -> str:
+    if agent_id in REPORTERS:
+        info = REPORTERS[agent_id]
+        return f"{info['kor']} ({info['en']})"
+    if agent_id in MANAGERS:
+        info = MANAGERS[agent_id]
+        return f"{info['kor']} ({info['en']})"
+    if agent_id == EDITOR_IN_CHIEF:
+        return "Damien (편집국장)"
+    if agent_id == DESIGNER:
+        return "Olive (디자이너)"
+    return agent_id
 
 
 def _extract_text(obj: Any) -> str:
@@ -249,10 +337,34 @@ def run_pipeline(base_url: str, source_text: str, today: str | None = None) -> P
     today = today or today_kst()
     out = PipelineOutput(today=today, source=source_text)
 
+    _emit_event(
+        "pipeline-start",
+        base_url=base_url,
+        today=today,
+        source_len=len(source_text),
+    )
+
     def section(step: int | str, title: str):
         print("\n" + "═" * 72)
         print(f" {step}. {title}")
         print("═" * 72)
+        _set_current_step(step, title)
+
+    def finish_step(step_result: StepResult) -> None:
+        """append StepResult to out.steps and emit a step-end event."""
+        out.steps.append(step_result)
+        _emit_event(
+            "step-end",
+            step=step_result.step,
+            step_name=step_result.name,
+            agent_id=step_result.agent_id,
+            skill=step_result.skill,
+            ok=step_result.ok,
+            checks=[
+                {"name": name, "ok": ok, "note": note}
+                for name, ok, note in step_result.checks
+            ],
+        )
 
     # ── 0-pre. 헬스체크: 10개 에이전트 카드 전부 응답하는가 ───
     section("0-pre", f"Agent cards health check — {base_url}")
@@ -274,7 +386,7 @@ def run_pipeline(base_url: str, source_text: str, today: str | None = None) -> P
             all_up = False
     step_pre = StepResult(0, "Healthcheck", agent_id=base_url, skill=None, text=json.dumps(card_results))
     step_pre.checks.append(("10개 카드 전부 200", all_up, f"{sum(1 for _, c in card_results if c == 200)}/{len(card_results)}"))
-    out.steps.append(step_pre)
+    finish_step(step_pre)
 
     # ── 0. Scraping (입력 검증) ──────────────────────────────
     section(0, "Scraping — 원문 준비")
@@ -285,7 +397,7 @@ def run_pipeline(base_url: str, source_text: str, today: str | None = None) -> P
     step0 = StepResult(0, "Scraping", agent_id="-", skill=None, text=source_text)
     step0.checks.append(("원문 비어있지 않음", bool(source_text.strip()), ""))
     step0.checks.append(("원문 최소 길이(30자)", len(source_text.strip()) >= 30, f"{len(source_text.strip())}자"))
-    out.steps.append(step0)
+    finish_step(step0)
 
     # ── 1. Assignment (Damien) ──────────────────────────────
     section(1, f"Assignment — {EDITOR_IN_CHIEF} / skill=assignment")
@@ -302,10 +414,10 @@ def run_pipeline(base_url: str, source_text: str, today: str | None = None) -> P
     step1.checks.append(("기자 이름 파싱됨", bool(reporter_id), reporter_id or "인식 실패"))
     step1.checks.append((f"오늘 날짜({today}) 언급", today in text or today.replace("-", ".") in text or _contains_date_token(text), ""))
     step1.checks.append(("반말 할당 어투(자네/맡기네/~게)", bool(re.search(r"(자네|맡기네|맡긴다|담당해|맡겨)", text)), ""))
-    out.steps.append(step1)
+    finish_step(step1)
     if not reporter_id:
-        print("\n[경고] 기자 이름을 자동 파싱 실패. 기본값 unblock-max 로 진행.")
-        reporter_id = "unblock-max"
+        reporter_id = random.choice(list(REPORTERS.keys()))
+        print(f"\n[경고] 기자 이름을 자동 파싱 실패. 랜덤 배정: {reporter_id}")
         out.reporter_id = reporter_id
     manager_id = pick_manager_for_reporter(reporter_id)
     out.manager_id = manager_id
@@ -332,7 +444,7 @@ def run_pipeline(base_url: str, source_text: str, today: str | None = None) -> P
     step2.checks.append(("리서치 길이(≥200자)", len(text.strip()) >= 200, f"{len(text.strip())}자"))
     step2.checks.append(("출처 언급(~에 따르면)", "에 따르면" in text or "보도" in text, ""))
     step2.checks.append(("일자 언급(숫자+일/현지시각)", _contains_date_token(text), ""))
-    out.steps.append(step2)
+    finish_step(step2)
 
     # ── 3. Guide (팀장) ──────────────────────────────────────
     section(3, f"Guide — {manager_id} / skill=guide")
@@ -347,7 +459,7 @@ def run_pipeline(base_url: str, source_text: str, today: str | None = None) -> P
     step3 = StepResult(3, "Guide", manager_id, "guide", text)
     step3.checks.append(("기자명 멘션", rep_kor in text or REPORTERS[reporter_id]["en"] in text, rep_kor))
     step3.checks.append(("한 문단 가이드(비어있지 않음)", len(text.strip()) >= 60, ""))
-    out.steps.append(step3)
+    finish_step(step3)
 
     # ── 4. Writing (기자) ────────────────────────────────────
     section(4, f"Writing — {reporter_id} / skill=writing")
@@ -366,7 +478,7 @@ def run_pipeline(base_url: str, source_text: str, today: str | None = None) -> P
     step4.checks.append(("본문에 일자/출처 표기", struct["body_has_date_source"], ""))
     step4.checks.append(("본문 분량(≥400자)", struct["body_len"] >= 400, f"{struct['body_len']}자"))
     step4.checks.append(("페르소나 잡담 누출 없음", not struct["persona_leak"], "누출 감지됨" if struct["persona_leak"] else "OK"))
-    out.steps.append(step4)
+    finish_step(step4)
 
     # ── 5. Feedback (팀장) ───────────────────────────────────
     section(5, f"Feedback — {manager_id} / skill=feedback")
@@ -387,7 +499,7 @@ def run_pipeline(base_url: str, source_text: str, today: str | None = None) -> P
     step5.checks.append(("기자명 멘션", rep_kor in text, rep_kor))
     step5.checks.append(("구체 지적(제목/요약/리드/본문 중 하나)", any(k in text for k in ["제목", "요약", "리드", "본문"]), ""))
     step5.checks.append(("반말 톤(~해/~자/~어)", bool(re.search(r"(해[.\s]|어[.\s]|자[.\s]|야[.\s])", text)), ""))
-    out.steps.append(step5)
+    finish_step(step5)
 
     # ── 6. Revision (기자) ──────────────────────────────────
     section(6, f"Revision — {reporter_id} / skill=revision")
@@ -407,7 +519,7 @@ def run_pipeline(base_url: str, source_text: str, today: str | None = None) -> P
     step6.checks.append(("볼드(**,###) 사용 금지", ("**" not in text) and ("###" not in text), "사용됨" if ("**" in text or "###" in text) else "OK"))
     step6.checks.append(("분량 유지(초안의 60% 이상)", len(text.strip()) >= max(300, int(len(article_draft.strip()) * 0.6)), f"{len(text.strip())}/{len(article_draft.strip())}자"))
     step6.checks.append(("페르소나 잡담 누출 없음", not rstruct["persona_leak"], "누출 감지됨" if rstruct["persona_leak"] else "OK"))
-    out.steps.append(step6)
+    finish_step(step6)
 
     # ── 7. Confirm (Damien) ─────────────────────────────────
     section(7, f"Confirm — {EDITOR_IN_CHIEF} / skill=confirm")
@@ -426,7 +538,7 @@ def run_pipeline(base_url: str, source_text: str, today: str | None = None) -> P
     step7 = StepResult(7, "Confirm", EDITOR_IN_CHIEF, "confirm", text)
     step7.checks.append(("승인/반려 판결 포함", verdict != "UNKNOWN", verdict))
     step7.checks.append(("한 문단(불렛 없음)", "\n-" not in text and "\n•" not in text, ""))
-    out.steps.append(step7)
+    finish_step(step7)
 
     # ── 8. Drawing (Olive) ──────────────────────────────────
     section(8, f"Drawing — {DESIGNER} / skill=drawing")
@@ -438,8 +550,15 @@ def run_pipeline(base_url: str, source_text: str, today: str | None = None) -> P
     print(text)
     step8 = StepResult(8, "Drawing", DESIGNER, "drawing", text)
     step8.checks.append(("응답 존재", bool(text.strip()), f"{len(text.strip())}자"))
-    out.steps.append(step8)
+    finish_step(step8)
 
+    _emit_event(
+        "pipeline-end",
+        all_ok=out.all_ok,
+        reporter_id=out.reporter_id,
+        manager_id=out.manager_id,
+        today=out.today,
+    )
     return out
 
 
@@ -625,7 +744,16 @@ def main() -> int:
                     help=f"A2A 서버 base URL (기본: {DEFAULT_BASE_URL})")
     ap.add_argument("--today", help="TODAY_DATE 강제 지정 (YYYY-MM-DD). 생략 시 서버 KST 자동 주입")
     ap.add_argument("--out", help="각 단계 산출물을 저장할 디렉터리")
+    ap.add_argument(
+        "--json-events",
+        action="store_true",
+        help="stdout에 각 이벤트(step-start/agent-request/agent-response/step-end)를 "
+             "`__EVENT__<JSON>` 한 줄 형태로 함께 방출 — 대시보드 스트리밍 뷰 연동용",
+    )
     args = ap.parse_args()
+
+    global _JSON_EVENTS_ENABLED
+    _JSON_EVENTS_ENABLED = bool(args.json_events)
 
     if args.source:
         source_text = Path(args.source).read_text(encoding="utf-8").strip()

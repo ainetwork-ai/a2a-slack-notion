@@ -5,13 +5,17 @@ import { useRouter, usePathname } from 'next/navigation';
 import { Plus, ChevronDown, ChevronRight, Bot, Zap, UserPlus, Wrench, FlaskConical, Settings, Pencil } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useAppStore } from '@/lib/stores/app-store';
+import { useToast } from '@/components/ui/toast-provider';
 import { cn } from '@/lib/utils';
 import useSWR, { useSWRConfig } from 'swr';
+import { isSealedConnection } from '@/lib/connections/is-connection';
 
 const fetcher = (url: string) => fetch(url).then(r => r.json());
 
 interface Agent {
   id: string;
+  a2aId?: string | null;
+  ainAddress?: string;
   displayName?: string;
   name?: string;
   description?: string;
@@ -20,9 +24,19 @@ interface Agent {
   status: 'online' | 'offline' | 'busy';
   conversationId?: string;
   a2aUrl?: string;
+  agentCardJson?: unknown;
   agentVisibility?: 'public' | 'private' | 'unlisted';
   agentCategory?: string;
   isMine?: boolean;
+}
+
+/**
+ * URL segment for DM-ing an agent: prefer the natural a2aId, then the AIN
+ * address, and only fall back to a UUID for legacy records that have
+ * neither.
+ */
+function agentDmKey(a: Agent): string {
+  return a.a2aId || a.ainAddress || a.id;
 }
 
 type Tab = 'workspace' | 'mine' | 'browse';
@@ -33,6 +47,7 @@ export default function AgentList() {
   const [collapsed, setCollapsed] = useState(false);
   const [tab, setTab] = useState<Tab>('workspace');
   const { setAgentInviteOpen, setTestAgent, setAgentEditId } = useAppStore();
+  const { showToast } = useToast();
   const [openingBuilder, setOpeningBuilder] = useState(false);
 
   async function openBuilderDM() {
@@ -57,7 +72,8 @@ export default function AgentList() {
       const conv = await dmRes.json();
       mutate('/api/dm');
       mutate('/api/agents');
-      router.push(`/workspace/dm/${conv.id}`);
+      const key = builder?.a2aId || conv.id;
+      router.push(`/workspace/dm/${encodeURIComponent(key)}`);
     } finally {
       setOpeningBuilder(false);
     }
@@ -73,15 +89,22 @@ export default function AgentList() {
     refreshInterval: 10000,
   });
 
-  const agents = (data ?? []).map(a => ({
-    ...a,
-    name: a.displayName || a.name || 'Unnamed',
-    iconUrl: a.iconUrl || a.avatarUrl,
-  }));
+  const agents = (data ?? [])
+    .filter(a => tab !== 'workspace' || !isSealedConnection(a.agentCardJson))
+    .map(a => ({
+      ...a,
+      name: a.displayName || a.name || 'Unnamed',
+      iconUrl: a.iconUrl || a.avatarUrl,
+    }));
 
-  function isActive(conversationId?: string) {
-    if (!conversationId) return false;
-    return pathname === `/workspace/dm/${conversationId}`;
+  function isActive(agent: Agent) {
+    const key = agentDmKey(agent);
+    if (!key) return false;
+    const paths = new Set([
+      `/workspace/dm/${encodeURIComponent(key)}`,
+      agent.conversationId ? `/workspace/dm/${agent.conversationId}` : '',
+    ]);
+    return paths.has(pathname);
   }
 
   const statusColors = {
@@ -99,21 +122,30 @@ export default function AgentList() {
     if (res.ok) {
       const conv = await res.json();
       mutate('/api/dm');
-      router.push(`/workspace/dm/${conv.id}`);
+      const key = agentDmKey(agent) || conv.id;
+      router.push(`/workspace/dm/${encodeURIComponent(key)}`);
     }
   }
 
   async function handleInviteFromRegistry(agent: Agent) {
-    if (!agent.a2aUrl) return;
-    const res = await fetch('/api/agents', {
+    // Built-in agents (a2aUrl null) → subscribe by id; external agents → invite by URL.
+    const url = agent.a2aUrl
+      ? '/api/agents'
+      : `/api/agents/${agent.id}/subscribe`;
+    const body = agent.a2aUrl ? JSON.stringify({ a2aUrl: agent.a2aUrl }) : '{}';
+    const res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ a2aUrl: agent.a2aUrl }),
+      body,
     });
     if (res.ok) {
       mutate('/api/agents');
       mutateList();
       setTab('workspace');
+      showToast(`${agent.name} added to your workspace`, 'success');
+    } else {
+      const err = await res.json().catch(() => ({}));
+      showToast(err.error || 'Invite failed', 'error');
     }
   }
 
@@ -184,7 +216,7 @@ export default function AgentList() {
                 onClick={() => (isBrowse ? handleInviteFromRegistry(agent) : handleOpenDm(agent))}
                 className={cn(
                   'w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm transition-colors cursor-pointer group/agent',
-                  isActive(agent.conversationId)
+                  isActive(agent)
                     ? 'bg-[#4a154b]/60 text-white'
                     : 'text-[#bcabbc] hover:bg-white/5 hover:text-white'
                 )}

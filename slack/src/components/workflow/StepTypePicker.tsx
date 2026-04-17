@@ -11,12 +11,15 @@ interface StepTypeOption {
 }
 
 const STEP_TYPE_OPTIONS: StepTypeOption[] = [
+  // Agents — primary
+  { type: 'invoke_skill', icon: '⚡', label: 'Invoke an agent skill', category: 'Agents' },
+  { type: 'ask_agent', icon: '🤖', label: 'Ask an agent (legacy)', category: 'Agents' },
+  // Canvas
+  { type: 'write_canvas', icon: '📄', label: 'Write to a channel canvas', category: 'Canvas' },
   // Messages
   { type: 'send_message', icon: '💬', label: 'Send a message', category: 'Messages' },
   { type: 'form', icon: '📥', label: 'Collect input from a form', category: 'Messages' },
   { type: 'post_to_channel', icon: '↩️', label: 'Post to channel', category: 'Messages' },
-  // Agents
-  { type: 'ask_agent', icon: '🤖', label: 'Ask an agent', category: 'Agents' },
   // People
   { type: 'dm_user', icon: '👤', label: 'Send a DM to a user', category: 'People' },
   { type: 'add_to_channel', icon: '➕', label: 'Add a user to a channel', category: 'People' },
@@ -28,7 +31,7 @@ const STEP_TYPE_OPTIONS: StepTypeOption[] = [
   { type: 'create_channel', icon: '📝', label: 'Create channel', category: 'Channels' },
 ];
 
-const CATEGORIES = ['Messages', 'Agents', 'People', 'Logic', 'Channels'];
+const CATEGORIES = ['Agents', 'Canvas', 'Messages', 'People', 'Logic', 'Channels'];
 
 interface StepTypePickerProps {
   onSelect: (type: WorkflowStep['type']) => void;

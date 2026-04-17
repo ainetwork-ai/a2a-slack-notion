@@ -3,9 +3,10 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import useSWR from 'swr';
-import { ArrowLeft, Bot, Globe, Lock, EyeOff, Save, Trash2, ExternalLink, Loader2 } from 'lucide-react';
+import { ArrowLeft, Bot, Globe, Lock, EyeOff, Save, Trash2, ExternalLink, Loader2, Pencil } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
+import { useAppStore } from '@/lib/stores/app-store';
 
 const fetcher = (url: string) => fetch(url).then(r => r.json());
 
@@ -98,6 +99,7 @@ export default function AgentsManagementPage() {
 }
 
 function AgentRow({ agent, onChange }: { agent: RegistryAgent; onChange: () => void }) {
+  const setAgentEditId = useAppStore((s) => s.setAgentEditId);
   const [visibility, setVisibility] = useState<Visibility>(agent.agentVisibility || 'private');
   const [category, setCategory] = useState(agent.agentCategory ?? '');
   const [tagsText, setTagsText] = useState((agent.agentTags ?? []).join(', '));
@@ -181,6 +183,13 @@ function AgentRow({ agent, onChange }: { agent: RegistryAgent; onChange: () => v
             {agent.a2aUrl} · {skillsCount} skill{skillsCount === 1 ? '' : 's'}
           </p>
         </div>
+        <button
+          onClick={() => setAgentEditId(agent.id)}
+          className="p-1.5 rounded hover:bg-white/10 text-[#bcabbc] hover:text-white transition-colors shrink-0"
+          title="Edit agent (name, prompt, skills)"
+        >
+          <Pencil className="w-4 h-4" />
+        </button>
         <button
           onClick={remove}
           className="p-1.5 rounded hover:bg-red-500/10 text-[#bcabbc] hover:text-red-400 transition-colors shrink-0"

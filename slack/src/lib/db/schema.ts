@@ -13,8 +13,7 @@ import {
 
 export const workspaces = pgTable("workspaces", {
   id: uuid("id").primaryKey().defaultRandom(),
-  name: text("name").notNull(),
-  slug: text("slug").unique().notNull(),
+  name: text("name").unique().notNull(),
   iconText: text("icon_text").default("WS").notNull(),
   iconUrl: text("icon_url"),
   description: text("description"),
@@ -539,7 +538,8 @@ export const workflowRuns = pgTable("workflow_runs", {
 
 export const canvases = pgTable("canvases", {
   id: uuid("id").primaryKey().defaultRandom(),
-  channelId: uuid("channel_id").references(() => channels.id, { onDelete: "cascade" }).unique(),
+  // channelId is no longer unique — multiple canvases (one per article) can belong to the same channel
+  channelId: uuid("channel_id").references(() => channels.id, { onDelete: "cascade" }),
   conversationId: uuid("conversation_id").references(() => dmConversations.id, { onDelete: "cascade" }).unique(),
   workspaceId: uuid("workspace_id").references(() => workspaces.id, { onDelete: "cascade" }).notNull(),
   title: text("title").notNull(),
@@ -548,6 +548,12 @@ export const canvases = pgTable("canvases", {
   updatedBy: uuid("updated_by").references(() => users.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  // Pipeline fields for structured newsroom/multi-agent workflows
+  pipelineStatus: text("pipeline_status").$type<"draft" | "edited" | "fact-checked" | "published">(),
+  topic: text("topic"),
+  pipelineRunId: uuid("pipeline_run_id"),
+  // Bridge to Notion block tree (type='page' in blocks table). Null during cutover window.
+  pageId: uuid("page_id"),
 });
 
 export const canvasRevisions = pgTable("canvas_revisions", {
@@ -557,6 +563,26 @@ export const canvasRevisions = pgTable("canvas_revisions", {
   editedBy: uuid("edited_by").references(() => users.id).notNull(),
   editedAt: timestamp("edited_at").defaultNow().notNull(),
 });
+
+export const channelBookmarks = pgTable(
+  "channel_bookmarks",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    channelId: uuid("channel_id")
+      .references(() => channels.id, { onDelete: "cascade" })
+      .notNull(),
+    title: text("title").notNull(),
+    url: text("url").notNull(),
+    emoji: text("emoji").default("🔖").notNull(),
+    position: integer("position").default(0).notNull(),
+    createdBy: uuid("created_by")
+      .references(() => users.id)
+      .notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (t) => [index("channel_bookmarks_channel_idx").on(t.channelId, t.position)]
+);
 
 export const agentSkillConfigs = pgTable(
   "agent_skill_configs",
@@ -577,3 +603,333 @@ export const agentSkillConfigs = pgTable(
     uniqueIndex("agent_skill_configs_unique").on(t.agentId, t.skillId),
   ]
 );
+
+export const editorialBriefs = pgTable(
+  "editorial_briefs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id")
+      .references(() => workspaces.id, { onDelete: "cascade" })
+      .notNull(),
+    channelId: uuid("channel_id").references(() => channels.id, { onDelete: "set null" }),
+    incidentId: text("incident_id").notNull(),
+    requestId: text("request_id").notNull(),
+    purposeId: text("purpose_id").notNull(),
+    legalBasis: text("legal_basis").notNull(),
+    publicSafeBrief: text("public_safe_brief").notNull(),
+    holdBackItems: jsonb("hold_back_items").$type<string[]>().default([]),
+    verificationChecklist: jsonb("verification_checklist").$type<string[]>().default([]),
+    sourceExposureRiskScore: integer("source_exposure_risk_score"),
+    teePlatform: text("tee_platform"),
+    signingAddress: text("signing_address"),
+    chatId: text("chat_id"),
+    attestationEvidenceId: text("attestation_evidence_id"),
+    attestationVerified: boolean("attestation_verified").default(false).notNull(),
+    intelTdxVerified: boolean("intel_tdx_verified").default(false),
+    nvidiaNrasVerdict: text("nvidia_nras_verdict"),
+    responseSignatureVerified: boolean("response_signature_verified").default(false),
+    expiresAt: timestamp("expires_at").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [
+    index("editorial_briefs_workspace_idx").on(t.workspaceId, t.createdAt),
+    index("editorial_briefs_incident_idx").on(t.incidentId),
+    index("editorial_briefs_expires_idx").on(t.expiresAt),
+  ]
+);
+
+// ============================================================
+// Notion-core tables — ported from notion/apps/api/prisma/schema.prisma
+// ============================================================
+
+export type BlockType =
+  | "page"
+  | "text"
+  | "heading_1"
+  | "heading_2"
+  | "heading_3"
+  | "bulleted_list"
+  | "numbered_list"
+  | "to_do"
+  | "toggle"
+  | "callout"
+  | "code"
+  | "divider"
+  | "image"
+  | "quote"
+  | "table"
+  | "bookmark"
+  | "file"
+  | "embed"
+  | "database";
+
+export type ViewType = "table" | "board" | "list" | "calendar" | "gallery" | "timeline";
+
+export type PermissionLevel = "full_access" | "can_edit" | "can_comment" | "can_view";
+
+export const blocks = pgTable(
+  "blocks",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    type: text("type").$type<BlockType>().notNull(),
+    parentId: uuid("parent_id"),
+    pageId: uuid("page_id").notNull(),
+    workspaceId: uuid("workspace_id")
+      .references(() => workspaces.id, { onDelete: "cascade" })
+      .notNull(),
+    properties: jsonb("properties").$type<Record<string, unknown>>().default({}).notNull(),
+    content: jsonb("content").$type<Record<string, unknown>>().default({}).notNull(),
+    childrenOrder: jsonb("children_order").$type<string[]>().default([]).notNull(),
+    createdBy: uuid("created_by")
+      .references(() => users.id)
+      .notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+    archived: boolean("archived").default(false).notNull(),
+  },
+  (t) => [
+    index("blocks_page_parent_idx").on(t.pageId, t.parentId),
+    index("blocks_workspace_type_idx").on(t.workspaceId, t.type),
+    index("blocks_parent_idx").on(t.parentId),
+  ]
+);
+
+export const databaseViews = pgTable(
+  "database_views",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    databaseId: uuid("database_id")
+      .references(() => blocks.id, { onDelete: "cascade" })
+      .notNull(),
+    name: text("name").notNull(),
+    type: text("type").$type<ViewType>().default("table").notNull(),
+    filters: jsonb("filters")
+      .$type<{ logic: "and" | "or"; conditions: unknown[] }>()
+      .default({ logic: "and", conditions: [] })
+      .notNull(),
+    sorts: jsonb("sorts").$type<unknown[]>().default([]).notNull(),
+    groupBy: jsonb("group_by").$type<unknown>(),
+    config: jsonb("config")
+      .$type<{ visibleProperties: string[] }>()
+      .default({ visibleProperties: [] })
+      .notNull(),
+    position: integer("position").default(0).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (t) => [index("database_views_db_pos_idx").on(t.databaseId, t.position)]
+);
+
+export const databaseTemplates = pgTable(
+  "database_templates",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    databaseId: uuid("database_id")
+      .references(() => blocks.id, { onDelete: "cascade" })
+      .notNull(),
+    name: text("name").notNull(),
+    description: text("description"),
+    icon: text("icon"),
+    content: jsonb("content").$type<unknown[]>().default([]).notNull(),
+    values: jsonb("values").$type<Record<string, unknown>>().default({}).notNull(),
+    isDefault: boolean("is_default").default(false).notNull(),
+    position: integer("position").default(0).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (t) => [index("database_templates_db_pos_idx").on(t.databaseId, t.position)]
+);
+
+export const blockComments = pgTable(
+  "block_comments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    blockId: uuid("block_id")
+      .references(() => blocks.id, { onDelete: "cascade" })
+      .notNull(),
+    authorId: uuid("author_id")
+      .references(() => users.id)
+      .notNull(),
+    content: jsonb("content").$type<unknown>().notNull(),
+    resolved: boolean("resolved").default(false).notNull(),
+    threadId: uuid("thread_id"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (t) => [index("block_comments_block_idx").on(t.blockId)]
+);
+
+export const favorites = pgTable(
+  "favorites",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .references(() => users.id, { onDelete: "cascade" })
+      .notNull(),
+    workspaceId: uuid("workspace_id")
+      .references(() => workspaces.id, { onDelete: "cascade" })
+      .notNull(),
+    pageId: uuid("page_id")
+      .references(() => blocks.id, { onDelete: "cascade" })
+      .notNull(),
+    position: integer("position").default(0).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("favorites_user_page_unique").on(t.userId, t.pageId),
+    index("favorites_user_workspace_idx").on(t.userId, t.workspaceId),
+  ]
+);
+
+export const recentPages = pgTable(
+  "recent_pages",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .references(() => users.id, { onDelete: "cascade" })
+      .notNull(),
+    workspaceId: uuid("workspace_id")
+      .references(() => workspaces.id, { onDelete: "cascade" })
+      .notNull(),
+    pageId: uuid("page_id")
+      .references(() => blocks.id, { onDelete: "cascade" })
+      .notNull(),
+    visitedAt: timestamp("visited_at").defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("recent_pages_user_page_unique").on(t.userId, t.pageId),
+    index("recent_pages_visit_idx").on(t.userId, t.workspaceId, t.visitedAt),
+  ]
+);
+
+export const pagePermissions = pgTable(
+  "page_permissions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    pageId: uuid("page_id")
+      .references(() => blocks.id, { onDelete: "cascade" })
+      .notNull(),
+    userId: uuid("user_id")
+      .references(() => users.id, { onDelete: "cascade" })
+      .notNull(),
+    level: text("level").$type<PermissionLevel>().notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("page_permissions_page_user_unique").on(t.pageId, t.userId),
+    index("page_permissions_page_idx").on(t.pageId),
+  ]
+);
+
+export const pageSnapshots = pgTable(
+  "page_snapshots",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    pageId: uuid("page_id")
+      .references(() => blocks.id, { onDelete: "cascade" })
+      .notNull(),
+    title: text("title").notNull(),
+    snapshot: text("snapshot").notNull(),
+    createdBy: uuid("created_by")
+      .references(() => users.id)
+      .notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [index("page_snapshots_page_created_idx").on(t.pageId, t.createdAt)]
+);
+
+export const shareLinks = pgTable(
+  "share_links",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    pageId: uuid("page_id")
+      .references(() => blocks.id, { onDelete: "cascade" })
+      .notNull(),
+    token: text("token").unique().notNull(),
+    level: text("level").$type<PermissionLevel>().default("can_view").notNull(),
+    isPublic: boolean("is_public").default(false).notNull(),
+    expiresAt: timestamp("expires_at"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [index("share_links_page_idx").on(t.pageId)]
+);
+
+export const pageTemplates = pgTable(
+  "page_templates",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id")
+      .references(() => workspaces.id, { onDelete: "cascade" })
+      .notNull(),
+    name: text("name").notNull(),
+    description: text("description"),
+    icon: text("icon"),
+    category: text("category").default("custom").notNull(),
+    content: jsonb("content").$type<unknown[]>().default([]).notNull(),
+    createdBy: uuid("created_by")
+      .references(() => users.id)
+      .notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [index("page_templates_workspace_cat_idx").on(t.workspaceId, t.category)]
+);
+
+export const automations = pgTable("automations", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  workspaceId: uuid("workspace_id")
+    .references(() => workspaces.id, { onDelete: "cascade" })
+    .notNull(),
+  name: text("name").notNull(),
+  trigger: jsonb("trigger").$type<unknown>().notNull(),
+  actions: jsonb("actions").$type<unknown[]>().notNull(),
+  active: boolean("active").default(true).notNull(),
+  createdBy: uuid("created_by")
+    .references(() => users.id)
+    .notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// ============================================================
+// Notion-auxiliary tables — page notifications, webhooks, api keys
+// ============================================================
+
+export const notionNotifications = pgTable(
+  "notion_notifications",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .references(() => users.id, { onDelete: "cascade" })
+      .notNull(),
+    type: text("type").$type<"mention" | "comment" | "page_update">().notNull(),
+    title: text("title").notNull(),
+    body: text("body"),
+    pageId: uuid("page_id"),
+    read: boolean("read").default(false).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [index("notion_notifications_user_read_idx").on(t.userId, t.read, t.createdAt)]
+);
+
+export const notionWebhooks = pgTable("notion_webhooks", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id")
+    .references(() => users.id, { onDelete: "cascade" })
+    .notNull(),
+  url: text("url").notNull(),
+  secret: text("secret").notNull(),
+  events: jsonb("events").$type<string[]>().notNull(),
+  active: boolean("active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const notionApiKeys = pgTable("notion_api_keys", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id")
+    .references(() => users.id, { onDelete: "cascade" })
+    .notNull(),
+  name: text("name").notNull(),
+  keyHash: text("key_hash").unique().notNull(),
+  keyPrefix: text("key_prefix").notNull(),
+  lastUsedAt: timestamp("last_used_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});

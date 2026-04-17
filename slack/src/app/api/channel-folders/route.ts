@@ -3,13 +3,14 @@ import { requireAuth } from "@/lib/auth/middleware";
 import { db } from "@/lib/db";
 import { channelFolders } from "@/lib/db/schema";
 import { and, asc, eq } from "drizzle-orm";
+import { resolveWorkspaceIdQuery, resolveWorkspaceParam } from "@/lib/resolve";
 
 export async function GET(request: NextRequest) {
   const auth = await requireAuth();
   if ("error" in auth) return auth.error;
   const { user } = auth;
 
-  const workspaceId = request.nextUrl.searchParams.get("workspaceId");
+  const workspaceId = await resolveWorkspaceIdQuery(request);
   if (!workspaceId) {
     return NextResponse.json({ error: "workspaceId is required" }, { status: 400 });
   }
@@ -34,14 +35,19 @@ export async function POST(request: NextRequest) {
   const { user } = auth;
 
   const body = await request.json();
-  const { name, workspaceId } = body as { name?: string; workspaceId?: string };
+  const { name, workspaceId: workspaceRef } = body as { name?: string; workspaceId?: string };
 
   if (!name || typeof name !== "string" || !name.trim()) {
     return NextResponse.json({ error: "Folder name is required" }, { status: 400 });
   }
-  if (!workspaceId) {
+  if (!workspaceRef) {
     return NextResponse.json({ error: "workspaceId is required" }, { status: 400 });
   }
+  const ws = await resolveWorkspaceParam(String(workspaceRef));
+  if (!ws) {
+    return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
+  }
+  const workspaceId = ws.id;
 
   // Get current max position for this user/workspace
   const existing = await db

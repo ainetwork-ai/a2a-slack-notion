@@ -96,23 +96,23 @@ export default function ThreadPanel({
         className="w-[420px] sm:w-[480px] bg-[#1a1d21] border-l border-white/10 p-0 flex flex-col"
         showCloseButton={false}
       >
-        <SheetHeader className="px-4 py-3 border-b border-white/10 flex flex-row items-center gap-2">
-          <MessageSquare className="w-5 h-5 text-slate-400" />
-          <SheetTitle className="text-white text-base font-semibold flex-1">Thread</SheetTitle>
+        <SheetHeader className="px-4 h-12 border-b border-white/10 flex flex-row items-center gap-2">
+          <MessageSquare className="w-[18px] h-[18px] text-slate-400" />
+          <SheetTitle className="text-white text-[17px] font-bold flex-1">Thread</SheetTitle>
           <button
             onClick={handleToggleSubscription}
             disabled={subscribeLoading}
             title={isSubscribed ? 'Unfollow thread' : 'Follow thread'}
-            className="flex items-center gap-1.5 px-2 py-1 rounded text-xs text-slate-400 hover:text-white hover:bg-white/10 transition-colors disabled:opacity-50"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded text-sm text-slate-400 hover:text-white hover:bg-white/10 transition-colors disabled:opacity-50"
           >
             {isSubscribed ? (
               <>
-                <BellOff className="w-3.5 h-3.5" />
+                <BellOff className="w-4 h-4" />
                 <span>Unfollow</span>
               </>
             ) : (
               <>
-                <Bell className="w-3.5 h-3.5" />
+                <Bell className="w-4 h-4" />
                 <span>Follow</span>
               </>
             )}
@@ -123,7 +123,7 @@ export default function ThreadPanel({
         {parentMessageContent && (
           <div className="px-4 py-3 border-b border-white/10 bg-white/[0.02]">
             <p className="text-xs text-slate-400 mb-1">Original message</p>
-            <p className="text-sm text-slate-200 line-clamp-3">{parentMessageContent}</p>
+            <p className="text-[15px] text-slate-200 line-clamp-3 leading-relaxed">{parentMessageContent}</p>
           </div>
         )}
 
@@ -148,7 +148,7 @@ export default function ThreadPanel({
                 onChange={e => setAlsoSendToChannel(e.target.checked)}
                 className="w-3.5 h-3.5 accent-[#4a154b] cursor-pointer"
               />
-              <label htmlFor="also-send-channel" className="text-xs text-slate-400 cursor-pointer select-none">
+              <label htmlFor="also-send-channel" className="text-sm text-slate-400 cursor-pointer select-none">
                 Also send to {channelName ? `#${channelName}` : 'channel'}
               </label>
             </div>

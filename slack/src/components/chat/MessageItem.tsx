@@ -1,8 +1,10 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { useRouter } from 'next/navigation';
+import { Bot } from 'lucide-react';
 import { highlightCode } from '@/lib/syntax-highlight';
-import { format } from 'date-fns';
+import { format, formatDistanceToNowStrict } from 'date-fns';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 
@@ -99,6 +101,61 @@ export function renderInlineMarkdown(text: string): string {
   html = html.replace(/\n/g, '<br>');
   html = html.replace(/\x00BQSTART\x00([\s\S]*?)\x00BQEND\x00/g, '<blockquote class="border-l-4 border-[#4a154b] pl-3 text-slate-400 bg-white/5 my-0.5">$1</blockquote>');
   return html;
+}
+
+interface CreatedAgent {
+  id: string;
+  name: string;
+  a2aUrl: string | null;
+}
+
+function BuilderResultActions({ metadata }: { metadata: unknown }) {
+  const setAgentEditId = useAppStore((s) => s.setAgentEditId);
+  const router = useRouter();
+
+  if (!metadata || typeof metadata !== 'object') return null;
+  const m = metadata as { builder?: boolean; createdAgents?: CreatedAgent[] };
+  if (!m.builder || !Array.isArray(m.createdAgents) || m.createdAgents.length === 0) return null;
+
+  async function openDm(agentId: string) {
+    const res = await fetch('/api/dm', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userIds: [agentId] }),
+    });
+    if (res.ok) {
+      const conv = await res.json();
+      const key = conv.dmKey || conv.id;
+      router.push(`/workspace/dm/${encodeURIComponent(key)}`);
+    }
+  }
+
+  return (
+    <div className="mt-2 flex flex-wrap gap-1.5">
+      {m.createdAgents.map((agent) => (
+        <div
+          key={agent.id}
+          className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-[#1d9bd1]/10 border border-[#1d9bd1]/20 text-xs"
+        >
+          <Bot className="w-3 h-3 text-[#1d9bd1]" />
+          <span className="text-white font-medium">{agent.name}</span>
+          <button
+            onClick={() => openDm(agent.id)}
+            className="text-[#1d9bd1] hover:text-white transition-colors text-[11px] underline-offset-2 hover:underline"
+          >
+            DM
+          </button>
+          <span className="text-slate-600">·</span>
+          <button
+            onClick={() => setAgentEditId(agent.id)}
+            className="text-[#bcabbc] hover:text-white transition-colors flex items-center gap-1 text-[11px]"
+          >
+            <Pencil className="w-2.5 h-2.5" /> Edit
+          </button>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 function renderMessageContent(content: string): React.ReactNode {
@@ -403,7 +460,8 @@ export default function MessageItem({
       role="article"
       aria-label={`Message from ${senderName} at ${messageTime}`}
       className={cn(
-        'group relative flex items-start gap-3 px-4 hover:bg-white/[0.03] rounded-lg transition-colors',
+        'group relative flex items-start gap-3 px-4 hover:bg-white/[0.03] transition-colors',
+        'before:absolute before:left-0 before:top-0 before:bottom-0 before:w-[3px] before:bg-[#1d9bd1] before:opacity-0 before:transition-opacity hover:before:opacity-100',
         isCompact ? 'py-0.5' : 'py-1.5',
         isAgentResponse && 'bg-[#1d9bd1]/5 border-l-2 border-[#1d9bd1]/30',
         isMentioned && 'border-l-4 border-yellow-500 bg-yellow-500/5'
@@ -528,6 +586,8 @@ export default function MessageItem({
               {renderMessageContent(message.content)}
             </p>
 
+            <BuilderResultActions metadata={message.metadata} />
+
             {/* OG link preview — T6 */}
             {firstUrl && (/\.(jpe?g|png|gif|webp|svg)(\?.*)?$/i.test(firstUrl) ? (
               <div
@@ -617,7 +677,7 @@ export default function MessageItem({
 
         {/* Reactions — T8: tooltip showing who reacted */}
         {message.reactions && message.reactions.length > 0 && (
-          <div className="flex flex-wrap gap-1 mt-1.5">
+          <div className="flex flex-wrap items-center gap-1 mt-1.5">
             <TooltipProvider>
               {message.reactions.map(reaction => {
                 const iReacted = reaction.userIds.includes(currentUserId ?? '');
@@ -658,17 +718,47 @@ export default function MessageItem({
                 );
               })}
             </TooltipProvider>
+            <ReactionPicker
+              onSelect={handleReaction}
+              open={reactionPickerOpen}
+              onOpenChange={setReactionPickerOpen}
+              triggerClassName="inline-flex items-center justify-center h-[22px] px-1.5 rounded-full border border-white/10 bg-white/5 text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
+              triggerIcon={<SmilePlus className="w-3 h-3" />}
+              triggerTitle="Add reaction"
+            />
           </div>
         )}
 
-        {/* Thread count */}
+        {/* Thread preview — Slack-style: avatar stack + reply count + last reply time */}
         {!isThreadView && message.threadCount && message.threadCount > 0 ? (
           <button
             onClick={() => setActiveThread(message.id)}
-            className="flex items-center gap-1.5 mt-1.5 text-xs text-[#1d9bd1] hover:text-[#1d9bd1]/80 hover:underline"
+            className="group/thread flex items-center gap-2 mt-1.5 -ml-1 pl-1 pr-2 py-1 rounded-md border border-transparent hover:border-white/10 hover:bg-white/5 transition-colors"
           >
-            <MessageSquare className="w-3.5 h-3.5" />
-            {message.threadCount} {message.threadCount === 1 ? 'reply' : 'replies'}
+            <div className="flex -space-x-1.5">
+              {(message.threadParticipants ?? []).slice(0, 4).map(p => {
+                const initials = p.displayName.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+                return (
+                  <Avatar key={p.id} size="sm" className="w-5 h-5 ring-2 ring-[#1a1d21] after:border-0">
+                    {p.avatarUrl && <AvatarImage src={p.avatarUrl} alt={p.displayName} />}
+                    <AvatarFallback className={cn('text-[9px]', p.isAgent ? 'bg-[#1d9bd1]/30 text-[#1d9bd1]' : 'bg-[#4a154b] text-white')}>
+                      {initials}
+                    </AvatarFallback>
+                  </Avatar>
+                );
+              })}
+            </div>
+            <span className="text-xs font-semibold text-[#1d9bd1] group-hover/thread:underline">
+              {message.threadCount} {message.threadCount === 1 ? 'reply' : 'replies'}
+            </span>
+            {message.threadLastReplyAt && (
+              <span className="text-xs text-slate-500 group-hover/thread:text-slate-300">
+                Last reply {formatDistanceToNowStrict(new Date(message.threadLastReplyAt), { addSuffix: true })}
+              </span>
+            )}
+            <span className="text-xs text-slate-500 opacity-0 group-hover/thread:opacity-100 transition-opacity ml-auto">
+              View thread →
+            </span>
           </button>
         ) : null}
       </div>

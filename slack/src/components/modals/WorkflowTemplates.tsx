@@ -1,10 +1,47 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import useSWR from 'swr';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Loader2 } from 'lucide-react';
 import type { WorkflowStep } from '@/lib/workflow/types';
+import { NEWSROOM_TEMPLATE } from '@/lib/workflow/templates/notion-newsroom';
+
+const fetcher = (url: string) => fetch(url).then((r) => r.json());
+
+function templateNeedsChannel(template: WorkflowTemplate): boolean {
+  const walk = (steps: WorkflowStep[]): boolean => {
+    for (const s of steps) {
+      if (
+        ('channel' in s && (s.channel as string | undefined) === '') ||
+        (s.type === 'form' && s.submitToChannel === '')
+      )
+        return true;
+      if (s.type === 'condition') {
+        if (walk(s.then) || walk(s.else ?? [])) return true;
+      }
+    }
+    return false;
+  };
+  const trigCfg = template.triggerConfig as { channel?: string };
+  if (trigCfg.channel === '') return true;
+  return walk(template.steps);
+}
+
+function substituteChannel(steps: WorkflowStep[], channel: string): WorkflowStep[] {
+  return steps.map((step) => {
+    const s = step as unknown as Record<string, unknown>;
+    const next = { ...s };
+    if ('channel' in next && next.channel === '') next.channel = channel;
+    if (step.type === 'form' && next.submitToChannel === '') next.submitToChannel = channel;
+    if (step.type === 'condition') {
+      next.then = substituteChannel(step.then, channel);
+      if (step.else) next.else = substituteChannel(step.else, channel);
+    }
+    return next as WorkflowStep;
+  });
+}
 
 interface WorkflowTemplate {
   name: string;
@@ -21,17 +58,17 @@ const TEMPLATES: WorkflowTemplate[] = [
     description: 'When someone joins a channel, send them a welcome DM and add them to key channels.',
     icon: '👋',
     triggerType: 'channel_join',
-    triggerConfig: { channelId: '' },
+    triggerConfig: { channel: '' },
     steps: [
       {
         type: 'dm_user',
-        userId: '{{triggeredBy}}',
+        user: '{{triggeredBy}}',
         message: 'Welcome to the team! Here are some tips to get started:\n\n• Check out #general for announcements\n• Use /help for available commands\n\nLet us know if you need anything!',
       },
       {
         type: 'add_to_channel',
-        channelId: '',
-        userId: '{{triggeredBy}}',
+        channel: '',
+        user: '{{triggeredBy}}',
       },
     ],
   },
@@ -61,7 +98,7 @@ const TEMPLATES: WorkflowTemplate[] = [
       },
       {
         type: 'approval',
-        approverUserId: '',
+        approver: '',
         message: 'Time off request from {{triggeredBy}}:\n\n• Dates: {{form.start_date}} to {{form.end_date}}\n• Type: {{form.type}}\n• Reason: {{form.reason}}',
         saveAs: 'approval',
       },
@@ -71,14 +108,14 @@ const TEMPLATES: WorkflowTemplate[] = [
         then: [
           {
             type: 'dm_user',
-            userId: '{{triggeredBy}}',
+            user: '{{triggeredBy}}',
             message: 'Your time off request has been **approved**! Enjoy your time off.',
           },
         ],
         else: [
           {
             type: 'dm_user',
-            userId: '{{triggeredBy}}',
+            user: '{{triggeredBy}}',
             message: 'Your time off request was **rejected**. Please reach out to your manager for more information.',
           },
         ],
@@ -112,7 +149,7 @@ const TEMPLATES: WorkflowTemplate[] = [
       },
       {
         type: 'post_to_channel',
-        channelId: '',
+        channel: '',
         message: '**Bug Report: {{form.title}}**\n\nSeverity: {{form.severity}}\nReported by: {{triggeredBy}}\n\n**Steps to reproduce:**\n{{form.steps}}\n\n**Expected:** {{form.expected}}\n**Actual:** {{form.actual}}',
       },
     ],
@@ -136,11 +173,176 @@ const TEMPLATES: WorkflowTemplate[] = [
       },
       {
         type: 'post_to_channel',
-        channelId: '',
+        channel: '',
         message: '**Standup Update**\n\n**Yesterday:** {{standup.yesterday}}\n**Today:** {{standup.today}}\n**Blockers:** {{standup.blockers}}',
       },
     ],
   },
+  {
+    name: 'Newsroom article pipeline',
+    description:
+      'Reporter drafts → Editor edits → FactChecker verifies → Publisher finalizes and writes to canvas.',
+    icon: '📰',
+    triggerType: 'shortcut',
+    triggerConfig: { label: 'Write news article' },
+    steps: [
+      {
+        type: 'form',
+        title: 'Article topic',
+        fields: [
+          { name: 'topic', label: 'Topic', type: 'text', required: true },
+          { name: 'lang', label: 'Language (ko/en)', type: 'select', options: ['ko', 'en'], required: false },
+        ],
+        saveAs: 'brief',
+      },
+      // Create a dedicated canvas for this article — its ID flows through all agent steps
+      {
+        type: 'create_canvas',
+        channel: '',
+        title: '{{brief.topic}}',
+        topic: '{{brief.topic}}',
+        saveAs: 'articleCanvasId',
+      },
+      {
+        type: 'invoke_skill',
+        agent: 'Reporter',
+        skillId: 'draft-article',
+        inputs: { topic: '{{brief.topic}}', lang: '{{brief.lang}}', canvasId: '{{articleCanvasId}}' },
+        saveAs: 'draft',
+      },
+      {
+        type: 'invoke_skill',
+        agent: 'Editor',
+        skillId: 'edit-draft',
+        inputs: { draft: '{{draft}}', canvasId: '{{articleCanvasId}}' },
+        saveAs: 'edited',
+      },
+      {
+        type: 'invoke_skill',
+        agent: 'FactChecker',
+        skillId: 'verify-article',
+        inputs: { article: '{{edited}}', canvasId: '{{articleCanvasId}}' },
+        saveAs: 'verdict',
+      },
+      {
+        type: 'invoke_skill',
+        agent: 'Publisher',
+        skillId: 'finalize-article',
+        inputs: { article: '{{edited}}', verdict: '{{verdict}}', canvasId: '{{articleCanvasId}}' },
+        saveAs: 'final',
+      },
+      {
+        type: 'post_to_channel',
+        channel: '',
+        message: '**[PUBLISHED ✅]** {{brief.topic}}\n\nFull article written to canvas.',
+      },
+    ],
+  },
+  {
+    name: 'Unblock 편집 파이프라인',
+    description:
+      '채널 메시지 트리거 → Damien 배정 → 기자 리포트 → 팀장 가이드 → 초안 → 피드백 → 수정 → 최종 승인 (7단계 A2A 파이프라인)',
+    icon: '📝',
+    triggerType: 'channel_message',
+    triggerConfig: { channel: 'unblockmedia-test-1', pattern: 'start-writing-article' },
+    steps: [
+      // Step 1: Damien assigns reporter + manager
+      {
+        type: 'invoke_skill',
+        agent: 'damien',
+        skillId: 'assignment',
+        inputs: {
+          TODAY_DATE: new Date().toISOString().slice(0, 10),
+          BASIC_ARTICLE_SOURCE: '{{trigger.body}}',
+        },
+        saveAs: 'assignment',
+      },
+      // Step 2: Parse assignment to extract reporter/manager IDs
+      {
+        type: 'parse_assignment',
+        input: '{{assignment}}',
+        saveAs: 'routing',
+      },
+      // Step 3: Reporter market research
+      {
+        type: 'invoke_skill',
+        agent: '{{routing.reporter}}',
+        skillId: 'report',
+        inputs: {
+          TODAY_DATE: new Date().toISOString().slice(0, 10),
+          BASIC_ARTICLE_SOURCE: '{{trigger.body}}',
+          CHIEF_COMMENT: '{{assignment}}',
+        },
+        saveAs: 'report',
+      },
+      // Step 4: Manager gives writing guide
+      {
+        type: 'invoke_skill',
+        agent: '{{routing.manager}}',
+        skillId: 'guide',
+        inputs: {
+          REPORTER: '{{routing.reporterKor}}',
+          MARKET_RESEARCH: '{{report}}',
+        },
+        saveAs: 'guide',
+      },
+      // Step 5: Reporter writes article draft
+      {
+        type: 'invoke_skill',
+        agent: '{{routing.reporter}}',
+        skillId: 'writing',
+        inputs: {
+          MARKET_RESEARCH: '{{report}}',
+          ARTICLE_GUIDE: '{{guide}}',
+        },
+        saveAs: 'draft',
+      },
+      // Step 6: Manager feedback on draft
+      {
+        type: 'invoke_skill',
+        agent: '{{routing.manager}}',
+        skillId: 'feedback',
+        inputs: {
+          REPORTER: '{{routing.reporterKor}}',
+          TODAY_DATE: new Date().toISOString().slice(0, 10),
+          BASIC_ARTICLE_SOURCE: '{{trigger.body}}',
+          ARTICLE_DRAFT: '{{draft}}',
+        },
+        saveAs: 'feedback',
+      },
+      // Step 7: Reporter revises based on feedback
+      {
+        type: 'invoke_skill',
+        agent: '{{routing.reporter}}',
+        skillId: 'revision',
+        inputs: {
+          ARTICLE_DRAFT: '{{draft}}',
+          MANAGER_FEEDBACK: '{{feedback}}',
+        },
+        saveAs: 'revision',
+      },
+      // Step 8: Damien confirms or rejects
+      {
+        type: 'invoke_skill',
+        agent: 'damien',
+        skillId: 'confirm',
+        inputs: {
+          REPORTER: '{{routing.reporterKor}}',
+          TODAY_DATE: new Date().toISOString().slice(0, 10),
+          CORRECTED_ARTICLE: '{{revision}}',
+        },
+        saveAs: 'confirm',
+      },
+      // Step 9: Post result to channel
+      {
+        type: 'post_to_channel',
+        channel: '',
+        message:
+          '**[편집 파이프라인 완료]** {{routing.reporterKor}} 기자 기사\n\n{{confirm}}',
+      },
+    ],
+  },
+  NEWSROOM_TEMPLATE,
 ];
 
 interface WorkflowTemplatesProps {
@@ -158,11 +360,45 @@ export default function WorkflowTemplates({
 }: WorkflowTemplatesProps) {
   const [creating, setCreating] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [channelByTemplate, setChannelByTemplate] = useState<Record<string, string>>({});
+
+  const { data: channels } = useSWR<Array<{ id: string; name: string }>>(
+    open ? '/api/channels' : null,
+    fetcher
+  );
+
+  useEffect(() => {
+    if (!channels || channels.length === 0) return;
+    const pref =
+      channels.find((c) => /newsroom/i.test(c.name)) ??
+      channels.find((c) => /general/i.test(c.name)) ??
+      channels[0];
+    setChannelByTemplate((prev) => {
+      const next = { ...prev };
+      for (const t of TEMPLATES) {
+        if (templateNeedsChannel(t) && !next[t.name]) next[t.name] = pref.name;
+      }
+      return next;
+    });
+  }, [channels]);
 
   async function handleUseTemplate(template: WorkflowTemplate) {
     setCreating(template.name);
     setError(null);
     try {
+      const needsChannel = templateNeedsChannel(template);
+      const pickedChannel = channelByTemplate[template.name] || '';
+      if (needsChannel && !pickedChannel) {
+        throw new Error('Pick a target channel for this template first.');
+      }
+      const resolvedSteps = needsChannel
+        ? substituteChannel(template.steps, pickedChannel)
+        : template.steps;
+      const resolvedTriggerCfg = { ...template.triggerConfig };
+      if ((resolvedTriggerCfg as { channel?: string }).channel === '') {
+        (resolvedTriggerCfg as { channel?: string }).channel = pickedChannel;
+      }
+
       const res = await fetch('/api/workflows', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -170,8 +406,8 @@ export default function WorkflowTemplates({
           name: template.name,
           description: template.description,
           triggerType: template.triggerType,
-          triggerConfig: template.triggerConfig,
-          steps: template.steps,
+          triggerConfig: resolvedTriggerCfg,
+          steps: resolvedSteps,
           workspaceId,
         }),
       });
@@ -205,7 +441,15 @@ export default function WorkflowTemplates({
               key={template.name}
               className="border border-white/10 rounded-lg p-4 bg-white/5 flex items-start gap-3"
             >
-              <span className="text-2xl shrink-0">{template.icon}</span>
+              <span
+                className="text-2xl shrink-0 w-8 h-8 flex items-center justify-center leading-none"
+                style={{
+                  fontFamily:
+                    '"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji","EmojiOne Color","Android Emoji",sans-serif',
+                }}
+              >
+                {template.icon}
+              </span>
               <div className="flex-1 min-w-0">
                 <h3 className="text-sm font-medium text-white">{template.name}</h3>
                 <p className="text-xs text-slate-400 mt-0.5">{template.description}</p>
@@ -217,6 +461,26 @@ export default function WorkflowTemplates({
                     {template.steps.length} step{template.steps.length !== 1 ? 's' : ''}
                   </span>
                 </div>
+                {templateNeedsChannel(template) && (
+                  <div className="mt-2 flex items-center gap-2">
+                    <label className="text-xs text-slate-400">Target channel:</label>
+                    <select
+                      value={channelByTemplate[template.name] ?? ''}
+                      onChange={(e) =>
+                        setChannelByTemplate((prev) => ({
+                          ...prev,
+                          [template.name]: e.target.value,
+                        }))
+                      }
+                      className="bg-[#0f1114] border border-white/10 rounded px-2 py-1 text-xs text-white"
+                    >
+                      <option value="">— pick —</option>
+                      {(channels ?? []).map((c) => (
+                        <option key={c.id} value={c.name}>#{c.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
               </div>
               <Button
                 size="sm"

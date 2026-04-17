@@ -16,6 +16,8 @@ interface DMConversation {
     displayName: string;
     avatarUrl?: string | null;
     isAgent: boolean;
+    ainAddress?: string;
+    a2aId?: string | null;
   } | null;
   latestMessage?: {
     content: string;
@@ -69,7 +71,10 @@ export default function DMsPage() {
             <button
               key={conv.id}
               className="w-full flex items-center gap-3 px-4 py-3 hover:bg-white/[0.03] border-b border-white/5 transition-colors text-left"
-              onClick={() => router.push(`/workspace/dm/${conv.id}`)}
+              onClick={() => {
+                const key = conv.otherUser?.a2aId || conv.otherUser?.ainAddress;
+                router.push(`/workspace/dm/${encodeURIComponent(key || conv.id)}`);
+              }}
             >
               <Avatar className="w-9 h-9 shrink-0">
                 {displayUser?.avatarUrl && (

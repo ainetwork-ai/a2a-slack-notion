@@ -22,39 +22,48 @@ const TAVILY_URL = 'https://api.tavily.com/search';
  * context available" and proceed without blocking the user response
  * (silent degradation is preferable to a hard failure).
  */
-export async function webSearch(query: string): Promise<SearchResult[]> {
+export async function webSearch(
+  query: string,
+  timeRange?: string,
+): Promise<{ results: SearchResult[]; timeRange?: string }> {
   const apiKey = process.env.TAVILY_API_KEY;
-  if (!apiKey) return [];
+  if (!apiKey) return { results: [] };
 
   try {
+    const payload: Record<string, unknown> = {
+      api_key: apiKey,
+      query,
+      max_results: 10,
+      topic: 'news', // news-focused results; matches parent project
+    };
+    if (timeRange) {
+      payload.time_range = timeRange;
+    }
+
     const resp = await fetch(TAVILY_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        api_key: apiKey,
-        query,
-        max_results: 10,
-        topic: 'news', // news-focused results; matches parent project
-      }),
+      body: JSON.stringify(payload),
     });
 
     if (!resp.ok) {
       console.warn(`[search] Tavily returned ${resp.status}`);
-      return [];
+      return { results: [] };
     }
 
     const data = (await resp.json()) as {
       results?: Array<{ title: string; url: string; content: string }>;
     };
 
-    return (data.results ?? []).map((r) => ({
+    const results = (data.results ?? []).map((r) => ({
       title: r.title,
       url: r.url,
       snippet: r.content,
     }));
+    return { results, timeRange: results.length > 0 ? timeRange : undefined };
   } catch (err) {
     console.warn('[search] Tavily error:', err);
-    return [];
+    return { results: [] };
   }
 }
 
@@ -77,8 +86,8 @@ export async function searchForReport(source: string): Promise<string> {
 
   // Step 1: generate 3 queries from the source.
   const queryPrompt =
-    `다음 기사 자료를 바탕으로, 이 주제를 더 조사하는 데 도움이 될 구체적인 웹 검색 쿼리 3개를 생성하세요. ` +
-    `번호나 추가 텍스트 없이 한 줄에 하나씩 쿼리만 반환하세요.\n\n<자료>\n${source}`;
+    `Based on the following article source, generate 3 specific web search queries that would help investigate this topic further. ` +
+    `Return only the queries, one per line, without numbering or additional text.\n\n<Source>\n${source}`;
 
   let queries: string[] = [];
   try {
@@ -95,13 +104,40 @@ export async function searchForReport(source: string): Promise<string> {
 
   if (queries.length === 0) return '';
 
-  // Step 2: parallel search across queries.
-  const allResults = (await Promise.all(queries.map((q) => webSearch(q)))).flat();
+  // Step 2: parallel search across queries with progressive time-range
+  // fallback: day → week → month → no filter. For each query, use the
+  // first timeRange that returns results.
+  const TIME_RANGES: Array<string | undefined> = ['day', 'week', 'month', undefined];
+  const TIME_RANGE_LABELS: Record<string, string> = {
+    day: 'within last 24 hours',
+    week: 'within last week',
+    month: 'within last month',
+  };
+  const NO_RANGE_LABEL = 'date unknown';
+
+  interface TaggedResult extends SearchResult {
+    timeRangeLabel: string;
+  }
+
+  async function searchWithFallback(query: string): Promise<TaggedResult[]> {
+    for (const tr of TIME_RANGES) {
+      const { results } = await webSearch(query, tr);
+      if (results.length > 0) {
+        const label = tr ? TIME_RANGE_LABELS[tr] : NO_RANGE_LABEL;
+        return results.map((r) => ({ ...r, timeRangeLabel: label }));
+      }
+    }
+    return [];
+  }
+
+  const allResults: TaggedResult[] = (
+    await Promise.all(queries.map((q) => searchWithFallback(q)))
+  ).flat();
   if (allResults.length === 0) return '';
 
   // Step 3: dedup by URL, keep insertion order.
   const seen = new Set<string>();
-  const unique: SearchResult[] = [];
+  const unique: TaggedResult[] = [];
   for (const r of allResults) {
     if (!r.url || seen.has(r.url)) continue;
     seen.add(r.url);
@@ -111,8 +147,9 @@ export async function searchForReport(source: string): Promise<string> {
 
   if (unique.length === 0) return '';
 
-  // Step 4: format as markdown-link blocks. Matches the shape the
-  // Notion pipeline prompt was written against — the LLM is primed
-  // to quote these links and dates directly in its article.
-  return unique.map((r) => `[${r.title}](${r.url})\n${r.snippet}`).join('\n\n');
+  // Step 4: format as markdown-link blocks. Each result is tagged with
+  // the time range it came from so the LLM can cite dates accurately.
+  return unique
+    .map((r) => `[${r.title}](${r.url}) (${r.timeRangeLabel})\n${r.snippet}`)
+    .join('\n\n');
 }

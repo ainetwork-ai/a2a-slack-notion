@@ -3,6 +3,7 @@ import { canvases, channels, channelMembers, workspaceMembers } from "@/lib/db/s
 import { eq, and, ilike, or } from "drizzle-orm";
 import { requireAuth } from "@/lib/auth/middleware";
 import { NextRequest, NextResponse } from "next/server";
+import { resolveWorkspaceParam } from "@/lib/resolve";
 
 export async function POST(request: NextRequest) {
   const auth = await requireAuth();
@@ -64,12 +65,17 @@ export async function GET(request: NextRequest) {
   const { user } = auth;
 
   const { searchParams } = new URL(request.url);
-  const workspaceId = searchParams.get("workspaceId");
+  const workspaceRef = searchParams.get("workspaceId");
   const q = searchParams.get("q");
 
-  if (!workspaceId) {
+  if (!workspaceRef) {
     return NextResponse.json({ error: "workspaceId is required" }, { status: 400 });
   }
+  const ws = await resolveWorkspaceParam(workspaceRef);
+  if (!ws) {
+    return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
+  }
+  const workspaceId = ws.id;
 
   // Verify user is a member of the workspace
   const [membership] = await db

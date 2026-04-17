@@ -7,7 +7,7 @@
 import { db } from "@/lib/db";
 import { users, workspaceMembers, channels, channelMembers, agentSkillConfigs } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
-import { v4 as uuidv4 } from "uuid";
+import type { AgentCard } from "@a2a-js/sdk";
 
 // ─── Agent templates (used by both LLM path and fallback) ─────────────────────
 
@@ -317,23 +317,35 @@ async function createAgent(
     ainAddress = "0x" + crypto.randomBytes(20).toString("hex");
   }
 
-  // Standard A2A agent card: only id, name, description, skills (with id, name, description, tags, examples)
+  const appUrl = (process.env.NEXT_PUBLIC_APP_URL || "").replace(/\/$/, "");
+  const a2aUrl = appUrl ? `${appUrl}/api/a2a/${a2aId}` : null;
+
+  // A2A-compliant agent card (conforms to @a2a-js/sdk AgentCard interface)
   const defaultSkillId = role;
-  const agentCard = {
+  const agentCard: AgentCard = {
     name: def.name,
     description,
+    url: a2aUrl || `/api/a2a/${a2aId}`,
+    protocolVersion: "0.3.0",
+    version: "1.0.0",
+    capabilities: {
+      streaming: false,
+      pushNotifications: false,
+      stateTransitionHistory: false,
+    },
+    defaultInputModes: ["text/plain"],
+    defaultOutputModes: ["text/plain"],
     skills: [
       {
         id: defaultSkillId,
         name: def.name,
         description,
         tags: [role],
+        examples: [],
       },
     ],
+    provider: { organization: "Slack-A2A", url: appUrl || "" },
   };
-
-  const appUrl = (process.env.NEXT_PUBLIC_APP_URL || "").replace(/\/$/, "");
-  const a2aUrl = appUrl ? `${appUrl}/api/a2a/${a2aId}` : null;
 
   const [agent] = await db
     .insert(users)

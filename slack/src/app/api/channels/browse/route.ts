@@ -3,13 +3,14 @@ import { channels, channelMembers } from "@/lib/db/schema";
 import { eq, and, desc, sql, ilike, inArray } from "drizzle-orm";
 import { requireAuth } from "@/lib/auth/middleware";
 import { NextRequest, NextResponse } from "next/server";
+import { resolveWorkspaceIdQuery } from "@/lib/resolve";
 
 export async function GET(request: NextRequest) {
   const auth = await requireAuth();
   if ("error" in auth) return auth.error;
   const { user } = auth;
 
-  const workspaceId = request.nextUrl.searchParams.get("workspaceId");
+  const workspaceId = await resolveWorkspaceIdQuery(request);
   const q = request.nextUrl.searchParams.get("q");
 
   // Build conditions for all public, non-archived channels

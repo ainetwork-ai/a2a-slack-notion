@@ -28,7 +28,7 @@ export class UnblockExecutor implements AgentExecutor {
   /**
    * Substitute `^VAR^` placeholders in a pipeline prompt with values the
    * caller supplied in `metadata.variables`. Any placeholder the caller
-   * did not provide is replaced with a visible "(제공되지 않음)" marker so
+   * did not provide is replaced with a visible "(not provided)" marker so
    * the LLM treats it as a missing field rather than a literal token.
    *
    * Keys in `variables` match the placeholder name without the carets —
@@ -50,7 +50,7 @@ export class UnblockExecutor implements AgentExecutor {
     }
     // Scrub any ^VAR^ the caller didn't provide so the LLM doesn't echo
     // the literal placeholder back into its response.
-    out = out.replace(/\^[A-Z_]+\^/g, '(제공되지 않음)');
+    out = out.replace(/\^[A-Z_]+\^/g, '(not provided)');
     return out;
   }
 
@@ -91,8 +91,8 @@ export class UnblockExecutor implements AgentExecutor {
     const skillPrompt = this.substituteVariables(raw, vars);
     const authoritativeDate =
       `⚠ CURRENT DATE (authoritative, KST): ${todayValue}\n` +
-      `위 날짜는 서버 시계 기준이며 반드시 그대로 사용하세요. ` +
-      `학습 데이터 시점으로 "보정"하지 마세요. 이 날짜가 미래처럼 느껴져도 실제 오늘입니다.`;
+      `This date is from the server clock and must be used as-is. ` +
+      `Do NOT "correct" it to your training data cutoff. Even if this date feels like the future, it is today.`;
 
     // Append Tavily search results as a `<Web Search Results>` block at
     // the end, matching the exact section name the Notion pipeline
@@ -118,6 +118,8 @@ export class UnblockExecutor implements AgentExecutor {
       typeof userMessage.metadata?.skillId === 'string'
         ? userMessage.metadata.skillId
         : undefined;
+
+    const debug = userMessage.metadata?.debug === true;
 
     // Optional per-call template variables. Each key/value corresponds to
     // a `^KEY^` placeholder in the pipeline prompt (see FOLLOWUPS.md,
@@ -161,8 +163,23 @@ export class UnblockExecutor implements AgentExecutor {
     try {
       const responseText = await callLLM([
         { role: 'system', content: systemPrompt },
-        { role: 'user', content: userText || '안녕하세요.' },
+        { role: 'user', content: userText || 'Hello.' },
       ]);
+
+      const replyMeta: Record<string, unknown> = {};
+      if (skillId) replyMeta.skillId = skillId;
+      if (debug) replyMeta.systemPrompt = systemPrompt;
+
+      // For confirm skill: ask LLM to judge if the response is approval or rejection.
+      if (skillId === 'confirm') {
+        const verdictResponse = await callLLM([
+          {
+            role: 'user',
+            content: `The following is an editor-in-chief's verdict on a reporter's article. Determine whether this verdict is an "approval" or a "rejection", and respond with only one word: true or false. Approval = true, Rejection = false.\n\n"""${responseText}"""`,
+          },
+        ]);
+        replyMeta.approved = verdictResponse.trim().toLowerCase() === 'true';
+      }
 
       const reply: Message = {
         kind: 'message',
@@ -170,7 +187,7 @@ export class UnblockExecutor implements AgentExecutor {
         role: 'agent',
         parts: [{ kind: 'text', text: responseText }],
         contextId,
-        ...(skillId && { metadata: { skillId } }),
+        ...(Object.keys(replyMeta).length > 0 && { metadata: replyMeta }),
       };
       eventBus.publish(reply);
     } catch (err) {

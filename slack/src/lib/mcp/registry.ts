@@ -219,6 +219,32 @@ export const MCP_SERVERS: McpServer[] = [
           content: { type: "string", required: true, description: "Markdown to append" },
         },
       },
+      {
+        name: "canvas_update_section",
+        description: "Update a named section inside a canvas by canvasId. Creates the section if it does not exist. Use this instead of canvas_write to avoid overwriting other agents' sections.",
+        parameters: {
+          canvasId: { type: "string", required: true, description: "Canvas ID" },
+          section: { type: "string", required: true, description: "Section name: draft | edits | fact-check | final" },
+          content: { type: "string", required: true, description: "Markdown body for this section" },
+          status: { type: "string", required: false, description: "Section status: pending | running | complete" },
+        },
+      },
+      {
+        name: "canvas_read_section",
+        description: "Read a named section from a canvas. Returns only that section body, saving tokens vs reading the full canvas.",
+        parameters: {
+          canvasId: { type: "string", required: true, description: "Canvas ID" },
+          section: { type: "string", required: true, description: "Section name to read" },
+        },
+      },
+      {
+        name: "canvas_set_status",
+        description: "Update the pipeline status of a canvas after completing your stage.",
+        parameters: {
+          canvasId: { type: "string", required: true, description: "Canvas ID" },
+          status: { type: "string", required: true, description: "New status: draft | edited | fact-checked | published" },
+        },
+      },
     ],
   },
 ];

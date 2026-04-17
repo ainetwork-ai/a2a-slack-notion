@@ -152,18 +152,18 @@ export default function ChannelDetailPanel({
   ];
 
   return (
-    <div className="flex flex-col w-72 border-l border-white/5 bg-[#1a1d21] shrink-0 h-full overflow-hidden">
+    <div className="flex flex-col w-80 border-l border-white/5 bg-[#1a1d21] shrink-0 h-full overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between px-4 h-12 border-b border-white/5 shrink-0">
-        <div className="flex items-center gap-1.5">
-          <Hash className="w-4 h-4 text-slate-400" />
-          <span className="font-semibold text-white text-sm truncate">{channelName}</span>
+        <div className="flex items-center gap-2 min-w-0">
+          <Hash className="w-[18px] h-[18px] text-slate-400 shrink-0" />
+          <span className="font-semibold text-white text-[15px] truncate">{channelName}</span>
         </div>
         <Button
           size="icon"
           variant="ghost"
           onClick={onClose}
-          className="w-7 h-7 text-slate-400 hover:text-white hover:bg-white/10"
+          className="w-8 h-8 text-slate-400 hover:text-white hover:bg-white/10"
         >
           <X className="w-4 h-4" />
         </Button>
@@ -176,7 +176,7 @@ export default function ChannelDetailPanel({
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
             className={cn(
-              'flex-1 py-2 text-xs font-medium transition-colors relative',
+              'flex-1 py-2.5 text-[13px] font-medium transition-colors relative',
               activeTab === tab.id
                 ? 'text-white'
                 : 'text-slate-400 hover:text-white'
@@ -184,7 +184,7 @@ export default function ChannelDetailPanel({
           >
             {tab.label}
             {tab.count !== undefined && tab.count > 0 && (
-              <span className="ml-1 text-[10px] text-slate-500">{tab.count}</span>
+              <span className="ml-1 text-[11px] text-slate-500">{tab.count}</span>
             )}
             {activeTab === tab.id && (
               <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#4a154b]" />
@@ -198,19 +198,19 @@ export default function ChannelDetailPanel({
         {activeTab === 'about' && (
           <div className="p-4 space-y-4">
             <div>
-              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Description</p>
-              <p className="text-sm text-slate-300">
+              <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Description</p>
+              <p className="text-[15px] text-slate-300 leading-relaxed">
                 {channelDescription || <span className="text-slate-500 italic">No description set</span>}
               </p>
             </div>
             {createdAt && (
               <div>
-                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Created</p>
-                <p className="text-sm text-slate-300">{format(new Date(createdAt), 'MMMM d, yyyy')}</p>
+                <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Created</p>
+                <p className="text-[15px] text-slate-300">{format(new Date(createdAt), 'MMMM d, yyyy')}</p>
               </div>
             )}
             <div>
-              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Channel ID</p>
+              <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Channel ID</p>
               <p className="text-xs text-slate-500 font-mono break-all">{channelId}</p>
             </div>
             {isAdmin && onArchiveToggle && (
@@ -271,13 +271,13 @@ export default function ChannelDetailPanel({
                     key={member.id}
                     className="flex items-center gap-3 px-4 py-2 hover:bg-white/5 transition-colors"
                   >
-                    <Avatar className="w-8 h-8 shrink-0">
+                    <Avatar className="w-9 h-9 shrink-0">
                       {member.avatarUrl && <AvatarImage src={member.avatarUrl} alt={member.displayName} />}
                       <AvatarFallback className="text-xs bg-[#4a154b] text-white">{initials}</AvatarFallback>
                     </Avatar>
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1">
-                        <p className="text-sm text-white truncate">{member.displayName}</p>
+                      <div className="flex items-center gap-1.5">
+                        <p className="text-[15px] text-white truncate">{member.displayName}</p>
                         {member.isAgent && (
                           <Badge className="text-[10px] px-1 py-0 h-4 bg-[#36c5f0]/20 text-[#36c5f0] border-[#36c5f0]/30 shrink-0">
                             Bot
@@ -330,13 +330,13 @@ export default function ChannelDetailPanel({
                   className="px-4 py-3 border-b border-white/5 last:border-0"
                 >
                   <div className="flex items-center gap-1.5 mb-1">
-                    <Pin className="w-3 h-3 text-[#e8912d]" />
-                    <span className="text-xs font-medium text-white">{msg.senderName}</span>
-                    <span className="text-[10px] text-slate-500">
+                    <Pin className="w-3.5 h-3.5 text-[#e8912d]" />
+                    <span className="text-sm font-medium text-white">{msg.senderName}</span>
+                    <span className="text-[11px] text-slate-500">
                       {format(new Date(msg.createdAt), 'MMM d')}
                     </span>
                   </div>
-                  <p className="text-xs text-slate-400 line-clamp-3">{msg.content}</p>
+                  <p className="text-sm text-slate-400 line-clamp-3 leading-relaxed">{msg.content}</p>
                 </div>
               ))
             )}

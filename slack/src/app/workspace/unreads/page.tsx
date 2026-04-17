@@ -104,7 +104,7 @@ export default function UnreadsPage() {
           <div key={channel.id}>
             <button
               className="flex items-center gap-1.5 text-sm font-semibold text-white mb-2 hover:text-[#36c5f0] transition-colors"
-              onClick={() => router.push(`/workspace/channel/${channel.id}`)}
+              onClick={() => router.push(`/workspace/channel/${encodeURIComponent(channel.name)}`)}
             >
               <Hash className="w-4 h-4 text-slate-400" />
               {channel.name}
@@ -117,7 +117,7 @@ export default function UnreadsPage() {
                 <div
                   key={msg.id}
                   className="group flex items-start gap-2 py-1 rounded hover:bg-white/[0.03] cursor-pointer"
-                  onClick={() => router.push(`/workspace/channel/${channel.id}`)}
+                  onClick={() => router.push(`/workspace/channel/${encodeURIComponent(channel.name)}`)}
                 >
                   <div className="min-w-0 flex-1">
                     <span className="text-xs font-semibold text-slate-300 mr-2">

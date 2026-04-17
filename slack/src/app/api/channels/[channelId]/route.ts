@@ -1,9 +1,10 @@
 import { db } from "@/lib/db";
-import { users, channels, channelMembers, messages } from "@/lib/db/schema";
-import { eq, and, desc, lt, sql, inArray, or, ilike } from "drizzle-orm";
+import { users, channels, channelMembers } from "@/lib/db/schema";
+import { eq, and } from "drizzle-orm";
 import { requireAuth } from "@/lib/auth/middleware";
 import { NextRequest, NextResponse } from "next/server";
 import { logAudit } from "@/lib/audit";
+import { resolveChannelParam } from "@/lib/resolve";
 
 export async function GET(
   _request: NextRequest,
@@ -13,7 +14,12 @@ export async function GET(
   if ("error" in auth) return auth.error;
   const { user } = auth;
 
-  const { channelId } = await params;
+  const { channelId: param } = await params;
+  const channel = await resolveChannelParam(param, user.id);
+  if (!channel) {
+    return NextResponse.json({ error: "Channel not found" }, { status: 404 });
+  }
+  const channelId = channel.id;
 
   const [membership] = await db
     .select()
@@ -23,16 +29,6 @@ export async function GET(
 
   if (!membership) {
     return NextResponse.json({ error: "Not a member" }, { status: 403 });
-  }
-
-  const [channel] = await db
-    .select()
-    .from(channels)
-    .where(eq(channels.id, channelId))
-    .limit(1);
-
-  if (!channel) {
-    return NextResponse.json({ error: "Channel not found" }, { status: 404 });
   }
 
   const members = await db
@@ -60,7 +56,12 @@ export async function PATCH(
   if ("error" in auth) return auth.error;
   const { user } = auth;
 
-  const { channelId } = await params;
+  const { channelId: param } = await params;
+  const channel = await resolveChannelParam(param, user.id);
+  if (!channel) {
+    return NextResponse.json({ error: "Channel not found" }, { status: 404 });
+  }
+  const channelId = channel.id;
 
   const [membership] = await db
     .select()
@@ -100,7 +101,12 @@ export async function DELETE(
   if ("error" in auth) return auth.error;
   const { user } = auth;
 
-  const { channelId } = await params;
+  const { channelId: param } = await params;
+  const channel = await resolveChannelParam(param, user.id);
+  if (!channel) {
+    return NextResponse.json({ error: "Channel not found" }, { status: 404 });
+  }
+  const channelId = channel.id;
 
   const [membership] = await db
     .select()
@@ -112,12 +118,10 @@ export async function DELETE(
     return NextResponse.json({ error: "Only owner can delete channel" }, { status: 403 });
   }
 
-  const [channelRow] = await db.select({ workspaceId: channels.workspaceId, name: channels.name }).from(channels).where(eq(channels.id, channelId)).limit(1);
-
   await db.delete(channels).where(eq(channels.id, channelId));
 
-  if (channelRow?.workspaceId) {
-    await logAudit(channelRow.workspaceId, user.id, "channel.delete", "channel", channelId, { name: channelRow.name });
+  if (channel.workspaceId) {
+    await logAudit(channel.workspaceId, user.id, "channel.delete", "channel", channelId, { name: channel.name });
   }
 
   return NextResponse.json({ success: true });

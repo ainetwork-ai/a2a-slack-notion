@@ -1,0 +1,110 @@
+{
+  "name": "Sealed Witness Agent",
+  "description": "A2A-compliant sealed-data Q&A agent: answers policy-permitted questions about sensitive datasets while keeping raw records inside a NEAR AI Cloud TEE. Designed for verifiable journalism, arms-control verification, and audit scenarios.",
+  "url": "https://near-bounty.example/agents/war-desk-source-shield",
+  "provider": {
+    "organization": "Beacon News"
+  },
+  "version": "0.3.0",
+  "documentationUrl": "https://near-bounty.example/docs/war-desk-source-shield",
+  "capabilities": {
+    "streaming": false,
+    "pushNotifications": false,
+    "stateTransitionHistory": true,
+    "extensions": [
+      {
+        "uri": "https://near-bounty.example/a2a/extensions/gdpr/v1",
+        "description": "Declares privacy/legal processing metadata and subject-rights handling.",
+        "required": true,
+        "params": {
+          "controller_name": "Beacon News",
+          "purpose_scope": ["journalism_sealed_data_qa", "arms_control_verification", "compliance_audit"],
+          "lawful_basis_supported": ["legitimate_interest", "public_interest"],
+          "retention_policy_days": 14,
+          "evidence_retention_days": 30,
+          "audit_retention_days": 30,
+          "region_policy": "policy_restricted",
+          "dsar_endpoint": "https://near-bounty.example/privacy/requests",
+          "subprocessor_disclosure": "https://near-bounty.example/privacy/subprocessors",
+          "policy_contract": {
+            "required_request_fields": [
+              "request_id",
+              "purpose_id",
+              "legal_basis",
+              "retention_days",
+              "tee_required"
+            ],
+            "allowed_purpose_ids": ["journalism_sealed_data_qa", "arms_control_verification", "compliance_audit"],
+            "max_retention_days": 30
+          }
+        }
+      },
+      {
+        "uri": "https://near-bounty.example/a2a/extensions/near-tee-attestation/v1",
+        "description": "Declares NEAR AI Cloud TEE execution attestation metadata and verification status.",
+        "required": true,
+        "params": {
+          "tee_required_default": true,
+          "attestation_mode": "fail_closed",
+          "tee_platform": "near_ai_cloud",
+          "tee_hardware": ["intel_tdx", "nvidia_h200_confidential_compute"],
+          "connection_mode": "direct_completions",
+          "model_slug": "qwen35-122b",
+          "default_model": "Qwen/Qwen3.5-122B-A10B",
+          "base_url": "https://qwen35-122b.completions.near.ai/v1",
+          "attestation_endpoint": "https://qwen35-122b.completions.near.ai/v1/attestation/report",
+          "signature_endpoint_template": "https://qwen35-122b.completions.near.ai/v1/signature/{chat_id}",
+          "gateway_fallback_base_url": "https://cloud-api.near.ai/v1",
+          "verifier_implementation": "nearai/nearai-cloud-verifier",
+          "signing_algo": "ecdsa",
+          "include_tls_fingerprint": true,
+          "tls_terminates_inside_tee": true,
+          "evidence_retention_days": 30,
+          "response_contract": {
+            "required_fields": [
+              "gdpr.processing_record_id",
+              "gdpr.retention_applied_days",
+              "gdpr.data_minimization_applied",
+              "gdpr.transfer_region",
+              "tee.platform",
+              "tee.connection_mode",
+              "tee.signing_address",
+              "tee.attestation_evidence_id",
+              "tee.chat_id",
+              "tee.response_signature_verified",
+              "tee.attestation_verified",
+              "tee.intel_tdx_verified",
+              "tee.nvidia_nras_verdict",
+              "tee.tls_fingerprint_bound"
+            ],
+            "sealed_qa_fields": [
+              "answer",
+              "data_slice_read",
+              "policy_decision",
+              "dataset_id"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "defaultInputModes": ["text"],
+  "defaultOutputModes": ["text", "application/json"],
+  "skills": [
+    {
+      "id": "sealed-qa",
+      "name": "Sealed Data Q&A",
+      "description": "Answer a policy-permitted question about a sealed dataset. Raw records stay inside the TEE; the answer comes with an attestation receipt and the list of fields actually read.",
+      "tags": ["journalism", "verification", "arms-control", "audit", "near-ai", "tee"],
+      "examples": [
+        "Was any enrichment above 20% observed during the period?",
+        "Total HEU-equivalent kg produced across all facilities in H1 2025.",
+        "How many months exceeded 19% peak enrichment?"
+      ]
+    }
+  ],
+  "security": {
+    "scheme": "service-http",
+    "note": "Calls must include policy context and extension negotiation headers. Inference is delegated to NEAR AI Cloud authenticated via NEAR_AI_API_KEY."
+  }
+}
