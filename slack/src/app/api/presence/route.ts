@@ -91,11 +91,7 @@ export async function GET(request: NextRequest) {
     .from(users)
     .where(inArray(users.id, ids));
 
-  // Agents are always online
-  const result = presences.map(p => ({
-    ...p,
-    status: p.isAgent ? "online" : p.status,
-  }));
+  const result = presences;
 
   return NextResponse.json(result);
 }

@@ -92,7 +92,7 @@ export default function DMList() {
     const userIds = conversations.flatMap(c =>
       c.isGroup
         ? (c.members ?? []).filter(m => !m.isAgent).map(m => m.userId)
-        : c.otherUser && !c.otherUser.isAgent ? [c.otherUser.id] : []
+        : c.otherUser ? [c.otherUser.id] : []
     );
     if (userIds.length > 0) fetchPresence(userIds);
   }, [conversations.map(c => c.id).join(',')]);

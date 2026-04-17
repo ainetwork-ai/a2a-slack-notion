@@ -63,6 +63,7 @@ export async function GET(
       displayName: users.displayName,
       avatarUrl: users.avatarUrl,
       isAgent: users.isAgent,
+      status: users.status,
       ainAddress: users.ainAddress,
       a2aId: users.a2aId,
     })

@@ -10,6 +10,13 @@ export interface Reaction {
   userNames: string[];
 }
 
+export interface ThreadParticipant {
+  id: string;
+  displayName: string;
+  avatarUrl?: string | null;
+  isAgent?: boolean;
+}
+
 export interface Message {
   id: string;
   content: string;
@@ -22,6 +29,8 @@ export interface Message {
   editedAt?: string;
   isEdited?: boolean;
   threadCount?: number;
+  threadLastReplyAt?: string | null;
+  threadParticipants?: ThreadParticipant[];
   reactions?: Reaction[];
   metadata?: Record<string, unknown>;
   parentId?: string;
@@ -42,6 +51,8 @@ function mapApiMessage(m: any): Message {
     editedAt: m.updatedAt !== m.createdAt ? m.updatedAt : undefined,
     isEdited: m.isEdited ?? false,
     threadCount: m.threadCount || 0,
+    threadLastReplyAt: m.threadLastReplyAt ?? null,
+    threadParticipants: Array.isArray(m.threadParticipants) ? m.threadParticipants : [],
     reactions: m.reactions
       ? Object.entries(m.reactions).map(([emoji, reactors]) => {
           const list = reactors as { userId: string; displayName: string }[];

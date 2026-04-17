@@ -28,6 +28,7 @@ interface ConversationMember {
   displayName: string;
   avatarUrl?: string;
   isAgent?: boolean;
+  status?: string;
 }
 
 interface Conversation {
@@ -132,7 +133,10 @@ export default function DMPage({ params }: { params: Promise<{ conversationId: s
 
   const { typingUsers } = useTyping(undefined, conversationId);
   const { isOnline } = usePresence();
-  const online = otherUser ? isOnline(otherUser.id) : false;
+  // For agents, use the DB status field; for humans, use real-time presence
+  const online = otherUser
+    ? (isAgent ? otherUser.status === "online" : isOnline(otherUser.id))
+    : false;
   const agentStream = useAgentStream();
 
   // Inject a synthetic typing entry for the agent while waiting for a response
