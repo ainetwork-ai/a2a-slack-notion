@@ -172,9 +172,13 @@ export class UnblockExecutor implements AgentExecutor {
 
       // For confirm skill: analyze response and include structured verdict in metadata.
       // Returns boolean `approved` so workflow loop's `until` check works directly.
+      // Rejection = explicit "반려" OR revision requests ("수정하고", "다시 가져", etc.)
+      // Approval = "승인" without any revision signals
       if (skillId === 'confirm') {
         const hasReject = /반려/.test(responseText);
-        replyMeta.approved = !hasReject;
+        const hasRevisionRequest = /수정하고|수정해서|다시 가져|다시 제출|다듬어서|수정이 필요|수정하면/.test(responseText);
+        const hasApprove = /승인/.test(responseText);
+        replyMeta.approved = hasApprove && !hasReject && !hasRevisionRequest;
       }
 
       const reply: Message = {
