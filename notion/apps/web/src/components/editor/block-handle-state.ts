@@ -12,6 +12,8 @@ export const blockHandleState = {
   dragSourcePos: null as number | null,
   /** Updated without notification (high-frequency updates via DOM mutation during drag) */
   dropTargetPos: null as number | null,
+  /** Called by BlockContextMenu when user clicks "Comment" */
+  onCommentRequest: null as ((blockPos: number, rect: DOMRect) => void) | null,
 };
 
 type Listener = () => void;

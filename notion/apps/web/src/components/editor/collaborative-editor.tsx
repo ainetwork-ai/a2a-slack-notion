@@ -17,6 +17,7 @@ import { CommentSidebar } from './comment-sidebar';
 import { RevisionOverlay } from './revision-overlay';
 import { useCommentAgent } from './use-comment-agent';
 import { findCommentHighlightRange } from './extensions/comment-highlight';
+import { blockHandleState } from './block-handle-state';
 
 interface CommentContent {
   text: string
@@ -267,28 +268,6 @@ export function CollaborativeEditor({ pageId, userName, editable = true, workspa
     }
   }, []);
 
-  const handleSelectionUpdate = useCallback(({ editor }: { editor: Editor }) => {
-    const { from, to } = editor.state.selection;
-    if (from === to) {
-      setBubblePosition(null);
-      return;
-    }
-    const selectedText = editor.state.doc.textBetween(from, to, ' ');
-    if (!selectedText.trim()) {
-      setBubblePosition(null);
-      return;
-    }
-
-    const coords = editor.view.coordsAtPos(to);
-    const container = editorContainerRef.current?.getBoundingClientRect();
-    if (!container) return;
-
-    setBubblePosition({
-      top: coords.top - container.top - 8,
-      left: coords.left - container.left + 16,
-      selectedText,
-    });
-  }, []);
 
   const handleCommentSubmit = useCallback(async (content: string) => {
     const editor = editorRef.current;
@@ -407,10 +386,28 @@ export function CollaborativeEditor({ pageId, userName, editable = true, workspa
         class: 'outline-none min-h-[200px]',
       },
     },
-    onSelectionUpdate: handleSelectionUpdate,
   });
 
   useEffect(() => { editorRef.current = editor; }, [editor]);
+
+  useEffect(() => {
+    blockHandleState.onCommentRequest = (blockPos: number, rect: DOMRect) => {
+      const ed = editorRef.current;
+      if (!ed) return;
+      const container = editorContainerRef.current?.getBoundingClientRect();
+      if (!container) return;
+      const node = ed.state.doc.nodeAt(blockPos);
+      const selectedText = node
+        ? ed.state.doc.textBetween(blockPos + 1, blockPos + node.nodeSize - 1, ' ')
+        : '';
+      setBubblePosition({
+        top: rect.bottom - container.top + 4,
+        left: rect.left - container.left,
+        selectedText,
+      });
+    };
+    return () => { blockHandleState.onCommentRequest = null; };
+  }, []);
 
   useEffect(() => {
     if (!workspaceId) return;

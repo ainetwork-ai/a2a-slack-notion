@@ -189,6 +189,26 @@ export function BlockContextMenu() {
     close();
   };
 
+  const handleComment = () => {
+    if (!view || blockPos === null) return;
+    const node = view.state.doc.nodeAt(blockPos);
+    if (!node) return;
+
+    // Select the block's text content
+    const from = blockPos + 1;
+    const to = blockPos + node.nodeSize - 1;
+    if (from < to) {
+      view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, from, to)));
+    }
+
+    const dom = view.nodeDOM(blockPos);
+    const rect = dom instanceof Element ? dom.getBoundingClientRect() : null;
+    if (rect) {
+      blockHandleState.onCommentRequest?.(blockPos, rect);
+    }
+    close();
+  };
+
   const handleTurnInto = (nodeType: string, attrs?: Record<string, unknown>) => {
     if (!view || blockPos === null) return;
     const { state } = view;
@@ -328,7 +348,7 @@ export function BlockContextMenu() {
 
       <MenuItem icon={Link} label="Copy link to block" onClick={handleCopyLink} />
       <MenuItem icon={CornerUpRight} label="Move to" shortcut="soon" disabled />
-      <MenuItem icon={MessageSquare} label="Comment" disabled />
+      <MenuItem icon={MessageSquare} label="Comment" onClick={handleComment} />
 
       <div style={{ height: 1, background: 'var(--divider)', margin: '4px 0' }} />
 
