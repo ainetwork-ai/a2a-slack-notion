@@ -621,11 +621,12 @@ async function executeStep(
         channelId: trigger?.channelId,
       });
 
-      // If the agent returned structured metadata (e.g. verdict from confirm skill),
-      // return an object with both content and metadata so the workflow can use it.
+      // If the agent returned an `approved` field in metadata (confirm skill),
+      // return an object so the loop can check confirm.approved.
+      // Otherwise return plain content string for compatibility with parse_assignment etc.
       const a2aMeta = (agentMessage.metadata as Record<string, unknown>)?.a2aResponseMeta as Record<string, unknown> | undefined;
-      if (a2aMeta && Object.keys(a2aMeta).length > 0) {
-        return { content: agentMessage.content, ...a2aMeta };
+      if (a2aMeta && 'approved' in a2aMeta) {
+        return { content: agentMessage.content, approved: a2aMeta.approved };
       }
       return agentMessage.content;
     }
