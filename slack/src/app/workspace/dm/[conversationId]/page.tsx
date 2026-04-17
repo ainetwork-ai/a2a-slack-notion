@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, use, useEffect, useRef } from 'react';
+import { useState, use, useEffect, useRef, useCallback } from 'react';
 import { Bot, Phone, Video, Users, Bell, BellOff, FileJson, Trash2, Copy, Check, Link } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
