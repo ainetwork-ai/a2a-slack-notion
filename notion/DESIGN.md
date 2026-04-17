@@ -39,30 +39,32 @@
 
 ### Light Mode
 ```css
---bg-default:      #ffffff;
---bg-sidebar:      #f7f6f3;
---bg-hover:        rgba(55, 53, 47, 0.04);
---bg-active:       rgba(55, 53, 47, 0.08);
---text-primary:    #37352f;
---text-secondary:  rgba(55, 53, 47, 0.65);
---text-tertiary:   rgba(55, 53, 47, 0.45);
---accent-blue:     #2383e2;
---divider:         rgba(55, 53, 47, 0.09);
---selection:       rgba(35, 131, 226, 0.14);
+--bg-default:       #ffffff;
+--bg-sidebar:       #f7f6f3;
+--bg-hover:         rgba(55, 53, 47, 0.08);
+--bg-active:        rgba(55, 53, 47, 0.16);
+--text-primary:     #37352f;
+--text-secondary:   rgba(55, 53, 47, 0.65);
+--text-tertiary:    rgba(55, 53, 47, 0.45);
+--text-placeholder: rgba(55, 53, 47, 0.35);
+--accent-blue:      #2383e2;
+--divider:          rgba(55, 53, 47, 0.09);
+--selection:        rgba(35, 131, 226, 0.28);
 ```
 
 ### Dark Mode
 ```css
---bg-default:      #191919;
---bg-sidebar:      #202020;
---bg-hover:        rgba(255, 255, 255, 0.04);
---bg-active:       rgba(255, 255, 255, 0.08);
---text-primary:    rgba(255, 255, 255, 0.81);
---text-secondary:  rgba(255, 255, 255, 0.54);
---text-tertiary:   rgba(255, 255, 255, 0.35);
---accent-blue:     #529cca;
---divider:         rgba(255, 255, 255, 0.09);
---selection:       rgba(82, 156, 202, 0.2);
+--bg-default:       #191919;
+--bg-sidebar:       #202020;
+--bg-hover:         rgba(255, 255, 255, 0.04);
+--bg-active:        rgba(255, 255, 255, 0.08);
+--text-primary:     rgba(255, 255, 255, 0.81);
+--text-secondary:   rgba(255, 255, 255, 0.54);
+--text-tertiary:    rgba(255, 255, 255, 0.35);
+--text-placeholder: rgba(255, 255, 255, 0.25);
+--accent-blue:      #529cca;
+--divider:          rgba(255, 255, 255, 0.09);
+--selection:        rgba(82, 156, 202, 0.2);
 ```
 
 ### Block Colors (9 colors x 2: text + background)
@@ -108,7 +110,7 @@
 ```css
 /* 드롭다운, 메뉴, 자동완성 */
 --shadow-menu: 
-  0 0 0 1px rgba(15, 15, 15, 0.05),
+  0 0 0 1px rgba(15, 15, 15, 0.1),
   0 3px 6px rgba(15, 15, 15, 0.1),
   0 9px 24px rgba(15, 15, 15, 0.2);
 
