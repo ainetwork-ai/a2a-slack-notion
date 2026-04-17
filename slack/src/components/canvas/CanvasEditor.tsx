@@ -306,22 +306,11 @@ export default function CanvasEditor({ channelId, onClose }: CanvasEditorProps) 
   useEffect(() => {
     function handleOpenCanvas(e: Event) {
       const detail = (e as CustomEvent).detail as { canvasId?: string };
-      if (detail?.canvasId) {
-        loadList(); // refresh list to include newly created canvases
-        openCanvas(detail.canvasId);
-      }
+      if (detail?.canvasId) openCanvas(detail.canvasId);
     }
     window.addEventListener('open-canvas', handleOpenCanvas);
     return () => window.removeEventListener('open-canvas', handleOpenCanvas);
   });
-
-  // Auto-refresh canvas list every 10s to pick up new canvases from workflows
-  useEffect(() => {
-    const interval = setInterval(() => {
-      if (!canvas) loadList({ q: debouncedQuery }); // only refresh when in list view
-    }, 10000);
-    return () => clearInterval(interval);
-  }, [canvas, debouncedQuery, loadList]);
 
   function openCanvas(canvasId: string) {
     setLoading(true);

@@ -505,8 +505,9 @@ export default function ChannelPage({ params }: { params: Promise<{ channelName:
           />
         </div>
 
-        {/* Canvas Panel */}
-        {canvasOpen && (
+        {/* Canvas Panel — only mount once channelId has resolved to avoid
+            firing `/api/channels//canvas(es)` with an empty segment. */}
+        {canvasOpen && channelId && (
           <CanvasEditor
             channelId={channelId}
             onClose={() => setCanvasOpen(false)}
