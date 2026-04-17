@@ -815,11 +815,12 @@ async function executeStep(
     case "write_canvas": {
       const channel = await resolveChannel(step.channel, workspaceId);
       if (!channel) throw new Error(`Channel not found: "${step.channel}"`);
+      if (!workspaceId) throw new Error("write_canvas requires workspaceId");
 
       const content = substituteVariables(step.content, vars);
-      const title = step.title ? substituteVariables(step.title, vars) : undefined;
+      const title = step.title ? substituteVariables(step.title, vars) : `#${channel.name} canvas`;
 
-      // Resolve agent for canvas authorship from routing.reporter or step.agent
+      // Resolve agent for canvas authorship
       const canvasAgentRef = (step as { agent?: string }).agent
         ? substituteVariables((step as { agent?: string }).agent!, vars)
         : (vars.routing as { reporter?: string })?.reporter;
@@ -828,19 +829,26 @@ async function executeStep(
         const resolved = await resolveAgent(canvasAgentRef);
         canvasAgentId = resolved?.id;
       }
-
-      const { executeTool } = await import("@/lib/mcp/executor");
-      const toolName = step.append ? "canvas_append" : "canvas_write";
-      const params: Record<string, unknown> = { channelId: channel.id, content };
-      if (title) params.title = title;
-      if (canvasAgentId) params.agentId = canvasAgentId;
-
-      const result = await executeTool("slack", toolName, params);
-      if (!result.success) {
-        throw new Error(`write_canvas failed: ${result.content}`);
+      if (!canvasAgentId) {
+        const [member] = await db.select({ userId: channelMembers.userId })
+          .from(channelMembers).where(eq(channelMembers.channelId, channel.id)).limit(1);
+        canvasAgentId = member?.userId;
       }
 
-      return content;
+      // Always create a new canvas (never overwrite existing ones)
+      const [created] = await db
+        .insert(canvases)
+        .values({
+          channelId: channel.id,
+          workspaceId,
+          title,
+          content,
+          createdBy: canvasAgentId!,
+          pipelineStatus: "draft",
+        })
+        .returning();
+
+      return created.id;
     }
 
     case "create_canvas": {
