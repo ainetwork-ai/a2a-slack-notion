@@ -6,6 +6,24 @@
 
 ---
 
+## Live Deployments
+
+| App | URL |
+|-----|-----|
+| 🗨️ **Slack** (main workspace) | [slack-comcom-team.vercel.app](https://slack-comcom-team.vercel.app) |
+| 📝 **Notion + Agents dashboard** | [a2a-slack-notion.vercel.app](https://a2a-slack-notion.vercel.app) |
+| 🔐 **War Desk Source Shield** (TEE agent) | [war-desk-source-shield.vercel.app](https://war-desk-source-shield.vercel.app) |
+
+### Deployed A2A Agent Cards
+
+Invite any of these into the Slack workspace via **Invite agent → Agent A2A URL**:
+
+| Agent | Agent Card |
+|-------|-----------|
+| 🔐 War Desk Source Shield (NEAR AI Cloud TEE) | [`.well-known/agent.json`](https://war-desk-source-shield.vercel.app/.well-known/agent.json) |
+
+---
+
 ## The Problem
 
 - [Problem 1: Agents don't feel like teammates](#problem-1-agents-dont-feel-like-teammates)
@@ -25,15 +43,26 @@ We wanted agents that *live* in the workflow. Join a channel. Read threads. Use 
 
 ### Problem 2: What happens when an agent crosses an org boundary?
 
-When a source hands sensitive information to an AI journalist, or when a newsroom shares an AI-generated brief with a partner org over Slack Connect — how do you prove the agent ran exactly the code it claimed to, without logging the conversation?
+**A trusted source should act as a sealed black box for the whole newsroom — queryable by anyone, but never exposed.**
 
-Standard cloud LLMs can't answer that. A subpoena reaches their logs. An insider can read the data. The source has no choice but to trust you.
+Say one reporter establishes a confidential source inside Iran. Normally that source only reaches the newsroom through that one reporter — a single fragile pipe. We want the *knowledge* to be available to every editor and partner-org reporter over Slack Connect, so anyone can ask "what does the source say about X?" — while the source's identity, raw words, and operational details never leak outside a hardware enclave.
 
-TEE changes the answer. TLS terminates inside the hardware enclave. The plaintext never exists outside the chip. Every response carries a cryptographic attestation — independently verifiable against Intel and NVIDIA's public services. The source doesn't have to trust anyone. **The hardware proves it.**
+**This is not hypothetical. Sources die when the infrastructure fails them.**
+
+- *[WikiLeaks Afghan War Diary, 2010](https://www.cbsnews.com/news/wikileaks-reportedly-outs-100s-of-afghan-informants/)* — hundreds of Afghan informants were named in the leak; the Taliban publicly stated "we know how to punish them."
+- *[Jamal Khashoggi, 2018](https://www.washingtonpost.com/nation/interactive/2021/hanan-elatr-phone-pegasus/)* — Pegasus spyware on an associate's phone exposed Khashoggi's private comms to Saudi intelligence; he was murdered in the Istanbul consulate months later.
+- *[Reality Winner / The Intercept, 2017](https://theintercept.com/2017/06/06/how-reality-winner-the-alleged-nsa-leaker-got-caught/)* — printer microdots in a document shared across orgs led the FBI to the source within days.
+- *[NYT v. OpenAI ChatGPT preservation order, 2025](https://news.bloomberglaw.com/ip-law/openai-must-turn-over-20-million-chatgpt-logs-judge-affirms)* — a federal judge ordered OpenAI to retain **all ChatGPT logs indefinitely**, including deleted conversations. If a source had spoken to a standard cloud LLM, their words would now be discoverable.
+- *[Samsung / ChatGPT leak, 2023](https://www.bleepingcomputer.com/news/security/samsung-fab-workers-leak-confidential-data-while-using-chatgpt/)* — employees pasted confidential code into ChatGPT; the data sits on OpenAI's servers, unrecoverable.
+- *[OpenAI Redis bug, March 2023](https://openai.com/index/march-20-chatgpt-outage/)* — other users could briefly see each other's conversation titles and billing info. Breaches happen.
+
+A subpoena reaches vendor logs. An insider with production access can read the data. A misconfigured library can leak the conversation to another customer. Each of these failure modes has already killed or jailed people.
+
+**TEE changes the answer.** TLS terminates *inside* the hardware enclave. The plaintext never exists outside the chip — not in logs, not in vendor storage, not in a RAM dump. Every response carries a cryptographic attestation, independently verifiable against Intel and NVIDIA's public services. The agent becomes a sealed oracle the whole newsroom can query; the source doesn't have to trust anyone. **The hardware proves it.**
 
 ---
 
-We demonstrate both through journalism: agents as newsroom teammates, and a TEE-protected source intake that posts verified briefs across org boundaries via Slack Connect.
+We demonstrate both through journalism: agents as newsroom teammates, and a TEE-sealed source that the whole cross-org newsroom can interrogate over Slack Connect.
 
 ---
 
@@ -122,13 +151,13 @@ checkAutoEngagement()
 | A2A | @a2a-js/sdk, JSON-RPC 2.0 |
 | MCP | Custom MCP executor |
 | Auth | MetaMask (SIWE) + AIN Wallet + Private Key |
-| Chain | AIN Blockchain |
+| Chain | AIN Blockchain + NEAR |
 
 ---
 
 ## Demo: AI Newsroom
 
-> **A Build Agent assembles a multi-agent newsroom. Journalism agents research, write, and fact-check articles in a TEE. Verified articles are published to a Canvas and shared externally via Slack Connect.**
+> **A Build Agent assembles a multi-agent newsroom. A confidential source is sealed inside a NEAR AI Cloud TEE — every editor and partner-org reporter can query the source over Slack Connect, while the source's raw words never leave the enclave. Journalism agents corroborate, draft, and publish the final article to a Canvas.**
 
 ### Scenario Overview
 
@@ -248,26 +277,31 @@ Editors and reporter agents in `#war-desk` — across multiple orgs — see the 
 ### Full Flow
 
 ```
-User trigger
+Confidential source (e.g. Iran insider)
      │
      ▼
+Source Intake Agent (NEAR AI Cloud TEE — Intel TDX + NVIDIA H200)
+  └─ TLS terminates inside the enclave · plaintext never leaves the chip
+  └─ every response carries an attestation badge
+           │
+           ▼
+Sealed source = queryable black box for the whole newsroom
+           │
+           ▼
 Editor-in-Chief (Build Agent)
+  └─ receives attested brief in #war-desk via Slack Connect
   └─ assigns coverage → A2A JSON-RPC 2.0
            │
            ▼
-Reporter Agents (external A2A)
-  └─ MCP tool-use: web search, on-chain data
+Reporter Agents (external A2A, cross-org)
+  └─ MCP tool-use: web search, on-chain data, document parser
+  └─ query the sealed source as needed — source identity stays in TEE
   └─ draft → message bridge → channel thread
-           │
-           ▼
-Fact-Checker (TEE Agent)
-  └─ claim verification + blockchain attestation
-  └─ result posted to channel
            │
            ▼
 Publisher Agent
   └─ Canvas API → article created
-  └─ Slack Connect → shared to external channel
+  └─ Slack Connect → shared to partner newsrooms
 ```
 
 ---
