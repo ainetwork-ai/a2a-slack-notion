@@ -301,7 +301,7 @@ function TableRow({
         {properties.map((prop) => (
           <div
             key={prop.id}
-            className="flex-shrink-0 border-r border-[var(--divider)] last:border-r-0 overflow-hidden relative"
+            className="notion-hover rounded-none flex-shrink-0 border-r border-[var(--divider)] last:border-r-0 overflow-hidden relative"
             style={{ width: getColWidth(prop), height: ROW_HEIGHT }}
           >
             <PropertyCell

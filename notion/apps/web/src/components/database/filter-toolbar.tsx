@@ -107,11 +107,10 @@ export function FilterToolbar({
       {/* Filter button */}
       <Popover open={filterOpen} onOpenChange={setFilterOpen}>
         <PopoverTrigger>
-          <Button
-            variant="ghost"
-            size="sm"
+          <button
+            type="button"
             className={cn(
-              'gap-1.5 text-xs text-[var(--text-secondary)] h-7',
+              'notion-hover inline-flex items-center gap-1.5 px-2 h-6 rounded-[3px] text-xs text-[var(--text-secondary)] bg-[var(--bg-hover)]',
               activeFilterCount > 0 && 'text-[var(--accent-blue)] bg-[var(--bg-active)]',
             )}
           >
@@ -122,7 +121,7 @@ export function FilterToolbar({
                 {activeFilterCount}
               </span>
             )}
-          </Button>
+          </button>
         </PopoverTrigger>
         <PopoverContent className="p-3 min-w-[360px]">
           <div className="space-y-2">
@@ -189,11 +188,10 @@ export function FilterToolbar({
       {/* Sort button */}
       <Popover open={sortOpen} onOpenChange={setSortOpen}>
         <PopoverTrigger>
-          <Button
-            variant="ghost"
-            size="sm"
+          <button
+            type="button"
             className={cn(
-              'gap-1.5 text-xs text-[var(--text-secondary)] h-7',
+              'notion-hover inline-flex items-center gap-1.5 px-2 h-6 rounded-[3px] text-xs text-[var(--text-secondary)] bg-[var(--bg-hover)]',
               activeSortCount > 0 && 'text-[var(--accent-blue)] bg-[var(--bg-active)]',
             )}
           >
@@ -204,7 +202,7 @@ export function FilterToolbar({
                 {activeSortCount}
               </span>
             )}
-          </Button>
+          </button>
         </PopoverTrigger>
         <PopoverContent className="p-3 min-w-[280px]">
           <div className="space-y-2">

@@ -182,9 +182,8 @@ function BoardCard({ row, title, previewProps, onDragStart, onDragEnd }: BoardCa
       onDragEnd={onDragEnd}
       className={cn(
         'bg-[var(--bg-default)] rounded-[6px] p-2.5 cursor-grab active:cursor-grabbing',
-        'shadow-[0_0_0_1px_var(--divider),0_1px_3px_rgba(15,15,15,0.05)]',
-        'hover:shadow-[0_0_0_1px_var(--divider),0_2px_6px_rgba(15,15,15,0.1)]',
-        'transition-shadow duration-[var(--duration-micro)]',
+        'shadow-[var(--shadow-card)] hover:shadow-[var(--shadow-menu)]',
+        'transition-shadow duration-[var(--duration-hover)]',
       )}
     >
       <p className="text-sm text-[var(--text-primary)] font-medium leading-snug mb-1.5 break-words">
