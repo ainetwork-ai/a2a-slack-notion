@@ -65,6 +65,21 @@ export type WorkflowStep =
       type: "parse_assignment";
       input: string;
       saveAs: string;
+    }
+  | {
+      /** Parse confirm response to extract approved/rejected verdict.
+       *  Returns { approved: boolean }. */
+      type: "parse_verdict";
+      input: string;
+      saveAs: string;
+    }
+  | {
+      /** Repeat steps until a variable becomes truthy, with a safety cap. */
+      type: "loop";
+      until: string;
+      steps: WorkflowStep[];
+      maxIterations?: number;
+      onMaxReached?: "continue" | "fail";
     };
 
 export type WorkflowTrigger =

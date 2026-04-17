@@ -66,6 +66,35 @@ function pickAgentFromText(text: string, roster: Record<string, { kor: string; e
   return null;
 }
 
+/** Resolve a dot-separated path against the vars object. */
+function resolveVarPath(vars: Record<string, unknown>, path: string): unknown {
+  return path
+    .trim()
+    .split(".")
+    .reduce(
+      (obj: unknown, k: string) =>
+        obj != null && typeof obj === "object"
+          ? (obj as Record<string, unknown>)[k]
+          : undefined,
+      vars as unknown
+    );
+}
+
+function parseVerdictResponse(text: string): { approved: boolean } {
+  const hasApprove = /승인|발행/.test(text);
+  const hasReject = /반려/.test(text);
+
+  if (hasApprove && hasReject) {
+    // Both present — last occurrence wins
+    const lastApprove = Math.max(text.lastIndexOf("승인"), text.lastIndexOf("발행"));
+    const lastReject = text.lastIndexOf("반려");
+    return { approved: lastApprove > lastReject };
+  }
+  if (hasReject) return { approved: false };
+  // Default to approved (승인 found, or neither — avoid infinite loops)
+  return { approved: true };
+}
+
 function parseAssignmentResponse(text: string): Record<string, string> {
   const reporterId = pickAgentFromText(text, REPORTERS) ?? "max";
   let managerId = pickAgentFromText(text, MANAGERS);
@@ -549,18 +578,42 @@ async function executeStep(
       return parseAssignmentResponse(text);
     }
 
-    case "condition": {
-      const conditionKey = step.if.trim();
-      const condValue = conditionKey
-        .split(".")
-        .reduce(
-          (obj: unknown, k: string) =>
-            obj != null && typeof obj === "object"
-              ? (obj as Record<string, unknown>)[k]
-              : undefined,
-          vars as unknown
-        );
+    case "parse_verdict": {
+      const text = substituteVariables(step.input, vars);
+      return parseVerdictResponse(text);
+    }
 
+    case "loop": {
+      const maxIter = Math.min(step.maxIterations ?? 3, 10);
+      const onMaxReached = step.onMaxReached ?? "continue";
+      let loopVars = { ...vars };
+
+      for (let iteration = 0; iteration < maxIter; iteration++) {
+        // Check until condition BEFORE each iteration — exit if truthy
+        if (Boolean(resolveVarPath(loopVars, step.until))) break;
+
+        // Execute loop body
+        for (const bodyStep of step.steps) {
+          const result = await executeStep(bodyStep, loopVars, workspaceId);
+          const saveAs = (bodyStep as { saveAs?: string }).saveAs;
+          if (saveAs && result !== undefined) {
+            loopVars = { ...loopVars, [saveAs]: result };
+          }
+        }
+      }
+
+      // Check if maxIterations reached without condition met
+      if (!Boolean(resolveVarPath(loopVars, step.until)) && onMaxReached === "fail") {
+        throw new Error(`Loop exceeded maxIterations (${maxIter}) without "${step.until}" becoming truthy`);
+      }
+
+      // Merge loop vars back to parent scope
+      Object.assign(vars, loopVars);
+      return undefined;
+    }
+
+    case "condition": {
+      const condValue = resolveVarPath(vars, step.if);
       const isTruthy = Boolean(condValue);
       const branchSteps = isTruthy ? step.then : (step.else ?? []);
 

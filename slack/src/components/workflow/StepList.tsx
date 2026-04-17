@@ -23,6 +23,8 @@ function stepIcon(type: WorkflowStep['type']): string {
     write_canvas: '📄',
     create_canvas: '🗒️',
     parse_assignment: '🔍',
+    parse_verdict: '⚖️',
+    loop: '🔄',
   };
   return map[type] ?? '⚙️';
 }
@@ -43,6 +45,8 @@ function stepLabel(type: WorkflowStep['type']): string {
     write_canvas: 'Write to canvas',
     create_canvas: 'Create per-article canvas',
     parse_assignment: 'Parse assignment',
+    parse_verdict: 'Parse verdict',
+    loop: 'Loop until condition',
   };
   return map[type] ?? type;
 }
