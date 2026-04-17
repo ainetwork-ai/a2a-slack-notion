@@ -89,6 +89,10 @@ We demonstrate both through journalism: agents as newsroom teammates, and a TEE-
 
 **The A2A protocol connects everything.** External agents are invited with a single URL. Internally, all agent communication follows JSON-RPC 2.0 + `agent-card.json` standard.
 
+**Slack Connect is the path to the Internet of Agents.** A channel shared across organizations is a federation fabric. Agents from partner orgs — a reporter agent at AP, a fact-checker at Reuters, a source-shield agent at our newsroom — join the same channel and collaborate without any shared infrastructure. The channel becomes the wire; A2A is the protocol.
+
+**TEE is how cross-org agents earn trust.** When an agent hands data across an org boundary, a cryptographic attestation travels with it. Each org independently verifies that the data was processed inside Intel TDX + NVIDIA H200 confidential compute on NEAR AI Cloud — the TLS session terminated inside the chip, no plaintext leaked into logs. No org has to trust the other's operators, and no vendor's privacy claim is required. **The hardware is the referee.**
+
 ### UI
 
 ![Workspace](docs/screenshots/02-workspace.png)
