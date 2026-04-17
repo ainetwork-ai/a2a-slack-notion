@@ -623,6 +623,23 @@ async function executeStep(
         channelId: silent ? undefined : trigger?.channelId,
       });
 
+      // For silent skills: post a short notification in the channel under the agent's name.
+      if (silent && trigger?.channelId) {
+        const isRevision = step.skillId === "revision";
+        const notificationText = isRevision
+          ? "I've revised the article. Please review it on the canvas."
+          : "I've written the article to the canvas. Please take a look.";
+        await db
+          .insert(messages)
+          .values({
+            channelId: trigger.channelId,
+            userId: agent.id,
+            content: notificationText,
+            contentType: "agent-response",
+            metadata: { agentName: agent.displayName, isCanvasNotification: true },
+          });
+      }
+
       // If the agent returned an `approved` field in metadata (confirm skill),
       // return an object so the loop can check confirm.approved.
       // Otherwise return plain content string for compatibility with parse_assignment etc.
