@@ -132,13 +132,14 @@ function evaluateCondition(expr: string, vars: Record<string, unknown>): boolean
 }
 
 function parseVerdictResponse(text: string): { approved: boolean } {
-  // Only "승인" counts as approval. "발행" is excluded because Damien
-  // often says "수정하고 발행하자" (fix and then publish) in rejections.
+  // "승인" is the only approval keyword.
+  // Rejection signals: explicit "반려" + implicit patterns like "수정하고",
+  // "다시 가져와", "다듬어서" that indicate Damien wants revisions.
   const hasApprove = /승인/.test(text);
-  const hasReject = /반려/.test(text);
+  const hasReject = /반려|수정하고|수정해서|다시 가져|다듬어서|다시 수정|수정이 필요/.test(text);
 
+  if (hasApprove && !hasReject) return { approved: true };
   if (hasReject) return { approved: false };
-  if (hasApprove) return { approved: true };
   // Neither found — default to approved to avoid infinite loops
   return { approved: true };
 }
