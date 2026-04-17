@@ -610,16 +610,35 @@ async function executeStep(
 
       // Pass inputs as metadata.variables for external A2A agents (e.g. unblock-agents)
       // that expect structured variables rather than text-formatted inputs.
-      // Also pass channelId from trigger so responses appear in the channel.
+      // Also pass channelId from trigger so responses appear in the channel,
+      // unless the step is marked silent (e.g. report/writing → canvas only).
       const trigger = vars.trigger as { channelId?: string } | undefined;
+      const silent = (step as { silent?: boolean }).silent === true;
 
       const agentMessage = await sendToAgent({
         agentId: agent.id,
         text: skillMessage,
         skillId: step.skillId,
         variables: Object.keys(resolvedInputs).length > 0 ? resolvedInputs : undefined,
-        channelId: trigger?.channelId,
+        channelId: silent ? undefined : trigger?.channelId,
       });
+
+      // For silent skills: post a short notification in the channel under the agent's name.
+      if (silent && trigger?.channelId) {
+        const isRevision = step.skillId === "revision";
+        const notificationText = isRevision
+          ? "I've revised the article. Please review it on the canvas."
+          : "I've written the article to the canvas. Please take a look.";
+        await db
+          .insert(messages)
+          .values({
+            channelId: trigger.channelId,
+            userId: agent.id,
+            content: notificationText,
+            contentType: "agent-response",
+            metadata: { agentName: agent.displayName, isCanvasNotification: true },
+          });
+      }
 
       // If the agent returned an `approved` field in metadata (confirm skill),
       // return an object so the loop can check confirm.approved.
