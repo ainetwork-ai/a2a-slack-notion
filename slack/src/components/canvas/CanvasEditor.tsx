@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { X, Eye, Edit3, Loader2, FileText, ChevronLeft, Plus, Trash2, Search } from 'lucide-react';
 import { useToast } from '@/components/ui/toast-provider';
 import { CanvasMarkdown } from '@/lib/canvas/CanvasMarkdown';
-import NotionPage from '@/components/notion/NotionPage';
+import NotionCanvasFrame from '@/components/canvas/NotionCanvasFrame';
 
 type PipelineStatus = 'draft' | 'edited' | 'fact-checked' | 'published' | null;
 
@@ -876,9 +876,10 @@ export default function CanvasEditor({ channelId, onClose }: CanvasEditorProps) 
 
             {/* Content */}
             {canvas.pageId ? (
-              // Notion block-tree editor: slash commands, rich text, headings, bullets, etc.
+              // Notion block-tree editor rendered inside a persistent same-origin iframe.
+              // View Transitions morph via `notion-frame-${pageId}` name.
               <div className="flex-1 min-h-0 overflow-hidden">
-                <NotionPage pageId={canvas.pageId} mode="panel" />
+                <NotionCanvasFrame pageId={canvas.pageId} mode="panel" />
               </div>
             ) : (
               <div className="flex-1 overflow-auto px-3.5 pb-3.5">
