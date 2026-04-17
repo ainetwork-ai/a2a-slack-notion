@@ -136,6 +136,15 @@ export default function ChannelPage({ params }: { params: Promise<{ channelName:
     }
   }, [searchParams]);
 
+  // Open canvas panel when a "View on Canvas" button is clicked in chat
+  useEffect(() => {
+    function handleOpenCanvas() {
+      setCanvasOpen(true);
+    }
+    window.addEventListener('open-canvas', handleOpenCanvas);
+    return () => window.removeEventListener('open-canvas', handleOpenCanvas);
+  }, []);
+
   // Issue 1: Reset active thread when switching channels
   useEffect(() => {
     setActiveThread(null);
