@@ -151,8 +151,7 @@ async function queryLLM(message: string): Promise<string | null> {
           { role: "system", content: SYSTEM_PROMPT },
           { role: "user", content: message },
         ],
-        max_tokens: 2000,
-        temperature: 0.3,
+        max_completion_tokens: 2000,
       }),
       signal: AbortSignal.timeout(30000),
     });

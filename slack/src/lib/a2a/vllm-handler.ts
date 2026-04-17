@@ -23,8 +23,7 @@ export async function callVLLM(
         { role: "system", content: systemPrompt },
         { role: "user", content: userMessage },
       ],
-      max_tokens: 2000,
-      temperature: 0.7,
+      max_completion_tokens: 2000,
     }),
     signal: AbortSignal.timeout(60000),
   });

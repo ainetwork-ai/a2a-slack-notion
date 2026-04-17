@@ -7,9 +7,18 @@ import { MCP_SERVERS } from "@/lib/mcp/registry";
 
 const VLLM_BASE_URL = process.env.VLLM_URL || "http://localhost:8100";
 const VLLM_MODEL = process.env.VLLM_MODEL || "gemma-4-31B-it";
+const LLM_API_KEY = process.env.LLM_API_KEY || "";
+const VLLM_CHAT_URL = VLLM_BASE_URL.includes("/chat/completions")
+  ? VLLM_BASE_URL
+  : `${VLLM_BASE_URL.replace(/\/$/, "")}/v1/chat/completions`;
 const MAX_TOOL_ROUNDS = 5;
 const VLLM_CONTEXT_LIMIT = Number(process.env.VLLM_CONTEXT_LIMIT || 32768);
 const VLLM_SAFETY_MARGIN = 800;
+function llmHeaders(): Record<string, string> {
+  const h: Record<string, string> = { "Content-Type": "application/json" };
+  if (LLM_API_KEY) h["api-key"] = LLM_API_KEY;
+  return h;
+}
 
 /**
  * Estimate token count (rough: 1 token ~= 3 chars for mixed English/Korean/code).
@@ -423,14 +432,13 @@ function parseToolCalls(
 async function callLLM(
   llmMessages: Array<{ role: string; content: string }>
 ): Promise<string> {
-  const res = await fetch(`${VLLM_BASE_URL}/v1/chat/completions`, {
+  const res = await fetch(VLLM_CHAT_URL, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: llmHeaders(),
     body: JSON.stringify({
       model: VLLM_MODEL,
       messages: llmMessages,
-      max_tokens: computeMaxTokens(llmMessages),
-      temperature: 0.7,
+      max_completion_tokens: computeMaxTokens(llmMessages),
     }),
   });
 
@@ -572,14 +580,13 @@ export async function* streamAgentResponse(params: {
 
   let fullContent = "";
   try {
-    const res = await fetch(`${VLLM_BASE_URL}/v1/chat/completions`, {
+    const res = await fetch(VLLM_CHAT_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: llmHeaders(),
       body: JSON.stringify({
         model: VLLM_MODEL,
         messages: llmMessages,
-        max_tokens: computeMaxTokens(llmMessages),
-        temperature: 0.7,
+        max_completion_tokens: computeMaxTokens(llmMessages),
         stream: true,
       }),
     });

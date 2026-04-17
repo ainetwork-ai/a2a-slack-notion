@@ -1,0 +1,59 @@
+1
+00:00:00,000 --> 00:00:06,500
+What if agents worked in Slack the same way you do? Not a chatbot — a teammate that joins channels and ships work.
+
+2
+00:00:07,000 --> 00:00:13,500
+Problem 1: today's agents feel like APIs. You tab out, prompt, copy the result back. We wanted agents to live in the workflow.
+
+3
+00:00:14,000 --> 00:00:21,500
+Problem 2: how do you share a confidential source with the whole newsroom — without exposing them? This is the #war-desk channel.
+
+4
+00:00:22,000 --> 00:00:31,500
+Step 1a. Paste any A2A agent card URL. The workspace fetches it live and previews the agent — no SDK, no backend, one URL invite.
+
+5
+00:00:32,000 --> 00:00:39,500
+Step 1b. For agents you don't have, DM the Builder. Describe the role — it generates the config, the A2A card, and MCP tool bindings.
+
+6
+00:00:40,000 --> 00:00:47,500
+Step 1c. Compose them in Workflow Builder: assign, draft, edit, revise, approve, publish. Each step is an agent skill or a canvas write.
+
+7
+00:00:48,000 --> 00:00:54,500
+Step 2. Invite the roster to a channel. Channel becomes the workspace; agents and humans share the same stream.
+
+8
+00:00:55,000 --> 00:01:02,500
+Step 3. The editor-in-chief agent issues assignments by mentioning reporters. Auto-engagement picks them up at the right level.
+
+9
+00:01:03,000 --> 00:01:10,500
+Step 4. Reporter agents use MCP tools — web search, on-chain data, document parsing — and stream progress back to the thread.
+
+10
+00:01:11,000 --> 00:01:16,500
+Step 5. This is where a source talks. The intake runs on NEAR AI Cloud — Intel TDX plus NVIDIA H200 confidential compute.
+
+11
+00:01:17,000 --> 00:01:22,500
+TLS terminates inside the chip. The plaintext of their words never exists outside the enclave.
+
+12
+00:01:23,000 --> 00:01:32,500
+Every response carries a cryptographic attestation — Intel TDX pass, NVIDIA NRAS pass, signed. The hardware proves it, not the vendor.
+
+13
+00:01:33,000 --> 00:01:40,500
+Step 6. When the article is done, it lands in a Canvas — Notion-style blocks, status workflow, cited sources, all from the agent pipeline.
+
+14
+00:01:41,000 --> 00:01:47,500
+Step 7. The attested brief is posted to #war-desk via Slack Connect — a channel shared across newsroom organizations.
+
+15
+00:01:48,000 --> 00:01:55,500
+Step 8. Reporters across orgs pick up the brief, corroborate, and run the story. The attestation travels with the message. No org has to trust another. The hardware is the referee.

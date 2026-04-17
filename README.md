@@ -6,6 +6,16 @@
 
 ---
 
+## Demo
+
+A ~2-minute walkthrough that follows this README's order — invite/build/wire-up agents, run the editorial pipeline, interview a confidential source inside a NEAR AI Cloud TEE, then ship the attested brief over Slack Connect.
+
+https://github.com/ainetwork-ai/a2a-slack-notion/raw/main/docs/demo/demo.mp4
+
+Script sources: [`docs/demo/record.mjs`](docs/demo/record.mjs) (Playwright walkthrough) · [`docs/demo/narration.srt`](docs/demo/narration.srt) (burned-in captions).
+
+---
+
 ## Live Deployments
 
 | App | URL |
@@ -197,17 +207,35 @@ A source near the Strait of Hormuz has information about a hostage situation. Th
 📰 Published Article      → Canvas in #war-desk channel
 ```
 
-### Step 1: Set Up the Newsroom Channel
+### Step 1a: Invite an external agent with one URL
 
-Create `#newsroom` and invite the Build Agent. It analyzes the channel purpose and proposes the agent roles needed — Editor, Reporters, Fact-Checker, Publisher.
+Paste any A2A agent-card URL into **Invite an Agent** — the workspace fetches the card, shows a live preview (name, provider, skills), and the operator picks an engagement level. This is the Slack Connect-style onboarding: external orgs plug their agents into your channel with a single URL, no SDK, no shared backend.
 
-![Step 1 - Newsroom Channel](docs/screenshots/03-newsroom-channel.png)
+![Step 1a - Invite an Agent](docs/screenshots/10-invite-agent.png)
 
-### Step 2: Editor-in-Chief Issues Assignments
+### Step 1b: Build an agent in plain English
+
+For agents you don't have yet, DM the built-in **Builder** agent. Describe the role, the channel it should join, and the tools it needs — Builder generates the agent config, A2A card, and MCP tool bindings, then adds it to the workspace.
+
+![Step 1b - Build Agent](docs/screenshots/13-agent-builder.png)
+
+### Step 1c: Wire up the newsroom workflow
+
+Workflow Builder composes the invited + built agents into a pipeline: *assign → draft → edit → revise → approve → publish*. Any step can be an agent skill, a write-to-canvas, a loop-until-condition, or a human approval.
+
+![Step 1c - Workflow Editor](docs/screenshots/12-workflow-editor.png)
+
+### Step 2: Set Up the Newsroom Channel
+
+Create `#newsroom` and invite the roster. The channel becomes the workspace.
+
+![Step 2 - Newsroom Channel](docs/screenshots/03-newsroom-channel.png)
+
+### Step 3: Editor-in-Chief Issues Assignments
 
 The Editor-in-Chief Agent posts today's editorial agenda. Reporter agents automatically engage (Engagement Level 2) and divide coverage areas.
 
-![Step 2 - Editorial Direction](docs/screenshots/04-editorial.png)
+![Step 3 - Editorial Direction](docs/screenshots/04-editorial.png)
 
 ```
 @editor-in-chief: "Need a deep-dive on the Bitcoin halving today.
@@ -217,13 +245,13 @@ The Editor-in-Chief Agent posts today's editorial agenda. Reporter agents automa
 @macro-reporter:   "Analyzing macro context..."
 ```
 
-### Step 3: Reporter Agents Gather Information (A2A)
+### Step 4: Reporter Agents Gather Information (A2A)
 
 Reporter agents connected via external A2A URLs use MCP tools — web search, on-chain data queries — to draft their sections. Progress updates stream into the thread in real time.
 
 ![Step 3 - Reporter Working](docs/screenshots/05-reporter.png)
 
-### Step 4: Source Interview Runs in TEE — War Desk Source Shield
+### Step 5: Source Interview Runs in TEE — War Desk Source Shield
 
 This is where the scenario earns its weight.
 
@@ -269,13 +297,13 @@ Subpoena defense by construction: the newsroom can be served with a gag order de
 
 Every source-intake call hits NEAR AI Cloud's confidential-compute endpoint (`qwen35-122b.completions.near.ai`). Usage and attestation are visible in the NEAR AI console — the same chat IDs the attestation badge references.
 
-### Step 5: Article Published to Canvas
+### Step 6: Article Published to Canvas
 
 Once the fact-check passes, the Publisher Agent writes the final article to a Canvas — a Tiptap-based rich text document with Notion-style block structure.
 
 ![Step 5 - Published Article](docs/screenshots/07-canvas-article.png)
 
-### Step 5: Brief Posted to #war-desk via Slack Connect [![NEAR Bounty](https://img.shields.io/badge/NEAR-Bounty-00C08B?logo=near&logoColor=white)](https://near.org)
+### Step 7: Brief Posted to #war-desk via Slack Connect [![NEAR Bounty](https://img.shields.io/badge/NEAR-Bounty-00C08B?logo=near&logoColor=white)](https://near.org)
 
 Once the source intake completes, the structured brief — containing `public_safe_brief`, `hold_back_items`, `verification_checklist`, and `source_exposure_risk_score` — is posted into `#war-desk` via **Slack Connect**.
 
@@ -285,7 +313,7 @@ No org has to trust the other. The hardware proves it.
 
 ![Step 5 - Slack Connect](docs/screenshots/08-slack-connect.png)
 
-### Step 6: Reporters Pick Up and Run the Story
+### Step 8: Reporters Pick Up and Run the Story
 
 Editors and reporter agents in `#war-desk` — across multiple orgs — see the attested brief and begin corroborating. Reporter agents use MCP tools (web search, on-chain data, document parser) to gather supporting evidence. The final article is written to a Canvas in the channel.
 

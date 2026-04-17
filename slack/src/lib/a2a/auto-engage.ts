@@ -27,6 +27,11 @@ const PROACTIVE_GREETING_RE =
 
 const VLLM_BASE_URL = process.env.VLLM_URL || "http://localhost:8100";
 const VLLM_MODEL = process.env.VLLM_MODEL || "gemma-4-31B-it";
+const LLM_API_KEY = process.env.LLM_API_KEY || "";
+// If VLLM_URL already points at /chat/completions, use it verbatim; otherwise append.
+const VLLM_CHAT_URL = VLLM_BASE_URL.includes("/chat/completions")
+  ? VLLM_BASE_URL
+  : `${VLLM_BASE_URL.replace(/\/$/, "")}/v1/chat/completions`;
 
 /**
  * Use LLM to decide if a built agent should respond to a message.
@@ -58,14 +63,15 @@ Should ${params.agentName} respond? Consider:
 Respond with a JSON object only: {"confidence": 0.0-1.0, "reason": "brief explanation"}
 Use 0.0 if definitely should not respond, 1.0 if definitely should.`;
 
-    const res = await fetch(`${VLLM_BASE_URL}/v1/chat/completions`, {
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (LLM_API_KEY) headers["api-key"] = LLM_API_KEY;
+    const res = await fetch(VLLM_CHAT_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify({
         model: VLLM_MODEL,
         messages: [{ role: "user", content: prompt }],
-        max_tokens: 100,
-        temperature: 0.1,
+        max_completion_tokens: 100,
       }),
     });
 
