@@ -1,14 +1,13 @@
 import { db } from "@/lib/db";
-import { canvases, channels, channelMembers, users } from "@/lib/db/schema";
+import { canvases, channelMembers, users, blocks } from "@/lib/db/schema";
 import { eq, and, count } from "drizzle-orm";
 import { requireAuth } from "@/lib/auth/middleware";
 import { NextRequest, NextResponse } from "next/server";
+import { resolveChannelParam } from "@/lib/resolve";
 
 // Explicit column list for canvases reads/writes. Drizzle's bare `.select()` /
-// `.returning()` emit every column in the schema — including `page_id`, which
-// migration 0010 adds but may not yet exist in every environment. Listing
-// columns we actually use keeps these routes safe during migration drift and
-// avoids `column "page_id" does not exist` 500s with empty response bodies.
+// `.returning()` emit every column in the schema — listing columns we actually
+// use keeps these routes safe during migration drift.
 const canvasColumns = {
   id: canvases.id,
   channelId: canvases.channelId,
@@ -23,6 +22,7 @@ const canvasColumns = {
   pipelineStatus: canvases.pipelineStatus,
   topic: canvases.topic,
   pipelineRunId: canvases.pipelineRunId,
+  pageId: canvases.pageId,
 } as const;
 
 export async function GET(
@@ -34,7 +34,12 @@ export async function GET(
     if ("error" in auth) return auth.error;
     const { user } = auth;
 
-    const { channelId } = await params;
+    const { channelId: param } = await params;
+    const channel = await resolveChannelParam(param, user.id);
+    if (!channel) {
+      return NextResponse.json({ error: "Channel not found" }, { status: 404 });
+    }
+    const channelId = channel.id;
 
     // Check membership
     const [membership] = await db
@@ -86,7 +91,12 @@ export async function POST(
     if ("error" in auth) return auth.error;
     const { user } = auth;
 
-    const { channelId } = await params;
+    const { channelId: param } = await params;
+    const resolvedChannel = await resolveChannelParam(param, user.id);
+    if (!resolvedChannel) {
+      return NextResponse.json({ error: "Channel not found" }, { status: 404 });
+    }
+    const channelId = resolvedChannel.id;
 
     // Check membership
     const [membership] = await db
@@ -99,14 +109,9 @@ export async function POST(
       return NextResponse.json({ error: "Not a member" }, { status: 403 });
     }
 
-    // Get workspaceId from channel
-    const [ch] = await db
-      .select({ workspaceId: channels.workspaceId, name: channels.name })
-      .from(channels)
-      .where(eq(channels.id, channelId))
-      .limit(1);
-
-    if (!ch?.workspaceId) {
+    // Use resolved channel workspace/name directly
+    const workspaceId = resolvedChannel.workspaceId;
+    if (!workspaceId) {
       return NextResponse.json({ error: "Channel not found" }, { status: 404 });
     }
 
@@ -117,19 +122,45 @@ export async function POST(
       .where(eq(canvases.channelId, channelId));
 
     const body = await request.json().catch(() => ({}));
-    const defaultTitle = `#${ch.name ?? 'channel'} canvas${existingCount > 0 ? ` ${existingCount + 1}` : ''}`;
+    const defaultTitle = `#${resolvedChannel.name ?? 'channel'} canvas${existingCount > 0 ? ` ${existingCount + 1}` : ''}`;
     const title = body.title?.trim() || defaultTitle;
 
-    const [canvas] = await db
-      .insert(canvases)
-      .values({
-        channelId,
-        workspaceId: ch.workspaceId,
-        title,
-        content: "",
-        createdBy: user.id,
-      })
-      .returning(canvasColumns);
+    // Create a Notion root page block and link the canvas to it so the block
+    // editor (headings, bullets, slash commands, rich text) is usable right
+    // after "+ New canvas". Without a pageId, NotionCanvasEditor falls back to
+    // the legacy markdown textarea.
+    const canvas = await db.transaction(async (tx) => {
+      const [page] = await tx
+        .insert(blocks)
+        .values({
+          type: "page",
+          parentId: null,
+          // page_id is NOT NULL and must point to itself; patched after insert.
+          pageId: "00000000-0000-0000-0000-000000000000",
+          workspaceId,
+          properties: { title },
+          content: {},
+          childrenOrder: [],
+          createdBy: user.id,
+        })
+        .returning({ id: blocks.id });
+
+      await tx.update(blocks).set({ pageId: page.id }).where(eq(blocks.id, page.id));
+
+      const [row] = await tx
+        .insert(canvases)
+        .values({
+          channelId,
+          workspaceId,
+          title,
+          content: "",
+          createdBy: user.id,
+          pageId: page.id,
+        })
+        .returning(canvasColumns);
+
+      return row;
+    });
 
     return NextResponse.json(canvas, { status: 201 });
   } catch (err) {

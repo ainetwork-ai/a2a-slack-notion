@@ -11,6 +11,7 @@ import { canvases, channelMembers, users } from "@/lib/db/schema";
 import { eq, and, desc, lt, or, ilike } from "drizzle-orm";
 import { requireAuth } from "@/lib/auth/middleware";
 import { NextRequest, NextResponse } from "next/server";
+import { resolveChannelParam } from "@/lib/resolve";
 
 function encodeCursor(updatedAt: Date, id: string): string {
   return Buffer.from(`${updatedAt.toISOString()}:${id}`).toString("base64");
@@ -38,7 +39,12 @@ export async function GET(
     const auth = await requireAuth();
     if ("error" in auth) return auth.error;
 
-    const { channelId } = await params;
+    const { channelId: param } = await params;
+    const channel = await resolveChannelParam(param, auth.user.id);
+    if (!channel) {
+      return NextResponse.json({ error: "Channel not found" }, { status: 404 });
+    }
+    const channelId = channel.id;
 
     const [membership] = await db
       .select()
@@ -80,8 +86,7 @@ export async function GET(
     }
 
     // Explicit column list — avoid bare `.select()` which would emit every
-    // schema column including `page_id`, which migration 0010 adds but may
-    // not yet exist in every environment.
+    // schema column; keeping the list stable during migration drift.
     const rows = await db
       .select({
         id: canvases.id,
@@ -92,6 +97,7 @@ export async function GET(
         updatedAt: canvases.updatedAt,
         createdAt: canvases.createdAt,
         updatedByName: users.displayName,
+        pageId: canvases.pageId,
       })
       .from(canvases)
       .leftJoin(users, eq(canvases.updatedBy, users.id))
