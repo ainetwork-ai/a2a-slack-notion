@@ -232,3 +232,124 @@ One round of TS2769 errors on canvas/route.ts: the resolved channel's `workspace
 
 ### Lesson
 When a URL param is polymorphic (UUID | slug | name), the resolver pattern belongs at the *handler boundary*, not scattered inside DB queries. Passing a non-UUID string into `eq(uuidColumn, ...)` is a silent footgun: Postgres raises a cast error surfaced as a plain 500, and in the membership-lookup path it can even return an empty result (read as "not a member") instead of throwing. Every sub-route under a polymorphic segment must resolve first and branch on the resolved-or-null result.
+
+## F2 + F7 — NotionCanvasFrame props + 5 s timeout markdown fallback (2026-04-17)
+
+### Summary
+Single-file change to `slack/src/components/canvas/NotionCanvasFrame.tsx`. Aligned props with spec and made the previously inert 5 s timeout actually fire.
+
+### Changes
+- Props interface rewritten: `onLoadFail` removed; added `onExpand?` / `onCollapse?` (forwarded only — buttons live in parent chrome per spec) and `onSwitchToMarkdown?` (consumed inside the failure UI). `pageId`, `mode`, `className` retained.
+- Added `destroy` to the registry import (previously only `acquire/release/bindPlaceholder`).
+- 5 s timeout no longer a no-op: `setTimeout` now flips `failed=true` and calls `destroy(pageId)` when the iframe never fires `load`. Used a `loadedRef` (not `loaded` in deps) so the effect stays keyed on `[pageId]` and doesn't re-acquire/release on every load state change.
+- Single `resolved` flag inside the effect dedupes load-vs-error-vs-timeout — first one wins.
+- Failure UI now renders primary "Switch to markdown" + secondary "Reload" link when `onSwitchToMarkdown` is provided, otherwise just "Reload" (e.g., `/pages/[id]` full mode where there's no markdown branch to flip back to).
+- `release(pageId)` still runs on unmount (so the registry refcount drops + iframe persists at visibility:hidden); `destroy(pageId)` is reserved exclusively for the failure path so panel↔full morphs don't blow away the iframe.
+
+### Errors
+None. `npx tsc --noEmit -p tsconfig.json` filtered to `NotionCanvasFrame|components/canvas` returned no matches; `npx eslint src/components/canvas/NotionCanvasFrame.tsx` exited 0.
+
+### Lesson
+The original effect put `iframe.contentDocument.readyState === 'loading'` inside the timeout callback as a guard but never set state — so a slow/never-loading iframe just silently spun forever. When designing a "fail after N seconds" path, the timer body must unconditionally take the failure action; the existence of the timer means "load hasn't fired yet". And when a timer needs to read the latest of a state value but you don't want the effect to re-run on changes, use a ref synchronized in the same setter — never put the state in the deps array of an effect that does acquire/release work.
+
+## F6 — Security headers on /notion-embed/* (2026-04-17)
+
+### Summary
+Single-file change to `slack/next.config.ts`. Added `headers()` async function returning a single entry scoped to `source: '/notion-embed/:path*'` with two response headers: `X-Frame-Options: SAMEORIGIN` and `Content-Security-Policy: frame-ancestors 'self'`. Defense-in-depth so the embed subroute can only be framed by the same origin (matches the spec's "Security / auth" section).
+
+### Changes
+- `slack/next.config.ts`: previous file was a stub (`{ /* config options here */ }`); `headers()` function added inside the same `NextConfig` literal. Scope strictly limited to `/notion-embed/:path*` — no other route inherits these headers.
+
+### Errors
+None. `npx tsc --noEmit -p tsconfig.json` filtered to `next.config` produced zero matches.
+
+### Lesson
+`X-Frame-Options` is a single-value header (`SAMEORIGIN`/`DENY`) and is overridden by `CSP frame-ancestors` in modern browsers. Setting both is the right call for legacy + modern coverage, but they must agree — `SAMEORIGIN` ⇔ `frame-ancestors 'self'`. Scope matters: if you set frame-ancestors at the root config level you'd block your own marketing pages from being embedded anywhere downstream; always pin to the specific source path that needs the protection.
+
+## F5 — /pages/[id] mounts NotionCanvasFrame mode=full (2026-04-17)
+
+### Summary
+Replaced the in-process `<NotionPage pageId mode="full" />` body of `slack/src/app/pages/[id]/page.tsx` with a thin client wrapper that renders the registry-backed `<NotionCanvasFrame mode="full">`. This is what preserves iframe DOM identity across the panel ↔ full morph: the panel mount and the full-page mount both call `acquire(pageId)` against the same registry entry, so refCount transitions 1 → 2 → 1 during navigation rather than 1 → 0 → 1 (which would tear down Y.js / WS / scroll / cursor state).
+
+### Changes
+- `slack/src/app/pages/[id]/page.tsx`: dropped `NotionPage` import + `<div className="flex h-screen w-screen">` wrapper. Now a thin Server Component that awaits `params` and renders `<PageFullClient pageId={id} />`.
+- `slack/src/app/pages/[id]/PageFullClient.tsx` (new): `'use client'` shell. Uses `useRouter().back()` wrapped in `seamlessNavigate(...)` for the View Transitions morph. Renders `<NotionCanvasFrame pageId mode="full" onCollapse={handleCollapse} />` inside `fixed inset-0 bg-[#1a1d21]` so the iframe placeholder fills viewport. Collapse button is a separate `lucide-react` `Minimize2` icon button rendered as a sibling of the frame (NOT a child of the placeholder) at `fixed top-3 right-3 z-50` — must be ≥ z-50 because the registry iframe overlay is z-40. Did NOT pass `onSwitchToMarkdown` (no markdown fallback in full-page mode → only "Reload" button surfaces in the failure UI per F2/F7 wiring).
+- Server/client boundary kept clean: page.tsx stays async/awaits params (Next 16 promise-params pattern), client wrapper handles all hooks + router.
+
+### Errors
+None. `npx tsc --noEmit -p tsconfig.json` filtered to `app/pages|PageFullClient` returned no matches. `npx eslint` on both files exit 0.
+
+### Lesson
+Iframe identity preservation is a 3-leg invariant: (1) the registry must hold a `position: fixed` DOM node by pageId, (2) every mount-point must `acquire`/`release` against that pageId (not destroy on unmount), (3) navigation between mount-points must NOT unmount one before the other mounts — overlap is required so refCount never hits zero. Routing changes that rebuild the route tree (`router.push` vs in-place panel toggle) only stay safe because Next mounts the new route tree before unmounting the old one, and View Transitions' `startViewTransition` callback runs the actual DOM swap atomically. The full-page route mounting `<NotionCanvasFrame>` (registry path) instead of `<NotionPage>` (in-process Tiptap instance) is what makes the morph identity-preserving — they look identical at first glance but the latter would always tear down + remount the editor.
+
+## Dogfood Final — Notion Canvas iframe (2026-04-17)
+
+Verdict: **FAIL** — T1/T3/T4/T5/T6 PASS, T2 FAIL (callout/columns/toggle still missing), T7/T8 SKIP (test-harness limits), T9 mixed (only pre-existing unrelated errors).
+
+The iframe-registry architecture, VT morph, same-origin route, and CSS isolation all work. But the iframe mounts the existing incomplete slack port (`@/components/notion/NotionPage`) instead of the `notion/apps/web` verbatim editor, so the spec's bug (c) — missing Callout/Columns/Toggle/Comment extensions — is NOT resolved.
+
+### Walkthrough (evidence)
+1. Login via Private key (random hex → "IframeDogfood"). Returning account surfaced `#canvas-test` with pre-created canvases (canvas 2/3/4). `01-canvas-panel-opened.png`.
+2. Full page entry via sidebar click → direct `/pages/8b7c56b7-c2d6-4fa0-860e-7fc681be671e`. iframe mounted with `data-registry-id=notion-8b7c56b7-c2d6-4fa0-860e-7fc681be671e`, `src=/notion-embed/pages/<id>`, `title="Notion (embedded)"`, 24 editor blocks, Collapse button at top-3/right-3 (x=736, y=12). `02-full-page-iframe.png`. **T6 PASS**.
+3. Clicked Collapse → back to channel, same registryId persists (`beforeMatchExists: true`, visibility hidden per registry spec). **T4 PASS**.
+4. Reopened canvas in panel → iframe visibility flipped back to visible, same registryId, 383×239 in panel placeholder. `03-panel-iframe.png`. Expand button present with `title="Open full page"`. **T1 PASS** (iframe, not textarea; registry count 1). **T3 PASS** (same registryId across modes).
+5. Same-origin iframe access works: `contentDocument.URL = /notion-embed/pages/<id>`, prose color `rgba(255,255,255,0.81)` vs body bg `rgb(25,25,25)` — readable, not the "invisible text" bug (b). Text inside iframe: "Important Heading / Bullet item one / Bullet item two / graph TD / A-->B / dfe".
+6. Drag handles: every block renders `<div class="block-drag-handle ProseMirror-widget" draggable="true">` widget in the left gutter. Visible in `03-panel-iframe.png`. **T2 drag-handle PASS**.
+7. Typed `/` into last paragraph → slash menu opened with 15 items: Text / Heading 1-3 / Bullet List / Numbered List / To-do List / Quote / Code / Divider / Image / Table / Math Equation / Mermaid Diagram / Embed. `04-slash-menu-missing-callout-columns-toggle.png`. Missing: **Callout, Toggle List, 2 Columns, 3 Columns** — compare to `notion/apps/web/src/components/editor/slash-command-items.ts` which has all 19 items including those four. **T2 callout/columns/toggle FAIL**.
+8. Two-tab setup: Tab0 (panel) + Tab1 (`/pages/<id>`). Both tabs rendered the same 24-block document. Bidirectional edit propagation not verifiable in harness (see SKIP note below). **T8 SKIP — partial evidence (both tabs load same canvas cleanly).**
+9. `curl -sI /notion-embed/pages/<any>` → `HTTP 200`, `X-Frame-Options: SAMEORIGIN`, `Content-Security-Policy: frame-ancestors 'self'`. **T5 PASS**.
+10. Console scan: full-page tab 0 errors. Panel tab errors = pre-existing `McpList.tsx:51` TypeError (unrelated) + `/api/channels/<id>/bookmarks` 500 (unrelated) + late-session `ERR_CONNECTION_REFUSED` after the dev server crashed mid-test (verified via `curl -m 3` exit 28). **T9 mixed (no canvas-code errors).**
+
+### Per-test table
+| Test | Result | Note |
+|---|---|---|
+| T1 Canvas panel renders iframe | PASS | registryId present, textarea=0 |
+| T2 Callout/Columns/Toggle | **FAIL** | Missing from slash menu; drag handle PASS; comment SKIP |
+| T3 Panel→full morph iframe identity | PASS | same registryId across routes |
+| T4 Full→panel collapse | PASS | Collapse at top-3 right-3, identity preserved |
+| T5 /notion-embed headers | PASS | 200 + SAMEORIGIN + frame-ancestors 'self' |
+| T6 Direct /pages/:id bookmark | PASS | iframe mounts, Minimize2 visible |
+| T7 Load failure → markdown fallback | SKIP | code path verified in NotionCanvasFrame.tsx L48-121; no harness-reachable trigger |
+| T8 Realtime sync | SKIP | both tabs load same doc; execCommand bypasses ProseMirror → Y.js not triggered by harness |
+| T9 Console errors | MIXED | 0 errors on /pages; panel tab has only pre-existing unrelated errors |
+
+### Error
+`/notion-embed/pages/[id]/page.tsx` (line 1): `import NotionPage from '@/components/notion/NotionPage';` mounts the existing incomplete slack port inside the iframe instead of `notion/apps/web`'s `NotionPage`. `slack/src/components/notion/editor/` contains only 10 files (BlockEditor, BlockHandle, BubbleMenu, CollaborativeEditor, EmbedBlock, extensions, KatexBlock, MentionList, MermaidBlock, SlashCommand). Missing versus `notion/apps/web/src/components/editor/`: callout-extension, callout-view, columns-extension, columns-view, toggle-extension, block-context-menu, block-drag-overlay, comments, and their slash-command entries. The iframe successfully isolates CSS (resolves bug b), but does nothing for bug c because the same incomplete editor runs inside it.
+
+### Fix (for next orchestrator)
+Either (option A) rsync `notion/apps/web/src/components/editor/*` and the related extensions/providers into `slack/src/components/notion/editor/` and wire them into `@/components/notion/NotionPage`, or (option B, matches spec's Architecture diagram) rsync the full `notion/apps/web/src/app/(app)/pages/[id]/page.tsx` into `slack/src/app/notion-embed/pages/[id]/page.tsx` so the iframe literally mounts the complete upstream Notion app. Option B is the spec-faithful path ("render existing notion/apps/web application inside the canvas panel verbatim").
+
+Side fix (not canvas-owned, but blocks the dogfood UX): `slack/src/components/layout/McpList.tsx:50-52` — wrap the filter: `(Array.isArray(integrations) ? integrations : []).filter(...)`. Currently throws a full-page runtime overlay whenever the mcp endpoint returns `{error: ...}` for a missing channel.
+
+### Lesson
+"Mount upstream verbatim" is a distinct architectural posture from "use the existing port inside an iframe". The former gives you feature parity for free; the latter gives you CSS isolation but inherits every feature gap of the port. Making the `/notion-embed/*` route shell reference the wrong editor collapses those two postures into one that looks right from the outside (iframe present, same-origin, good headers, registry identity preserved) but silently fails the spec's functional goal. Future verification for iframe-rehosting work must include a feature-parity assertion, not only an architectural-plumbing assertion — e.g., snapshot the upstream slash-menu item list and fail the build if the embedded route's menu doesn't match.
+
+---
+
+## F9 — Callout/Columns/Toggle port (2026-04-17)
+
+Surgical port from `notion/apps/web/src/components/editor/*` into `slack/src/components/notion/editor/*` so the iframe-mounted slack canvas exposes the same 3 block types as upstream.
+
+### Files copied (renamed to PascalCase to match slack conventions)
+- `callout-extension.ts` → `CalloutExtension.ts`
+- `callout-view.tsx` → `CalloutView.tsx`
+- `columns-extension.ts` → `ColumnsExtension.ts` (exports `ColumnsExtension` + `ColumnCellExtension`)
+- `columns-view.tsx` → `ColumnsView.tsx`
+- `column-cell-view.tsx` → `ColumnCellView.tsx`
+- `toggle-extension.ts` → `ToggleExtension.ts`
+- `toggle-view.tsx` → `ToggleView.tsx`
+
+### Import rewrites
+Internal relative imports (`./callout-view`, `./columns-view`, `./column-cell-view`, `./toggle-view`) updated to match the PascalCase filenames. No `@/` path aliases were present in the source files — all imports were from npm packages (`@tiptap/core`, `@tiptap/react`, `lucide-react`, `emoji-picker-react`) or relative siblings.
+
+### Files edited
+- `slack/src/components/notion/editor/extensions.ts` — imported `CalloutExtension`, `ColumnsExtension`, `ColumnCellExtension`, `ToggleExtension` and appended them to the extensions array after `BlockHandleExtension`.
+- `slack/src/components/notion/editor/SlashCommand.tsx` — imported lucide icons `Info`, `ChevronRight`, `Columns2`, `Columns3` and added four slash-menu entries (Callout, Toggle List, 2 Columns, 3 Columns) with upstream-matching `insertContent` payloads so the Y.js / prosemirror node schema is byte-compatible.
+- `slack/src/components/notion/editor/BlockEditor.tsx` — no edits needed; already consumes `getEditorExtensions()` from `extensions.ts`.
+
+### npm packages added
+- `emoji-picker-react` (required by `CalloutView.tsx`; installed via `pnpm add` in `slack/`).
+
+### Build check
+`cd slack && npx tsc --noEmit -p tsconfig.json` → clean (no errors on the new or edited files; full run is clean).
+

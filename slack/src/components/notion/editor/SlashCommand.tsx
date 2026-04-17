@@ -18,6 +18,10 @@ import {
   Sigma,
   GitBranch,
   Globe,
+  Info,
+  ChevronRight,
+  Columns2,
+  Columns3,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -88,6 +92,73 @@ const COMMANDS: SlashCommandItem[] = [
     description: 'Horizontal rule',
     icon: Minus,
     command: (editor) => editor.chain().focus().setHorizontalRule().run(),
+  },
+  {
+    title: 'Callout',
+    description: 'Highlight important information',
+    icon: Info,
+    command: (editor) =>
+      editor
+        .chain()
+        .focus()
+        .insertContent({
+          type: 'callout',
+          attrs: { emoji: '💡' },
+          content: [{ type: 'paragraph' }],
+        })
+        .run(),
+  },
+  {
+    title: 'Toggle List',
+    description: 'Collapsible toggle block',
+    icon: ChevronRight,
+    command: (editor) =>
+      editor
+        .chain()
+        .focus()
+        .insertContent({
+          type: 'toggle',
+          attrs: { open: true },
+          content: [{ type: 'paragraph' }],
+        })
+        .run(),
+  },
+  {
+    title: '2 Columns',
+    description: 'Two-column layout',
+    icon: Columns2,
+    command: (editor) =>
+      editor
+        .chain()
+        .focus()
+        .insertContent({
+          type: 'columns',
+          attrs: { columns: 2 },
+          content: [
+            { type: 'columnCell', content: [{ type: 'paragraph' }] },
+            { type: 'columnCell', content: [{ type: 'paragraph' }] },
+          ],
+        })
+        .run(),
+  },
+  {
+    title: '3 Columns',
+    description: 'Three-column layout',
+    icon: Columns3,
+    command: (editor) =>
+      editor
+        .chain()
+        .focus()
+        .insertContent({
+          type: 'columns',
+          attrs: { columns: 3 },
+          content: [
+            { type: 'columnCell', content: [{ type: 'paragraph' }] },
+            { type: 'columnCell', content: [{ type: 'paragraph' }] },
+            { type: 'columnCell', content: [{ type: 'paragraph' }] },
+          ],
+        })
+        .run(),
   },
   {
     title: 'Image',

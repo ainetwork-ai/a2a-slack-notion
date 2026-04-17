@@ -21,6 +21,9 @@ import { common, createLowlight } from 'lowlight';
 import { BlockHandleExtension } from './BlockHandle';
 import { MentionList } from './MentionList';
 import type { MentionItem, MentionListRef } from './MentionList';
+import { CalloutExtension } from './CalloutExtension';
+import { ColumnsExtension, ColumnCellExtension } from './ColumnsExtension';
+import { ToggleExtension } from './ToggleExtension';
 
 const lowlight = createLowlight(common);
 
@@ -170,5 +173,9 @@ export function getEditorExtensions(options: EditorExtensionOptions = {}) {
       },
     }),
     BlockHandleExtension,
+    CalloutExtension,
+    ColumnsExtension,
+    ColumnCellExtension,
+    ToggleExtension,
   ];
 }
