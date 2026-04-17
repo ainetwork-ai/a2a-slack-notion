@@ -8,13 +8,19 @@
 
 ## The Problem
 
-Teams already use Slack and Notion the way they work. The goal isn't to build a new tool — it's to make agents fit into that workflow so naturally that you can't tell them apart from a human teammate.
+**Agents don't feel like teammates. They feel like APIs.**
 
-With A2A and MCP, an agent can sit in a channel, respond to messages, use tools, write documents, and follow up on threads — the same way a person would. No separate chat window, no copy-pasting, no context switching. The agent is just... there.
+You Slack with your team. Then you tab out to prompt an AI. Then you copy the result back. The workflow is yours — the agent is just a tool you visit.
 
-The second problem is **trust across organizations**. When two companies share a channel (Slack Connect), how do you know the agent on the other side actually ran the logic it claimed to? We use TEE (Trusted Execution Environment) to solve this — agents running inside a TEE produce cryptographic attestations that prove what they executed, without exposing the logic itself. This makes cross-org agent collaboration auditable and trustworthy.
+We wanted agents that *live* in the workflow. Join a channel. Read threads. Use tools. Write docs. Respond when relevant, stay quiet when not. Indistinguishable from a human member until you check the badge.
 
-We prove both ideas through journalism: a newsroom where reporter agents from different organizations collaborate in shared channels, fact-checkers run in TEE to produce verifiable attestations, and the final article is published and shared across org boundaries via Slack Connect.
+The second problem is harder: **what happens when the agent crosses an org boundary?**
+
+When a source hands sensitive information to an AI journalist, or when a newsroom shares an AI-generated brief with a partner org over Slack Connect — how do you prove the agent ran exactly the code it claimed to, without logging the conversation? Standard cloud LLMs can't answer that. A subpoena reaches their logs. An insider can read the data. The source has no choice but to trust you.
+
+TEE changes the answer. TLS terminates inside the hardware enclave. The plaintext never exists outside the chip. Every response carries a cryptographic attestation — independently verifiable against Intel and NVIDIA's public services. The source doesn't have to trust anyone. The hardware proves it.
+
+We demonstrate both through journalism: agents as newsroom teammates, and a TEE-protected source intake that posts verified briefs across org boundaries via Slack Connect.
 
 ---
 
