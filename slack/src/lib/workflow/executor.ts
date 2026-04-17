@@ -819,10 +819,21 @@ async function executeStep(
       const content = substituteVariables(step.content, vars);
       const title = step.title ? substituteVariables(step.title, vars) : undefined;
 
+      // Resolve agent for canvas authorship from routing.reporter or step.agent
+      const canvasAgentRef = (step as { agent?: string }).agent
+        ? substituteVariables((step as { agent?: string }).agent!, vars)
+        : (vars.routing as { reporter?: string })?.reporter;
+      let canvasAgentId: string | undefined;
+      if (canvasAgentRef) {
+        const resolved = await resolveAgent(canvasAgentRef);
+        canvasAgentId = resolved?.id;
+      }
+
       const { executeTool } = await import("@/lib/mcp/executor");
       const toolName = step.append ? "canvas_append" : "canvas_write";
       const params: Record<string, unknown> = { channelId: channel.id, content };
       if (title) params.title = title;
+      if (canvasAgentId) params.agentId = canvasAgentId;
 
       const result = await executeTool("slack", toolName, params);
       if (!result.success) {
