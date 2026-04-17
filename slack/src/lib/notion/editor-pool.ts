@@ -1,7 +1,7 @@
 /**
  * Tiptap Editor pool — one `Editor` instance per pageId.
  *
- * Pairs with `doc-pool.ts`. The invariant: the panel view and the full-page
+ * The invariant: the panel view and the full-page
  * view for the same pageId mount the SAME editor instance. So when the user
  * collapses the side panel and re-expands it (or navigates between modes),
  * selection, undo stack, scroll position, and focus are all preserved.

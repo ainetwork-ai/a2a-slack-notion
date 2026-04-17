@@ -1,7 +1,5 @@
 /**
- * Block CRUD within a page. Y.Doc remains source of truth during active editing;
- * these endpoints are for server-driven reads/writes (e.g. MCP agents, REST clients,
- * initial document load before Yjs sync).
+ * Block CRUD within a page.
  *
  * GET /api/blocks/:id — fetch a single block
  * PATCH /api/blocks/:id — update properties/content/childrenOrder

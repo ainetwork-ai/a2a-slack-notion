@@ -6,7 +6,7 @@
  * the shared schema.ts (which belongs to a different agent). We define the
  * drizzle table inline here to avoid touching that file.
  *
- * Integration point for hocuspocus / comment hooks:
+ * Integration point for comment hooks:
  *   import { createNotionNotification, notifyMention } from '@/lib/notion/create-notification';
  */
 

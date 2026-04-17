@@ -32,14 +32,13 @@ interface NotionPageProps {
  * Single component rendered in both panel and full-page modes.
  *
  * Invariants:
- *  - Same `pageId` yields the same `Y.Doc`, `HocuspocusProvider`, and Tiptap
- *    `Editor` across panel ↔ full (see `doc-pool`, provider pool in
- *    `use-collaboration`, and `editor-pool`).
+ *  - Same `pageId` yields the same Tiptap `Editor` across panel ↔ full
+ *    (see `editor-pool`).
  *  - `view-transition-name` stays attached to the editor body container so
  *    the View Transitions API treats panel body and full body as the same
  *    element and morphs between them.
  *  - Unmount detaches the ProseMirror DOM from this container but does NOT
- *    destroy the editor, doc, or provider.
+ *    destroy the editor.
  */
 export default function NotionPage({
   pageId,
