@@ -142,24 +142,24 @@ export default function PageView() {
               title="Page history"
               aria-label="Page history"
               aria-pressed={historyOpen}
-              className={`p-1.5 rounded-[var(--radius-sm)] hover:bg-[var(--bg-hover)] transition-colors duration-[var(--duration-micro)] focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--accent-blue)] ${historyOpen ? 'bg-[var(--bg-active)]' : ''}`}
+              className={`notion-hover inline-flex items-center justify-center h-7 w-7 text-[var(--text-secondary)] transition-colors duration-[var(--duration-micro)] focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--accent-blue)] ${historyOpen ? 'bg-[var(--bg-active)]' : ''}`}
             >
               <Clock
                 size={16}
                 aria-hidden="true"
-                className={historyOpen ? 'text-[var(--text-primary)]' : 'text-[var(--text-tertiary)]'}
+                className={historyOpen ? 'text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'}
               />
             </button>
             <button
               onClick={toggleFavorite}
               aria-label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
               aria-pressed={isFavorite}
-              className="p-1.5 rounded-[var(--radius-sm)] hover:bg-[var(--bg-hover)] transition-colors duration-[var(--duration-micro)] focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--accent-blue)]"
+              className="notion-hover inline-flex items-center justify-center h-7 w-7 text-[var(--text-secondary)] transition-colors duration-[var(--duration-micro)] focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--accent-blue)]"
             >
               <Star
                 size={16}
                 aria-hidden="true"
-                className={isFavorite ? 'fill-[var(--color-yellow)] text-[var(--color-yellow)]' : 'text-[var(--text-tertiary)]'}
+                className={isFavorite ? 'fill-[var(--color-yellow)] text-[var(--color-yellow)]' : 'text-[var(--text-secondary)]'}
               />
             </button>
 
@@ -168,7 +168,7 @@ export default function PageView() {
               title="Share"
               aria-label="Share"
               aria-expanded={shareOpen}
-              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-[var(--radius-sm)] text-sm font-medium transition-colors duration-[var(--duration-micro)] focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--accent-blue)] ${shareOpen ? 'bg-[var(--bg-active)] text-[var(--text-primary)]' : 'hover:bg-[var(--bg-hover)] text-[var(--text-secondary)]'}`}
+              className={`notion-hover inline-flex items-center gap-1.5 h-7 px-2.5 text-sm font-medium transition-colors duration-[var(--duration-micro)] focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--accent-blue)] ${shareOpen ? 'bg-[var(--bg-active)] text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'}`}
             >
               <Share2 size={14} aria-hidden="true" />
               Share
@@ -182,12 +182,12 @@ export default function PageView() {
                 aria-label="More actions"
                 aria-expanded={moreMenuOpen}
                 aria-haspopup="menu"
-                className={`p-1.5 rounded-[var(--radius-sm)] hover:bg-[var(--bg-hover)] transition-colors duration-[var(--duration-micro)] focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--accent-blue)] ${moreMenuOpen ? 'bg-[var(--bg-active)]' : ''}`}
+                className={`notion-hover inline-flex items-center justify-center h-7 w-7 text-[var(--text-secondary)] transition-colors duration-[var(--duration-micro)] focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--accent-blue)] ${moreMenuOpen ? 'bg-[var(--bg-active)]' : ''}`}
               >
                 <MoreHorizontal
                   size={16}
                   aria-hidden="true"
-                  className={moreMenuOpen ? 'text-[var(--text-primary)]' : 'text-[var(--text-tertiary)]'}
+                  className={moreMenuOpen ? 'text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'}
                 />
               </button>
 
@@ -275,9 +275,10 @@ export default function PageView() {
 
           {/* Title */}
           <h1
-            className="text-[40px] font-bold leading-[1.2] text-[var(--text-primary)] outline-none"
+            className="text-[40px] font-bold leading-[1.2] text-[var(--text-primary)] outline-none empty:before:content-[attr(data-placeholder)] empty:before:text-[var(--text-placeholder)] placeholder:text-[var(--text-placeholder)]"
             contentEditable
             suppressContentEditableWarning
+            data-placeholder="Untitled"
             onFocus={(e) => {
               const text = e.currentTarget.textContent?.trim() ?? '';
               if (text === 'Untitled' || text === '') {
@@ -298,7 +299,7 @@ export default function PageView() {
               setBreadcrumbKey((k) => k + 1);
             }}
           >
-            {page?.title || 'Untitled'}
+            {page?.title || ''}
           </h1>
 
           {/* Collaborative editor — real-time via Hocuspocus, includes block handle/context menu/DnD */}
