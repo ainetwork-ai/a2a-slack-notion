@@ -48,7 +48,7 @@ export default function McpList({ onServerClick }: McpListProps = {}) {
   );
 
   const enabledIds = new Set(
-    (integrations ?? []).filter(i => i.enabled).map(i => i.serverId)
+    (Array.isArray(integrations) ? integrations : []).filter(i => i.enabled).map(i => i.serverId)
   );
 
   async function toggleMcp(serverId: string, currentlyEnabled: boolean) {

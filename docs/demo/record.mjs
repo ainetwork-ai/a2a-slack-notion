@@ -1,6 +1,6 @@
-// README-walkthrough recorder. Follows the flow:
-//   Hero → Principles → Problem 1 → Problem 2 → Demo steps (1a invite, 1b build,
-//   1c workflow, 2 newsroom, 3 editorial, 4 reporter, 5 TEE, 6 canvas, 7 Slack Connect, 8 corroborate).
+// README-walkthrough recorder.
+// Follows the README story in order, but only shows screens that have
+// real populated content so the video never lingers on empty panes.
 // Output: docs/demo/raw.webm  (aligned with narration.srt)
 
 import { chromium } from "playwright";
@@ -14,30 +14,40 @@ const SLACK = "http://localhost:3004";
 const TEE = "https://war-desk-source-shield.vercel.app";
 const PRIVATE_KEY = "b796e8971f2c5c909a2178fb3fc1970f317adb1e9237d950d8fcdd5f5e1d7e42";
 
-// Cue schedule (s). Each cue is the *start* of the corresponding narration line.
+// Cue schedule (seconds). Narration timings in narration.srt must match.
 const CUE = {
   hero: 0,
-  problem1: 7,
-  problem2: 14,
-  step1a_invite: 22,
-  step1b_build: 32,
-  step1c_workflow: 40,
-  step2_newsroom: 48,
-  step3_editorial: 55,
-  step4_reporter: 63,
-  step5_tee_open: 71,
-  step5_tee_ask: 77,
-  step5_tee_result: 83,
-  step6_canvas: 93,
-  step7_connect: 101,
-  step8_corroborate: 108,
-  end: 116,
+  problems: 7,
+  step1a_invite: 15,
+  step1c_workflow: 27,
+  step2_newsroom: 38,
+  step3_editorial: 47,
+  step4_reporter: 56,
+  step5_tee_open: 65,
+  step5_tee_ask: 71,
+  step5_tee_result: 78,
+  step6_canvas: 91,
+  end: 103,
 };
+
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const waitUntil = async (t0, sec) => {
   const wait = sec * 1000 - (Date.now() - t0);
   if (wait > 0) await sleep(wait);
 };
+
+// CSS to hide Next.js dev-tools overlay and its issue badges.
+const HIDE_DEV_OVERLAY = `
+  nextjs-portal, nextjs-build-watcher, [data-nextjs-toast],
+  [class*="__nextjs"], #__next-build-watcher,
+  button[aria-label*="Next.js Dev Tools"],
+  [class*="nextjs-dev-tools"],
+  [data-issues-count], [data-issues-toast] { display: none !important; visibility: hidden !important; }
+`;
+
+async function hideOverlay(page) {
+  await page.addStyleTag({ content: HIDE_DEV_OVERLAY }).catch(() => {});
+}
 
 async function getAuthCookie() {
   const res = await fetch(`${SLACK}/api/auth/key-login`, {
@@ -47,7 +57,7 @@ async function getAuthCookie() {
   });
   const raw = res.headers.get("set-cookie") || "";
   const [pair] = raw.split(";");
-  if (!pair || !pair.includes("=")) throw new Error("no session cookie returned");
+  if (!pair || !pair.includes("=")) throw new Error("no session cookie");
   const [name, value] = pair.split("=");
   return { name, value, domain: "localhost", path: "/", httpOnly: true, sameSite: "Lax" };
 }
@@ -62,6 +72,8 @@ async function scrollMessages(page, ratio) {
 async function openChannel(page, name) {
   await page.goto(`${SLACK}/workspace/channel/${name}`, { waitUntil: "domcontentloaded" });
   await page.waitForSelector(".message-area", { timeout: 15000 }).catch(() => {});
+  await hideOverlay(page);
+  await sleep(600);
 }
 
 async function run() {
@@ -73,26 +85,23 @@ async function run() {
   });
   await context.addCookies([cookie]);
   const page = await context.newPage();
+  page.on("framenavigated", () => hideOverlay(page).catch(() => {}));
 
   const t0 = Date.now();
 
-  // Hero (0s): #unblockmedia-test-1 with active agent pipeline
+  // Hero (0s): newsroom with real agent activity
   await openChannel(page, "unblockmedia-test-1");
   await scrollMessages(page, 0.55);
   await waitUntil(t0, CUE.hero);
-  await sleep(5800);
+  await sleep(6500);
 
-  // Problem 1 (7s): scroll to show more agent activity
+  // Problem 1 + Problem 2 framing (7s): stay in channel
   await scrollMessages(page, 0.3);
-  await waitUntil(t0, CUE.problem1);
-  await sleep(5800);
+  await hideOverlay(page);
+  await waitUntil(t0, CUE.problems);
+  await sleep(7500);
 
-  // Problem 2 (14s): show war-desk channel (will become the cross-org TEE receiver)
-  await openChannel(page, "war-desk");
-  await waitUntil(t0, CUE.problem2);
-  await sleep(6800);
-
-  // Step 1a Invite Agent (22s)
+  // Step 1a Invite Agent (15s): open dialog, preview Sealed Witness
   await page.evaluate(() => {
     const btn = Array.from(document.querySelectorAll("button")).find(
       (b) => b.textContent?.trim() === "Invite agent",
@@ -114,65 +123,66 @@ async function run() {
     );
     btn?.click();
   });
+  await page.getByText(/Sealed Witness Agent/i).first().waitFor({ timeout: 20000 }).catch(() => {});
   await waitUntil(t0, CUE.step1a_invite);
-  await sleep(9800);
+  await sleep(11500);
 
-  // Step 1b Build Agent DM (32s)
+  // Step 1c Workflow editor (27s)
   await page.keyboard.press("Escape");
-  await page.goto(`${SLACK}/workspace/dm/builder`, { waitUntil: "domcontentloaded" });
-  await waitUntil(t0, CUE.step1b_build);
-  await sleep(7800);
-
-  // Step 1c Workflow editor (40s)
   await page.goto(`${SLACK}/workspace/workflows`, { waitUntil: "domcontentloaded" });
   await page.waitForSelector("text=Workflow Builder", { timeout: 8000 }).catch(() => {});
+  await hideOverlay(page);
   await page.evaluate(() => {
     const btn = Array.from(document.querySelectorAll("button")).find((b) => b.title === "Edit");
     btn?.click();
   });
+  await page.waitForSelector('text=Then do', { timeout: 6000 }).catch(() => {});
   await waitUntil(t0, CUE.step1c_workflow);
-  await sleep(7800);
+  await sleep(10500);
   await page.keyboard.press("Escape");
 
-  // Step 2 Newsroom channel (48s)
+  // Step 2 Newsroom channel top (38s)
   await openChannel(page, "unblockmedia-test-1");
-  await scrollMessages(page, 0);
+  await scrollMessages(page, 0.02);
   await waitUntil(t0, CUE.step2_newsroom);
-  await sleep(6800);
+  await sleep(8500);
 
-  // Step 3 Editorial (55s)
-  await scrollMessages(page, 0.08);
+  // Step 3 Editorial (47s)
+  await scrollMessages(page, 0.1);
+  await hideOverlay(page);
   await waitUntil(t0, CUE.step3_editorial);
-  await sleep(7800);
+  await sleep(8500);
 
-  // Step 4 Reporter (63s)
+  // Step 4 Reporter (56s)
   await scrollMessages(page, 0.7);
+  await hideOverlay(page);
   await waitUntil(t0, CUE.step4_reporter);
-  await sleep(7800);
+  await sleep(8500);
 
-  // Step 5 TEE intake (71s): open
+  // Step 5 TEE intake (65s)
   await page.goto(TEE, { waitUntil: "domcontentloaded" });
   await page.waitForSelector('h1:has-text("Ask the source")', { timeout: 15000 });
   await waitUntil(t0, CUE.step5_tee_open);
-  await sleep(5800);
+  await sleep(5500);
 
-  // Step 5 ask (77s)
+  // Step 5 ask (71s)
   await page.getByRole("button", { name: /red line toward bomb-grade/i }).click();
   await waitUntil(t0, CUE.step5_tee_ask);
-  await sleep(5800);
+  await sleep(6500);
 
-  // Step 5 result (83s)
+  // Step 5 result (78s)
   try {
     await page.getByText(/Attestation verified/i).first().waitFor({ timeout: 40000 });
   } catch {}
   await waitUntil(t0, CUE.step5_tee_result);
-  await sleep(9800);
+  await sleep(12500);
 
-  // Step 6 Canvas (93s)
+  // Step 6 Canvas (91s)
   await page.goto(
     `${SLACK}/workspace/channel/unblockmedia-test-1?canvas=20e6ae67-9dde-495b-bcf8-a2457538110a`,
     { waitUntil: "domcontentloaded" },
   );
+  await hideOverlay(page);
   await page
     .evaluate(() => {
       const row = Array.from(document.querySelectorAll("*")).find(
@@ -182,18 +192,7 @@ async function run() {
     })
     .catch(() => {});
   await waitUntil(t0, CUE.step6_canvas);
-  await sleep(7800);
-
-  // Step 7 Slack Connect (101s)
-  await openChannel(page, "war-desk");
-  await waitUntil(t0, CUE.step7_connect);
-  await sleep(6800);
-
-  // Step 8 Corroborate (108s): back to newsroom thread
-  await openChannel(page, "unblockmedia-test-1");
-  await scrollMessages(page, 0.85);
-  await waitUntil(t0, CUE.step8_corroborate);
-  await sleep(7800);
+  await sleep(11500);
 
   await waitUntil(t0, CUE.end);
 
