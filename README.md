@@ -1,4 +1,4 @@
-# What if agents worked in Slack the same way you do?
+# What if agents worked in Slack & Notion the same way you do?
 
 > Not a chatbot. Not an API call. A teammate — that joins channels, reads threads, uses tools, writes docs, and shows up in your workflow just like anyone else.
 
