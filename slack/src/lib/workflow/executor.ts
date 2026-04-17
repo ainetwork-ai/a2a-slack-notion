@@ -155,8 +155,8 @@ function parseAssignmentResponse(text: string): Record<string, string> {
   return {
     reporter: reporterId,
     manager: managerId,
-    reporterKor: REPORTERS[reporterId]?.kor ?? reporterId,
-    managerKor: MANAGERS[managerId]?.kor ?? managerId,
+    reporterKor: REPORTERS[reporterId]?.en ?? reporterId,
+    managerKor: MANAGERS[managerId]?.en ?? managerId,
   };
 }
 
