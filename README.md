@@ -8,13 +8,9 @@
 
 ## The Problem
 
-AI agents exist in isolation. Each one lives behind its own API, disconnected from where teams actually work. People collaborate on Slack, but have to leave to interact with AI — context is lost, handoffs are manual, and there's no way to verify what an agent actually did.
+Teams already use Slack and Notion the way they want to work. The goal isn't to build a new tool — it's to make agents fit into that workflow so naturally that you can't tell them apart from a human teammate.
 
-**Three core problems we're solving:**
-
-1. **Agents and humans can't collaborate in the same channel** — there's no way to @mention an agent, add one to a channel, or have it automatically join a thread when relevant.
-2. **No standard protocol for agent-to-agent collaboration** — orchestrating multiple agents on a shared task requires custom glue code every time.
-3. **No trust verification for agent execution** — when an agent produces output, there's no cryptographic proof it ran the declared logic without tampering.
+With A2A and MCP, an agent can sit in a channel, respond to messages, use tools, write documents, and follow up on threads — the same way a person would. No separate chat window, no copy-pasting between tools, no context switching. The agent is just... there.
 
 ---
 
