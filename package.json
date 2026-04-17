@@ -18,7 +18,7 @@
     "db:migrate": "pnpm --filter slack-a2a db:migrate",
     "db:studio": "pnpm --filter slack-a2a db:studio",
     "clean": "pnpm -r exec rm -rf node_modules dist .next .turbo",
-    "dev:full": "pnpm --filter slack-a2a dev & pnpm --filter slack-a2a hocuspocus & wait",
+    "dev:full": "pnpm --filter slack-a2a dev",
     "dev:stack": "docker compose -f docker-compose.dev.yml up -d",
     "dev:down": "docker compose -f docker-compose.dev.yml down",
     "health": "curl -s http://localhost:3000/api/health | jq . 2>/dev/null || curl -s http://localhost:3000/api/health",

@@ -1,3 +1,4 @@
+// Collaboration and CollaborationCursor extensions removed (plain Tiptap + REST autosave).
 import StarterKit from '@tiptap/starter-kit';
 import TaskList from '@tiptap/extension-task-list';
 import TaskItem from '@tiptap/extension-task-item';
