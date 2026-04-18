@@ -28,7 +28,7 @@ import WorkspaceModal from '@/components/modals/WorkspaceModal';
 import KeyboardShortcutsModal from '@/components/modals/KeyboardShortcutsModal';
 import ConnectionStatus from '@/components/layout/ConnectionStatus';
 import { useKeyboardShortcuts } from '@/lib/hooks/use-keyboard-shortcuts';
-import { Loader2, Menu, X, ChevronDown, UserPlus, Settings as SettingsIcon, Users } from 'lucide-react';
+import { Loader2, Menu, X, ChevronDown, UserPlus, Settings as SettingsIcon, Users, MessageSquareText, Inbox } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -225,6 +225,24 @@ export default function WorkspaceLayout({
             }
           }}
         >
+          {/* Quick nav — Slack-style primary links above Channels */}
+          <div className="px-2 space-y-px">
+            <button
+              onClick={() => router.push('/workspace/threads')}
+              className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-[15px] text-[#bcabbc] hover:bg-white/5 hover:text-white transition-colors"
+            >
+              <MessageSquareText className="w-4 h-4 shrink-0 opacity-70" />
+              <span>Threads</span>
+            </button>
+            <button
+              onClick={() => router.push('/workspace/unreads')}
+              className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-[15px] text-[#bcabbc] hover:bg-white/5 hover:text-white transition-colors"
+            >
+              <Inbox className="w-4 h-4 shrink-0 opacity-70" />
+              <span>All unreads</span>
+            </button>
+          </div>
+          <Separator className="my-2 bg-white/5" />
           <ChannelList workspaceId={activeWorkspaceName ?? undefined} />
           <Separator className="my-2 bg-white/5" />
           <DMList />

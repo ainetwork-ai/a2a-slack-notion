@@ -272,25 +272,20 @@ export default function Sidebar() {
             <span className="text-[10px] leading-tight font-medium">More</span>
           </DropdownMenuTrigger>
           <DropdownMenuContent side="right" sideOffset={8} className="w-52 bg-[#1a1d21] border-white/10 text-white">
-            <DropdownMenuItem
-              className="text-slate-200 focus:bg-white/10 focus:text-white cursor-pointer"
-              onClick={() => router.push('/workspace/threads')}
-            >
-              Threads
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              className="text-slate-200 focus:bg-white/10 focus:text-white cursor-pointer"
-              onClick={() => router.push('/workspace/unreads')}
-            >
-              All unreads
-            </DropdownMenuItem>
-            {(activeWorkspace?.role === 'owner' || activeWorkspace?.role === 'admin') && (
+            {(activeWorkspace?.role === 'owner' || activeWorkspace?.role === 'admin') ? (
               <DropdownMenuItem
                 className="text-slate-200 focus:bg-white/10 focus:text-white cursor-pointer"
                 onClick={() => router.push('/workspace/settings')}
               >
                 <Settings className="w-4 h-4" />
                 Workspace Settings
+              </DropdownMenuItem>
+            ) : (
+              <DropdownMenuItem
+                className="text-slate-500 focus:bg-white/10 focus:text-slate-500 cursor-default"
+                disabled
+              >
+                No additional actions
               </DropdownMenuItem>
             )}
           </DropdownMenuContent>
