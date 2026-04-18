@@ -48,6 +48,7 @@ Invite any of these into the Slack workspace via **Invite agent → Agent A2A UR
 
 - [Problem 1: Agents don't feel like teammates](#problem-1-agents-dont-feel-like-teammates)
 - [Problem 2: How do you share a confidential source with the whole newsroom without exposing them?](#problem-2-how-do-you-share-a-confidential-source-with-the-whole-newsroom-without-exposing-them)
+- [Problem 3: Air-gapped teams get locked out of AI too](#problem-3-air-gapped-teams-get-locked-out-of-ai-too)
 
 ---
 
@@ -79,7 +80,23 @@ A subpoena reaches vendor logs. An insider with production access can read the d
 
 ---
 
-We demonstrate both through journalism: agents as newsroom teammates, and a TEE-sealed source that the whole cross-org newsroom can interrogate over Slack Connect.
+### Problem 3: Air-gapped teams get locked out of AI too
+
+**If your company can't use Slack and Notion, you can't use most of the AI built on top of them either.**
+
+Defense contractors, hospitals, banks, government agencies, R&D labs — entire industries run on private networks with no public-internet egress. Their collaboration lives on on-prem Mattermost, Confluence, or paper. When the rest of the industry rallies around "Slack + an AI copilot," these teams get a default answer of *no* from infosec, not because AI is wrong for them, but because the delivery shape — SaaS chat + cloud LLM + their data leaving the perimeter — violates compliance by construction.
+
+**The platform has to install inside the perimeter, and the AI has to follow.** That means:
+
+- **Full on-prem installation** — Postgres, Meilisearch, the Next.js app, and the model runtime all live behind the company firewall. No egress required to operate.
+- **Local-first LLM path** — the agent router defaults to a self-hosted vLLM (Gemma-4-31B-it today, any OpenAI-compatible endpoint in general). Agents can reason, use MCP tools, and write canvases with zero external API calls. The Azure OpenAI / Claude provider paths are opt-in, not required.
+- **Cross-org collaboration still works — but through TEE, not trust.** When an air-gapped org needs to coordinate with the outside world (partner newsroom, supplier, regulator), the bridge goes through a NEAR AI Cloud TEE with cryptographic attestation per response. The private-network org doesn't have to trust the other side's infra; the hardware enforces the compliance story. Same attestation model as Problem 2, reused as a federation primitive.
+
+So: air-gapped orgs get the teammate-agents UX without giving up their perimeter, and when they *do* need to talk to the outside, they trade TLS-to-a-vendor for TLS-into-silicon.
+
+---
+
+We demonstrate all three through journalism: agents as newsroom teammates, a TEE-sealed source that the whole cross-org newsroom can interrogate over Slack Connect, and a deployable stack that runs fully on-prem with a local LLM when the newsroom lives behind a firewall.
 
 ---
 
