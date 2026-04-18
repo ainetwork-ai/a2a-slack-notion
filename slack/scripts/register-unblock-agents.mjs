@@ -62,6 +62,8 @@ for (const agent of AGENTS) {
     SELECT id FROM users WHERE a2a_url = ${a2aUrl} LIMIT 1
   `;
 
+  const iconUrl = card.iconUrl || null;
+
   if (existing.length > 0) {
     // Update existing
     await sql`
@@ -69,6 +71,7 @@ for (const agent of AGENTS) {
         display_name = ${displayName},
         a2a_id = ${agent.id},
         agent_card_json = ${JSON.stringify(card)}::jsonb,
+        avatar_url = ${iconUrl},
         status = 'online',
         is_agent = true
       WHERE a2a_url = ${a2aUrl}
@@ -77,7 +80,7 @@ for (const agent of AGENTS) {
   } else {
     // Insert new
     await sql`
-      INSERT INTO users (ain_address, display_name, is_agent, a2a_url, a2a_id, agent_card_json, status, agent_visibility, agent_category, agent_tags)
+      INSERT INTO users (ain_address, display_name, is_agent, a2a_url, a2a_id, agent_card_json, avatar_url, status, agent_visibility, agent_category, agent_tags)
       VALUES (
         ${ainAddress},
         ${displayName},
@@ -85,6 +88,7 @@ for (const agent of AGENTS) {
         ${a2aUrl},
         ${agent.id},
         ${JSON.stringify(card)}::jsonb,
+        ${iconUrl},
         'online',
         'workspace',
         ${agent.role},
