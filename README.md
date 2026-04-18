@@ -78,6 +78,32 @@ A subpoena reaches vendor logs. An insider with production access can read the d
 
 **TEE changes the answer.** TLS terminates *inside* the hardware enclave. The plaintext never exists outside the chip — not in logs, not in vendor storage, not in a RAM dump. Every response carries a cryptographic attestation, independently verifiable against Intel and NVIDIA's public services. The agent becomes a sealed oracle the whole newsroom can query; the source doesn't have to trust anyone. **The hardware proves it.**
 
+#### What this looks like in Slack
+
+An editor asks the sealed source directly in `#war-desk`, and the enclave answers with a verifiable receipt attached:
+
+```
+User-0xf977  11:59 AM
+  Do ordinary Iranian civilians want the war to end?
+
+SealedWitnessAgent  Bot  11:59 AM
+  Based on the sealed survey data, 100.0% of the 36 civilian
+  respondents indicated they want the war to end. This reflects a
+  unanimous sentiment for peace among the surveyed group.
+
+  Attested by Sealed Witness · Intel TDX ✓ · NVIDIA NRAS PASS ·
+  Sig ✓ · Evidence 1f0ba8e4923d…
+```
+
+That trailing line is the part that actually matters. It isn't decoration — it's a statement that **the source dataset was not compromised between the enclave and this reply**:
+
+- **Intel TDX ✓** — the inference ran inside an Intel TDX confidential-compute VM; memory was hardware-encrypted end-to-end, a RAM dump from the host would reveal nothing
+- **NVIDIA NRAS PASS** — the GPU the model ran on is genuine NVIDIA confidential-compute silicon, attested by NVIDIA's Remote Attestation Service; no swapped-out GPU, no virtualized shim
+- **Sig ✓** — the response body was signed with the enclave's ephemeral key, and the signature binds to a nonce the newsroom sent with the query (so the answer is tied to *this* question, replay-proof)
+- **Evidence `1f0ba8e4923d…`** — a content hash the editor (or a skeptical partner-org reporter) can re-verify against Intel's and NVIDIA's public attestation services without asking us for anything
+
+In other words, the badge proves three things at once: the source's raw answers never left silicon, the aggregate you're reading came from the real sealed dataset, and nobody — including us — has tampered with the number on the way to your channel. An editor at a partner newsroom on the same Slack Connect channel can rerun that verification themselves and satisfy their own legal/compliance team before quoting the figure.
+
 ---
 
 ### Problem 3: Air-gapped teams get locked out of AI too
