@@ -22,7 +22,11 @@ export async function inviteAgent(a2aUrl: string, options: InviteAgentOptions = 
   if (existing) {
     await db
       .update(users)
-      .set({ agentCardJson: card as unknown as Record<string, unknown>, updatedAt: new Date() })
+      .set({
+        agentCardJson: card as unknown as Record<string, unknown>,
+        avatarUrl: card.iconUrl || null,
+        updatedAt: new Date(),
+      })
       .where(eq(users.id, existing.id));
     return existing;
   }
@@ -86,6 +90,7 @@ export async function healthCheck(agentId: string): Promise<boolean> {
       .update(users)
       .set({
         agentCardJson: card as unknown as Record<string, unknown>,
+        avatarUrl: card.iconUrl || null,
         status: "online",
         updatedAt: new Date(),
       })
