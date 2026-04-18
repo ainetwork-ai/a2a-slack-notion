@@ -7,8 +7,6 @@
   "scripts": {
     "dev": "pnpm --filter slack-a2a dev",
     "dev:slack": "pnpm --filter slack-a2a dev",
-    "dev:notion-api": "pnpm --filter @notion/api dev",
-    "dev:notion-web": "pnpm --filter @notion/web dev",
     "dev:all": "pnpm --parallel -r run dev",
     "build": "pnpm -r run build",
     "lint": "pnpm -r run lint",

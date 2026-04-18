@@ -15,6 +15,7 @@ interface PropertyCellProps {
   onChange: (value: PropertyValue) => void;
   rowIndex?: number;
   colIndex?: number;
+  workspaceId?: string;
 }
 
 export function PropertyCell({ definition, value, onChange }: PropertyCellProps) {

@@ -19,6 +19,7 @@ import type { FilterGroup, SortRule } from '@/lib/notion/shared';
 interface DatabaseViewProps {
   databaseId: string;
   inline?: boolean;
+  workspaceId?: string;
 }
 
 const VIEW_TYPE_ICONS: Record<ViewType, React.ComponentType<{ size?: number; className?: string }>> = {

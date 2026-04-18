@@ -46,11 +46,8 @@ function debounceAsync<TArgs extends unknown[], TReturn>(
 const fetchSuggestions = debounceAsync(
   async (query: string, workspaceId: string): Promise<MentionItem[]> => {
     try {
-      const apiUrl =
-        process.env['NEXT_PUBLIC_API_URL'] ??
-        (typeof window !== 'undefined'
-          ? `${window.location.protocol}//${window.location.hostname}:3011`
-          : 'http://localhost:3011');
+      // Same-origin — the Notion API lives at /api/v1/* in this merged Next.js app.
+      const apiUrl = '';
       const res = await fetch(
         `${apiUrl}/api/v1/mentions/suggest?type=user&q=${encodeURIComponent(query)}&workspace_id=${encodeURIComponent(workspaceId)}`,
         { credentials: 'include' },
@@ -66,6 +63,14 @@ const fetchSuggestions = debounceAsync(
 
 export interface EditorExtensionOptions {
   workspaceId?: string;
+  // Lazy accessor used by callers that don't know workspaceId at mount time.
+  getWorkspaceId?: () => string | undefined;
+  pageId?: string;
+  collaboration?: boolean;
+  // Loose signature — real handler lives in the page/component that wires
+  // up the editor; extensions.ts itself doesn't call it today.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  onAgentInvoke?: (...args: any[]) => any;
 }
 
 export function getEditorExtensions(options: EditorExtensionOptions = {}) {

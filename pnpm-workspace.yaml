@@ -1,7 +1,5 @@
 packages:
   - "slack"
-  - "notion/apps/*"
-  - "notion/packages/*"
 
 onlyBuiltDependencies:
   - "@tailwindcss/oxide"

@@ -1,11 +1,5 @@
-function getApiUrl() {
-  if (typeof window === 'undefined') {
-    return process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:3011';
-  }
-  return process.env['NEXT_PUBLIC_API_URL'] ?? `${window.location.protocol}//${window.location.hostname}:3011`;
-}
-
-const API_URL = getApiUrl();
+// Same-origin — the Notion API lives at /api/v1/* in this merged Next.js app.
+const API_URL = '';
 
 export async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, {
