@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "installCommand": "cd .. && pwd && echo '=== .npmrc ===' && cat .npmrc && echo '=== workspaces ===' && cat pnpm-workspace.yaml && pnpm install --force --no-frozen-lockfile --reporter=append-only",
+  "installCommand": "pwd && ls .npmrc pnpm-workspace.yaml 2>&1 && pnpm install --force --reporter=append-only",
   "buildCommand": "cd .. && pnpm --filter slack-a2a build",
   "crons": [
     {
