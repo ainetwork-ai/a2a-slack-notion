@@ -114,7 +114,15 @@ interface LLMAction {
 
 // ─── LLM via local vLLM (Gemma4) ────────────────────────────────────────────
 
-const VLLM_URL = process.env.VLLM_URL || "http://localhost:8100/v1/chat/completions";
+// Derive the chat-completions URL so that either a base URL (e.g. vLLM
+// `http://localhost:8100`) or a fully-qualified Azure endpoint that already
+// ends in `/chat/completions?...` works without double-suffixing. Mirrors
+// the logic in message-bridge.ts so Builder uses the same endpoint as the
+// regular agent path.
+const VLLM_BASE_URL = process.env.VLLM_URL || "http://localhost:8100";
+const VLLM_CHAT_URL = /\/chat\/completions(\?|$)/.test(VLLM_BASE_URL)
+  ? VLLM_BASE_URL
+  : `${VLLM_BASE_URL.replace(/\/$/, "")}/v1/chat/completions`;
 const VLLM_MODEL = process.env.VLLM_MODEL || "gemma-4-31B-it";
 
 const SYSTEM_PROMPT = `You are a Builder agent for Slack-A2A. You help users create new AI agents and channels.
@@ -142,7 +150,7 @@ async function queryLLM(message: string): Promise<string | null> {
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (LLM_API_KEY) headers["api-key"] = LLM_API_KEY;
 
-    const res = await fetch(VLLM_URL, {
+    const res = await fetch(VLLM_CHAT_URL, {
       method: "POST",
       headers,
       body: JSON.stringify({
@@ -156,11 +164,16 @@ async function queryLLM(message: string): Promise<string | null> {
       signal: AbortSignal.timeout(30000),
     });
 
-    if (!res.ok) return null;
+    if (!res.ok) {
+      const errText = await res.text().catch(() => "");
+      console.error(`[builder-agent] LLM ${res.status} from ${VLLM_CHAT_URL}: ${errText.slice(0, 200)}`);
+      return null;
+    }
 
     const data = await res.json();
     return data?.choices?.[0]?.message?.content ?? null;
-  } catch {
+  } catch (err) {
+    console.error(`[builder-agent] LLM fetch failed (${VLLM_CHAT_URL}):`, err instanceof Error ? err.message : err);
     return null;
   }
 }
