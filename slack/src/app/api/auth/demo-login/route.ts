@@ -64,54 +64,41 @@ export async function POST() {
         })
         .returning();
       user = created;
+    }
 
-      // Auto-join public channels
-      const publicChannels = await db
+    // Every demo visit: re-join the user to every public, non-archived
+    // channel in the default workspace (and also ensure workspace membership).
+    // Without this an existing DemoUser who was previously removed from a
+    // channel would see an empty sidebar — we want demo visitors to always
+    // land in the full workspace.
+    const [defaultWs] = await db
+      .select({ id: workspaces.id })
+      .from(workspaces)
+      .where(eq(workspaces.name, "Slack-A2A"))
+      .limit(1);
+
+    if (defaultWs) {
+      await db
+        .insert(workspaceMembers)
+        .values({ workspaceId: defaultWs.id, userId: user.id, role: "member" })
+        .onConflictDoNothing();
+
+      const wsChannels = await db
         .select({ id: channels.id })
         .from(channels)
-        .where(eq(channels.isPrivate, false));
+        .where(
+          and(
+            eq(channels.workspaceId, defaultWs.id),
+            eq(channels.isPrivate, false),
+            eq(channels.isArchived, false)
+          )
+        );
 
-      for (const ch of publicChannels) {
+      for (const ch of wsChannels) {
         await db
           .insert(channelMembers)
           .values({ channelId: ch.id, userId: user.id, role: "member" })
           .onConflictDoNothing();
-      }
-
-      const [defaultWs] = await db
-        .select({ id: workspaces.id })
-        .from(workspaces)
-        .where(eq(workspaces.name, "Slack-A2A"))
-        .limit(1);
-
-      if (defaultWs) {
-        await db
-          .insert(workspaceMembers)
-          .values({ workspaceId: defaultWs.id, userId: user.id, role: "member" })
-          .onConflictDoNothing();
-
-        const [generalChannel] = await db
-          .select({ id: channels.id })
-          .from(channels)
-          .where(
-            and(
-              eq(channels.workspaceId, defaultWs.id),
-              eq(channels.name, "general"),
-              eq(channels.isPrivate, false)
-            )
-          )
-          .limit(1);
-
-        if (generalChannel) {
-          await db
-            .insert(channelMembers)
-            .values({
-              channelId: generalChannel.id,
-              userId: user.id,
-              role: "member",
-            })
-            .onConflictDoNothing();
-        }
       }
     }
 
