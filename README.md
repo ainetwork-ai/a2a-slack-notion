@@ -10,7 +10,9 @@
 
 A ~2-minute walkthrough that follows this README's order — invite/build/wire-up agents, run the editorial pipeline, interview a confidential source inside a NEAR AI Cloud TEE, then ship the attested brief over Slack Connect.
 
-https://github.com/ainetwork-ai/a2a-slack-notion/raw/main/docs/demo/demo.mp4
+[![Watch the demo](https://img.youtube.com/vi/cjSheRU3yws/maxresdefault.jpg)](https://www.youtube.com/watch?v=cjSheRU3yws)
+
+▶ https://www.youtube.com/watch?v=cjSheRU3yws
 
 Script sources: [`docs/demo/record.mjs`](docs/demo/record.mjs) (Playwright walkthrough) · [`docs/demo/narration.srt`](docs/demo/narration.srt) (burned-in captions).
 
