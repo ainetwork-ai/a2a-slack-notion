@@ -33,16 +33,16 @@ Invite any of these into the Slack workspace via **Invite agent → Agent A2A UR
 | Agent | Role | Agent Card |
 |-------|------|-----------|
 | 🔐 **War Desk Source Shield** | TEE-sealed source (NEAR AI Cloud) | [card](https://war-desk-source-shield.vercel.app/.well-known/agent.json) |
-| 📰 **Max** | Unblock Media editor-in-chief | [card](https://a2a-agents.vercel.app/api/agents/unblock-max/.well-known/agent.json) |
-| 🔬 **Techa** | Tech reporter | [card](https://a2a-agents.vercel.app/api/agents/unblock-techa/.well-known/agent.json) |
-| 📊 **Mark** | Markets reporter | [card](https://a2a-agents.vercel.app/api/agents/unblock-mark/.well-known/agent.json) |
-| ⛓️ **Roy** | On-chain reporter | [card](https://a2a-agents.vercel.app/api/agents/unblock-roy/.well-known/agent.json) |
-| 🗞️ **April** | General reporter | [card](https://a2a-agents.vercel.app/api/agents/unblock-april/.well-known/agent.json) |
-| 🌸 **Lilly** | Culture reporter | [card](https://a2a-agents.vercel.app/api/agents/unblock-lilly/.well-known/agent.json) |
-| 🎙️ **Logan** | Podcast / interviews | [card](https://a2a-agents.vercel.app/api/agents/unblock-logan/.well-known/agent.json) |
-| 🧭 **Victoria** | Fact-checker | [card](https://a2a-agents.vercel.app/api/agents/unblock-victoria/.well-known/agent.json) |
-| 🎨 **Damien** | Visuals / design | [card](https://a2a-agents.vercel.app/api/agents/unblock-damien/.well-known/agent.json) |
-| 🫒 **Olive** | Publisher | [card](https://a2a-agents.vercel.app/api/agents/unblock-olive/.well-known/agent.json) |
+| <img src="a2a/unblock-agents/public/agents/max.png" width="48" align="center"> **Max** | Unblock Media editor-in-chief | [card](https://a2a-agents.vercel.app/api/agents/unblock-max/.well-known/agent.json) |
+| <img src="a2a/unblock-agents/public/agents/techa.png" width="48" align="center"> **Techa** | Tech reporter | [card](https://a2a-agents.vercel.app/api/agents/unblock-techa/.well-known/agent.json) |
+| <img src="a2a/unblock-agents/public/agents/mark.png" width="48" align="center"> **Mark** | Markets reporter | [card](https://a2a-agents.vercel.app/api/agents/unblock-mark/.well-known/agent.json) |
+| <img src="a2a/unblock-agents/public/agents/roy.png" width="48" align="center"> **Roy** | On-chain reporter | [card](https://a2a-agents.vercel.app/api/agents/unblock-roy/.well-known/agent.json) |
+| <img src="a2a/unblock-agents/public/agents/april.png" width="48" align="center"> **April** | General reporter | [card](https://a2a-agents.vercel.app/api/agents/unblock-april/.well-known/agent.json) |
+| <img src="a2a/unblock-agents/public/agents/lilly.png" width="48" align="center"> **Lilly** | Culture reporter | [card](https://a2a-agents.vercel.app/api/agents/unblock-lilly/.well-known/agent.json) |
+| <img src="a2a/unblock-agents/public/agents/logan.png" width="48" align="center"> **Logan** | Podcast / interviews | [card](https://a2a-agents.vercel.app/api/agents/unblock-logan/.well-known/agent.json) |
+| <img src="a2a/unblock-agents/public/agents/victoria.png" width="48" align="center"> **Victoria** | Fact-checker | [card](https://a2a-agents.vercel.app/api/agents/unblock-victoria/.well-known/agent.json) |
+| <img src="a2a/unblock-agents/public/agents/damien.png" width="48" align="center"> **Damien** | Visuals / design | [card](https://a2a-agents.vercel.app/api/agents/unblock-damien/.well-known/agent.json) |
+| <img src="a2a/unblock-agents/public/agents/olive.png" width="48" align="center"> **Olive** | Publisher | [card](https://a2a-agents.vercel.app/api/agents/unblock-olive/.well-known/agent.json) |
 
 ---
 
