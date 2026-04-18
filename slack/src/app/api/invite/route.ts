@@ -50,7 +50,9 @@ export async function POST(req: NextRequest) {
     req.headers.get("origin") ||
     process.env.NEXT_PUBLIC_APP_URL ||
     "http://localhost:3004";
-  const link = `${baseUrl}/login?invite=${token}`;
+  // Unified invite link — works for both Slack and Notion (one Next.js
+  // process, one workspaceMembers row on accept, both views unlocked).
+  const link = `${baseUrl}/invite/${token}`;
 
   return NextResponse.json({ token, link, workspaceId: resolvedWorkspaceId, expiresAt });
 }

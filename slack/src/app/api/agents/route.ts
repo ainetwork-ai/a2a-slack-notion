@@ -1,30 +1,17 @@
-import { db } from "@/lib/db";
-import { users, channels, channelMembers, messages, reactions, mentions, files, notifications, dmConversations, dmMembers } from "@/lib/db/schema";
-import { eq, and, desc, lt, sql, inArray, or, ilike } from "drizzle-orm";
 import { requireAuth } from "@/lib/auth/middleware";
 import { NextRequest, NextResponse } from "next/server";
 import { inviteAgent } from "@/lib/a2a/agent-manager";
+import { listAgentRows } from "@/lib/agents/list";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const auth = await requireAuth();
   if ("error" in auth) return auth.error;
 
-  const agents = await db
-    .select({
-      id: users.id,
-      a2aId: users.a2aId,
-      displayName: users.displayName,
-      avatarUrl: users.avatarUrl,
-      status: users.status,
-      a2aUrl: users.a2aUrl,
-      agentCardJson: users.agentCardJson,
-      agentInvitedBy: users.agentInvitedBy,
-      ownerId: users.ownerId,
-      createdAt: users.createdAt,
-    })
-    .from(users)
-    .where(eq(users.isAgent, true))
-    .orderBy(users.displayName);
+  const url = new URL(request.url);
+  const workspaceId =
+    url.searchParams.get("workspaceId") ?? url.searchParams.get("workspace_id");
+
+  const agents = await listAgentRows(workspaceId);
 
   return NextResponse.json(
     agents.map((a) => {

@@ -6,11 +6,13 @@ import { useRouter, usePathname } from 'next/navigation';
 import {
   Home, MessageSquare, Bell, Clock, Folder, FileText, Zap,
   LogOut, Sun, Moon, Smile, BellOff, Volume2, VolumeX, User, Plus,
+  Users,
 } from 'lucide-react';
 import Image from 'next/image';
 import NotificationPanel from '@/components/modals/NotificationPanel';
 import ProfileEditModal from '@/components/modals/ProfileEditModal';
 import SetStatusModal from '@/components/modals/SetStatusModal';
+import { WorkspaceMembersSheet } from '@/components/members/WorkspaceMembersSheet';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import {
@@ -69,12 +71,13 @@ export default function Sidebar() {
   const { unreadCount } = useNotifications();
   const { toggleNotificationPanel, notificationPanelOpen } = useAppStore();
   const { theme, toggleTheme } = useThemeStore();
-  const { workspaces, activeWorkspaceName, setActive, fetchWorkspaces } = useWorkspaceStore();
+  const { workspaces, activeWorkspaceId, activeWorkspaceName, setActive, fetchWorkspaces } = useWorkspaceStore();
   const { myStatus, setDnd, isDndEnabled } = usePresence();
   const [dndActive, setDndActive] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [profileModalOpen, setProfileModalOpen] = useState(false);
   const [statusModalOpen, setStatusModalOpen] = useState(false);
+  const [membersSheetOpen, setMembersSheetOpen] = useState(false);
 
   useEffect(() => {
     fetchWorkspaces();
@@ -111,13 +114,23 @@ export default function Sidebar() {
     ? user.displayName.split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2)
     : '?';
 
-  const activeWorkspace = workspaces.find((w) => w.name === activeWorkspaceName);
-  const otherWorkspaces = workspaces.filter((w) => w.name !== activeWorkspaceName);
+  // Prefer matching by id (canonical); fall back to name for legacy state.
+  const activeWorkspace =
+    workspaces.find((w) => w.id === activeWorkspaceId) ??
+    workspaces.find((w) => w.name === activeWorkspaceName) ??
+    null;
+  const otherWorkspaces = workspaces.filter((w) => w.id !== activeWorkspace?.id);
 
   return (
     <>
     <ProfileEditModal open={profileModalOpen} onClose={() => setProfileModalOpen(false)} />
     <SetStatusModal open={statusModalOpen} onClose={() => setStatusModalOpen(false)} />
+    <WorkspaceMembersSheet
+      open={membersSheetOpen}
+      onClose={() => setMembersSheetOpen(false)}
+      workspaceId={activeWorkspace?.id ?? null}
+      workspaceName={activeWorkspace?.name ?? null}
+    />
     <div className="sidebar-dark flex flex-col items-center w-[68px] h-full py-3 gap-1 border-r border-white/5 shrink-0" role="navigation" aria-label="Main navigation">
 
       {/* Active Workspace Icon */}
@@ -154,7 +167,7 @@ export default function Sidebar() {
           <Tooltip>
             <TooltipTrigger
               className="flex items-center justify-center w-10 h-10 rounded-xl bg-[#222529] cursor-pointer hover:bg-[#4a154b]/60 transition-colors border border-white/10 overflow-hidden"
-              onClick={() => setActive(ws.name)}
+              onClick={() => setActive(ws.id)}
             >
               {ws.iconUrl ? (
                 <Image
@@ -261,6 +274,12 @@ export default function Sidebar() {
           label="Canvases"
           onClick={() => router.push('/workspace/canvases')}
           active={pathname === '/workspace/canvases'}
+        />
+        <NavButton
+          icon={<Users className="w-5 h-5" />}
+          label="People"
+          onClick={() => setMembersSheetOpen(true)}
+          active={membersSheetOpen}
         />
       </nav>
 

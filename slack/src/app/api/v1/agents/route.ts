@@ -1,16 +1,17 @@
 /**
- * Agents collection route.
+ * Agents collection route — Notion alias.
  *
  * GET  /api/v1/agents?workspace_id=...  — list agents scoped to a workspace.
- * POST /api/v1/agents                    — invite (register) a new agent by a2a URL.
+ * POST /api/v1/agents                    — invite (register) a new agent by
+ *                                           a2a URL.
  *
- * Ported from the deleted Hono `routes/agents.ts`. The original depended on a
- * `listAgents(workspaceId)` helper and an `inviteAgent(a2aUrl, workspaceId)`
- * helper from `../lib/a2a/agent-manager.js` — neither helper is available in
- * the Slack lib in a form we can import directly (the Slack version imports
- * `@/lib/db`, which resolves to a different path in the web app), so the
- * equivalent logic is inlined here and uses `fetchAgentCard` from the
- * Slack client.
+ * The GET handler is a thin wrapper around `listAgentRows` from the canonical
+ * Slack endpoint (`/api/agents`) so the two UIs stay perfectly in sync; the
+ * only difference is auth resolution (Notion runs as the public Default User
+ * instead of the session user). Response keys include both the canonical
+ * names (`displayName`, `avatarUrl`, `status`) and the legacy v1 aliases
+ * (`name`, `image`, `agentStatus`) so existing Notion clients keep working
+ * without changes.
  */
 import { NextResponse } from 'next/server';
 import { and, eq } from 'drizzle-orm';
@@ -18,6 +19,7 @@ import { db } from '@/lib/notion/db';
 import { users, workspaceMembers } from '@/lib/db/schema';
 import { getDefaultUser } from '@/lib/notion/auth';
 import { fetchAgentCard } from '@/lib/a2a/client';
+import { listAgentRows } from '@/lib/agents/list';
 
 async function isWorkspaceMember(userId: string, workspaceId: string): Promise<boolean> {
   const [membership] = await db
@@ -38,25 +40,19 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'workspace_id required' }, { status: 400 });
   }
 
-  // Agents visible in a workspace = agent users (isAgent=true) that are members
-  // of that workspace via workspace_members.
-  const rows = await db
-    .select({
-      id: users.id,
-      a2aId: users.a2aId,
-      name: users.displayName,
-      image: users.avatarUrl,
-      a2aUrl: users.a2aUrl,
-      agentCardJson: users.agentCardJson,
-      agentStatus: users.status,
-      isAgent: users.isAgent,
-    })
-    .from(users)
-    .innerJoin(workspaceMembers, eq(workspaceMembers.userId, users.id))
-    .where(and(eq(workspaceMembers.workspaceId, workspaceId), eq(users.isAgent, true)))
-    .orderBy(users.displayName);
+  const rows = await listAgentRows(workspaceId);
 
-  return NextResponse.json(rows);
+  // Backward-compatible aliases for existing Notion consumers
+  // (`name`, `image`, `agentStatus`, `isAgent`).
+  return NextResponse.json(
+    rows.map((r) => ({
+      ...r,
+      name: r.displayName,
+      image: r.avatarUrl,
+      agentStatus: r.status,
+      isAgent: true,
+    })),
+  );
 }
 
 export async function POST(request: Request) {

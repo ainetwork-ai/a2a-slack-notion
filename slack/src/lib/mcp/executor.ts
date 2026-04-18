@@ -3,6 +3,13 @@ import * as news from "./providers/news";
 import * as slack from "./providers/slack";
 import * as document from "./providers/document";
 import * as newsroom from "./providers/newsroom";
+import { db } from "@/lib/db";
+import {
+  channelMcpIntegrations,
+  channels,
+  workspaceMcpIntegrations,
+} from "@/lib/db/schema";
+import { eq, and } from "drizzle-orm";
 
 type ProviderFn = (params: Record<string, unknown>) => Promise<string>;
 
@@ -75,4 +82,113 @@ export async function executeTool(
       content: `Error executing ${serverId}.${toolName}: ${err instanceof Error ? err.message : "Unknown error"}`,
     };
   }
+}
+
+/**
+ * Resolve which MCP integrations are active for a given scope.
+ *
+ * Scope rules:
+ *   - If `channelId` is provided: union (workspace-level rows for that
+ *     channel's workspace) ∪ (channel-level rows). A channel-level row with
+ *     `enabled=false` overrides workspace-level for that `serverId`. A
+ *     channel-level row with `enabled=true` (or absent) lets workspace-level
+ *     pass through.
+ *   - If only `workspaceId` is provided (e.g. Notion page context): use
+ *     workspace-level rows only.
+ *   - At least one of `channelId` / `workspaceId` must be provided.
+ *
+ * Returns the set of `serverId`s that are currently enabled for the scope.
+ */
+export async function resolveEnabledServers(opts: {
+  channelId?: string;
+  workspaceId?: string;
+}): Promise<string[]> {
+  const { channelId } = opts;
+  let workspaceId = opts.workspaceId ?? null;
+
+  if (!channelId && !workspaceId) {
+    return [];
+  }
+
+  if (!workspaceId && channelId) {
+    const [ch] = await db
+      .select({ workspaceId: channels.workspaceId })
+      .from(channels)
+      .where(eq(channels.id, channelId))
+      .limit(1);
+    workspaceId = ch?.workspaceId ?? null;
+  }
+
+  // Workspace-level rows
+  const wsRows = workspaceId
+    ? await db
+        .select({
+          serverId: workspaceMcpIntegrations.serverId,
+          enabled: workspaceMcpIntegrations.enabled,
+        })
+        .from(workspaceMcpIntegrations)
+        .where(eq(workspaceMcpIntegrations.workspaceId, workspaceId))
+    : [];
+
+  // Channel-level rows (only if a channel is in scope)
+  const chRows = channelId
+    ? await db
+        .select({
+          serverId: channelMcpIntegrations.serverId,
+          enabled: channelMcpIntegrations.enabled,
+        })
+        .from(channelMcpIntegrations)
+        .where(eq(channelMcpIntegrations.channelId, channelId))
+    : [];
+
+  const channelMap = new Map<string, boolean>();
+  for (const r of chRows) channelMap.set(r.serverId, r.enabled);
+
+  const result = new Set<string>();
+
+  // Workspace rows pass through unless channel explicitly disables them.
+  for (const r of wsRows) {
+    if (!r.enabled) continue;
+    const override = channelMap.get(r.serverId);
+    if (override === false) continue; // channel disabled overrides workspace
+    result.add(r.serverId);
+  }
+  // Channel rows enabled=true add (or keep) the server.
+  for (const [serverId, enabled] of channelMap) {
+    if (enabled) result.add(serverId);
+  }
+
+  return [...result];
+}
+
+/**
+ * Scoped execution helper for server-side callers (e.g. Notion automation
+ * engine, Slack message handlers).
+ *
+ * Verifies the requested `serverId` is enabled for the supplied scope, then
+ * dispatches to {@link executeTool}. Caller picks scope by passing either
+ * `channelId` (channel context) or `workspaceId` (e.g. Notion page context).
+ */
+export async function executeToolScoped(opts: {
+  serverId: string;
+  toolName: string;
+  params?: Record<string, unknown>;
+  channelId?: string;
+  workspaceId?: string;
+}): Promise<ExecuteResult> {
+  const { serverId, toolName, params, channelId, workspaceId } = opts;
+  if (!channelId && !workspaceId) {
+    return {
+      success: false,
+      content: "executeToolScoped requires channelId or workspaceId",
+    };
+  }
+  const enabled = await resolveEnabledServers({ channelId, workspaceId });
+  if (!enabled.includes(serverId)) {
+    return {
+      success: false,
+      content: `${serverId} is not enabled for this scope.`,
+    };
+  }
+  return executeTool(serverId, toolName, params || {});
 }

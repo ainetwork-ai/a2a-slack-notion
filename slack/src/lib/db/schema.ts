@@ -382,6 +382,27 @@ export const channelMcpIntegrations = pgTable(
   ]
 );
 
+export const workspaceMcpIntegrations = pgTable(
+  "workspace_mcp_integrations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id")
+      .references(() => workspaces.id, { onDelete: "cascade" })
+      .notNull(),
+    serverId: text("server_id").notNull(),
+    enabled: boolean("enabled").default(true).notNull(),
+    config: jsonb("config"),
+    addedBy: uuid("added_by")
+      .references(() => users.id)
+      .notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("workspace_mcp_unique").on(t.workspaceId, t.serverId),
+    index("workspace_mcp_workspace_idx").on(t.workspaceId),
+  ]
+);
+
 export const webhooks = pgTable(
   "webhooks",
   {

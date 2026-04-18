@@ -13,17 +13,29 @@ export interface Workspace {
 
 interface WorkspaceStore {
   workspaces: Workspace[];
+  /**
+   * Canonical active workspace selector — workspace UUID. This is the value
+   * that should be used when constructing routes (e.g. /notion/workspace/<id>)
+   * or any cross-surface link, because Notion already keys on workspace ID.
+   */
+  activeWorkspaceId: string | null;
+  /**
+   * Backward-compatible mirror of the active workspace's name. Many slack
+   * components/endpoints currently key on workspace name (channels, settings,
+   * webhooks, etc.). Whenever activeWorkspaceId changes we keep this in sync.
+   */
   activeWorkspaceName: string | null;
   isLoading: boolean;
   fetchWorkspaces: () => Promise<void>;
+  /** Set active workspace by name OR UUID. Updates both id + name fields. */
   setActive: (nameOrId: string) => void;
+  /** Set active workspace by UUID. Use this when navigating from a Notion URL. */
+  setActiveById: (id: string) => void;
   addWorkspace: (ws: Workspace) => void;
 }
 
 /**
- * Match a workspace by name or UUID. Historically the store held UUIDs;
- * rehydrated sessions may still have a UUID in localStorage until they
- * touch `setActive` again.
+ * Match a workspace by name or UUID. Persisted state may contain either.
  */
 function findActive(ws: Workspace[], ref: string | null): Workspace | null {
   if (!ref) return null;
@@ -34,6 +46,7 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
   persist(
     (set, get) => ({
       workspaces: [],
+      activeWorkspaceId: null,
       activeWorkspaceName: null,
       isLoading: false,
 
@@ -44,10 +57,17 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
           if (res.ok) {
             const data: Workspace[] = await res.json();
             set((s) => {
-              const active = findActive(data, s.activeWorkspaceName);
+              // Prefer matching by id first (canonical), then fall back to name
+              // for legacy persisted state that only stored the name.
+              const active =
+                findActive(data, s.activeWorkspaceId) ??
+                findActive(data, s.activeWorkspaceName) ??
+                data[0] ??
+                null;
               return {
                 workspaces: data,
-                activeWorkspaceName: active?.name ?? data[0]?.name ?? null,
+                activeWorkspaceId: active?.id ?? null,
+                activeWorkspaceName: active?.name ?? null,
               };
             });
           }
@@ -60,7 +80,23 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
 
       setActive: (ref) => {
         const match = findActive(get().workspaces, ref);
-        set({ activeWorkspaceName: match?.name ?? ref });
+        if (match) {
+          set({ activeWorkspaceId: match.id, activeWorkspaceName: match.name });
+        } else {
+          // We don't recognise this ref yet (e.g. workspaces haven't loaded).
+          // Best-effort: stash the ref in both slots; fetchWorkspaces() will
+          // reconcile once the workspace list arrives.
+          set({ activeWorkspaceId: ref, activeWorkspaceName: ref });
+        }
+      },
+
+      setActiveById: (id) => {
+        const match = findActive(get().workspaces, id);
+        if (match) {
+          set({ activeWorkspaceId: match.id, activeWorkspaceName: match.name });
+        } else {
+          set({ activeWorkspaceId: id });
+        }
       },
 
       addWorkspace: (ws) =>
@@ -68,24 +104,31 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
     }),
     {
       name: 'slack-a2a-workspaces',
-      partialize: (s) => ({ activeWorkspaceName: s.activeWorkspaceName }),
-      // Older persisted shapes stored `activeWorkspaceId` (UUID) or
-      // `activeWorkspaceSlug` (slug). Both resolve to the workspace row,
-      // so we promote them into the new `activeWorkspaceName` slot; the
-      // next fetch replaces them with the canonical workspace.name.
-      migrate: (persisted) => {
-        if (persisted && typeof persisted === 'object') {
-          const any = persisted as Record<string, unknown>;
-          const prior =
-            (any.activeWorkspaceName as string | undefined) ??
-            (any.activeWorkspaceSlug as string | undefined) ??
-            (any.activeWorkspaceId as string | undefined) ??
-            null;
-          return { activeWorkspaceName: prior };
+      partialize: (s) => ({
+        activeWorkspaceId: s.activeWorkspaceId,
+        activeWorkspaceName: s.activeWorkspaceName,
+      }),
+      // Older persisted shapes stored `activeWorkspaceSlug` (slug) or only
+      // `activeWorkspaceName`. Promote whichever is present into both slots;
+      // the next fetch reconciles them against the workspace list.
+      migrate: (persisted, version) => {
+        if (!persisted || typeof persisted !== 'object') {
+          return { activeWorkspaceId: null, activeWorkspaceName: null };
         }
-        return { activeWorkspaceName: null };
+        const any = persisted as Record<string, unknown>;
+        const priorId =
+          (any.activeWorkspaceId as string | undefined) ?? null;
+        const priorName =
+          (any.activeWorkspaceName as string | undefined) ??
+          (any.activeWorkspaceSlug as string | undefined) ??
+          null;
+        // v2 only stored a name (which could have been a UUID). Promote it.
+        if (version === 2 && !priorId && priorName) {
+          return { activeWorkspaceId: priorName, activeWorkspaceName: priorName };
+        }
+        return { activeWorkspaceId: priorId, activeWorkspaceName: priorName };
       },
-      version: 2,
+      version: 3,
     }
   )
 );
