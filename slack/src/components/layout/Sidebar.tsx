@@ -239,6 +239,12 @@ export default function Sidebar() {
           )}
         </button>
         <NavButton
+          icon={<Zap className="w-5 h-5" />}
+          label="Workflow"
+          onClick={() => router.push('/workspace/workflows')}
+          active={pathname === '/workspace/workflows'}
+        />
+        <NavButton
           icon={<Clock className="w-5 h-5" />}
           label="Later"
           onClick={() => router.push('/workspace/later')}
@@ -255,12 +261,6 @@ export default function Sidebar() {
           label="Canvases"
           onClick={() => router.push('/workspace/canvases')}
           active={pathname === '/workspace/canvases'}
-        />
-        <NavButton
-          icon={<Zap className="w-5 h-5" />}
-          label="Tools"
-          onClick={() => router.push('/workspace/workflows')}
-          active={pathname === '/workspace/workflows'}
         />
         {/* More — dropdown with additional items */}
         <DropdownMenu>
