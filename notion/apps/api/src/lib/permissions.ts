@@ -27,6 +27,11 @@ export async function checkPagePermission(
   pageId: string,
   required: PermLevel,
 ): Promise<boolean> {
+  // Demo mode: anyone authenticated can view any page. Write levels still gated below.
+  if (required === 'can_view') {
+    return true;
+  }
+
   // 1. Check explicit permission on this page
   const explicit = await db
     .select()

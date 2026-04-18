@@ -8,7 +8,6 @@ import { errorHandler } from './middleware/error-handler.js';
 import { rateLimit } from './middleware/rate-limit.js';
 import { db } from './lib/db.js';
 import { users } from '../../../slack/src/lib/db/schema';
-import { authRoutes } from './routes/auth.js';
 import { workspaces } from './routes/workspaces.js';
 import { pages } from './routes/pages.js';
 import { databases } from './routes/databases.js';
@@ -35,8 +34,7 @@ import { ensureSearchIndex } from './lib/search.js';
 import { setupEventHandlers } from './lib/event-handlers.js';
 import { startNotificationWorker } from './workers/notification-worker.js';
 import { startWebhookWorker } from './workers/webhook-worker.js';
-import type { AuthenticatedUser } from './types/auth.js';
-import type { AppVariables } from './types/app.js';
+import type { AppVariables, DefaultUser } from './types/app.js';
 
 const app = new Hono<{ Variables: AppVariables }>();
 const logger = createLogger('api');
@@ -57,19 +55,16 @@ app.use(
 app.use('*', traceMiddleware);
 app.onError(errorHandler);
 
-// Auth routes (nonce, verify, logout, session)
-app.route('/api/auth', authRoutes);
-
 // Notion-Version header on all API responses
 app.use(`${API_BASE_PATH}/*`, async (c, next) => {
   await next();
   c.header('Notion-Version', '2026-04-15');
 });
 
-// Default user middleware — no authentication required, always use a fixed default user.
-// The slack schema uses `ainAddress` (unique) for the AIN wallet identifier and
-// `displayName` for the user's display name — there is no `walletAddress`/`name`/`image`.
-// We map those to the AuthenticatedUser shape the API already exposes.
+// Default user middleware — the Notion API is fully public. Every request is
+// attributed to a single "Default User" row in the shared Slack Postgres so
+// `createdBy`/`userId` FKs still resolve. Authentication was removed in favor
+// of the unified login story on the Slack side.
 app.use(`${API_BASE_PATH}/*`, async (c, next) => {
   const DEFAULT_ADDR = 'default';
   const existing = await db
@@ -87,7 +82,7 @@ app.use(`${API_BASE_PATH}/*`, async (c, next) => {
       .returning()
       .then((r) => r[0]!));
 
-  const defaultUser: AuthenticatedUser = {
+  const defaultUser: DefaultUser = {
     id: row.id,
     walletAddress: row.ainAddress,
     name: row.displayName,

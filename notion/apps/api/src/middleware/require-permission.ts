@@ -17,6 +17,13 @@ type PermLevel = 'full_access' | 'can_edit' | 'can_comment' | 'can_view';
 export function requirePermission(level: PermLevel): MiddlewareHandler<{ Variables: AppVariables }> {
   return async (c, next) => {
     const user = c.get('user');
+
+    // Demo mode: allow unauthenticated viewing
+    if (level === 'can_view' && !user) {
+      await next();
+      return;
+    }
+
     if (!user) {
       return c.json(
         { object: 'error', status: 401, code: 'unauthorized', message: 'Not authenticated' },
