@@ -54,6 +54,9 @@ export async function POST() {
       .where(eq(users.ainAddress, normalizedAddress))
       .limit(1);
 
+    const demoAvatarUrl =
+      "https://api.dicebear.com/9.x/avataaars/svg?seed=DemoUser&backgroundType=gradientLinear&backgroundColor=b6e3f4,c0aede,d1d4f9,ffd5dc,ffdfbf";
+
     if (!user) {
       const [created] = await db
         .insert(users)
@@ -61,9 +64,17 @@ export async function POST() {
           ainAddress: normalizedAddress,
           displayName: "DemoUser",
           status: "online",
+          avatarUrl: demoAvatarUrl,
         })
         .returning();
       user = created;
+    } else if (!user.avatarUrl) {
+      const [updated] = await db
+        .update(users)
+        .set({ avatarUrl: demoAvatarUrl })
+        .where(eq(users.id, user.id))
+        .returning();
+      user = updated;
     }
 
     // Every demo visit: re-join the user to every public, non-archived
