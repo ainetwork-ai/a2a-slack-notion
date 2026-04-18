@@ -32,8 +32,6 @@ import { importRoutes } from './routes/import.js';
 import { startHocuspocus } from './hocuspocus.js';
 import { ensureSearchIndex } from './lib/search.js';
 import { setupEventHandlers } from './lib/event-handlers.js';
-import { startNotificationWorker } from './workers/notification-worker.js';
-import { startWebhookWorker } from './workers/webhook-worker.js';
 import type { AppVariables, DefaultUser } from './types/app.js';
 
 const app = new Hono<{ Variables: AppVariables }>();
@@ -150,14 +148,8 @@ startHocuspocus();
 // Initialize search index (best-effort, non-blocking)
 ensureSearchIndex().catch(() => {});
 
-// Wire application events to BullMQ notification queues
+// Wire application events to inline notification + webhook handlers
 setupEventHandlers();
-
-// Start BullMQ notification worker
-startNotificationWorker();
-
-// Start BullMQ webhook delivery worker
-startWebhookWorker();
 
 export default app;
 export type AppType = typeof app;

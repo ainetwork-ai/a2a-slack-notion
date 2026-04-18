@@ -1,19 +1,7 @@
 services:
-  # Postgres was removed — Notion app now uses the shared Slack Neon Postgres
-  # via DATABASE_URL / POSTGRES_URL env vars. There is no local Postgres.
-  redis:
-    image: redis:7-alpine
-    restart: unless-stopped
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis-data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
+  # Postgres + Redis were removed — Notion app uses the shared Slack Neon
+  # Postgres via DATABASE_URL / POSTGRES_URL, and runs single-instance
+  # in-process events (no BullMQ queue, no Hocuspocus pub/sub).
   minio:
     image: minio/minio:latest
     restart: unless-stopped
@@ -49,6 +37,5 @@ services:
       retries: 5
 
 volumes:
-  redis-data:
   minio-data:
   meilisearch-data:

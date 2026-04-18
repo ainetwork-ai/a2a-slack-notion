@@ -1,20 +1,6 @@
 services:
-  # Postgres removed — Notion now uses the shared Slack Neon Postgres
-  # (DATABASE_URL points at Neon). No local pg container.
-  redis:
-    image: redis:7-alpine
-    restart: always
-    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
-    volumes:
-      - redisdata:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - internal
-
+  # Postgres + Redis removed — Notion uses the shared Slack Neon Postgres
+  # (DATABASE_URL points at Neon). No local pg/redis containers.
   minio:
     image: minio/minio:latest
     restart: always
@@ -56,17 +42,11 @@ services:
       dockerfile: apps/api/Dockerfile
     restart: unless-stopped
     depends_on:
-      redis:
-        condition: service_healthy
       minio:
         condition: service_healthy
     environment:
       NODE_ENV: production
       DATABASE_URL: ${DATABASE_URL}
-      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
-      REDIS_HOST: redis
-      REDIS_PORT: "6379"
-      REDIS_PASSWORD: ${REDIS_PASSWORD}
       CORS_ORIGIN: ${CORS_ORIGIN:-https://localhost}
       MINIO_ENDPOINT: minio
       MINIO_PORT: "9000"
@@ -133,8 +113,6 @@ services:
       retries: 3
 
 volumes:
-  redisdata:
-    driver: local
   miniodata:
     driver: local
   meilidata:

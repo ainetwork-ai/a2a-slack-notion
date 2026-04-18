@@ -1,6 +1,5 @@
 import { Server } from '@hocuspocus/server';
 import { Database } from '@hocuspocus/extension-database';
-import { Redis } from '@hocuspocus/extension-redis';
 import { createLogger } from '@notion/shared';
 import { prisma } from './lib/prisma.js';
 
@@ -9,24 +8,9 @@ const logger = createLogger('hocuspocus');
 // Track last auto-snapshot time per document (in-memory, resets on server restart)
 const lastSnapshotTime = new Map<string, number>();
 
-// Build Redis extension only when REDIS_HOST is configured; fail softly if unavailable
-function buildRedisExtension(): Redis | null {
-  if (!process.env['REDIS_HOST']) return null;
-  try {
-    return new Redis({
-      host: process.env['REDIS_HOST'],
-      port: Number(process.env['REDIS_PORT'] ?? 6379),
-      options: {
-        password: process.env['REDIS_PASSWORD'] || undefined,
-      },
-    });
-  } catch (err) {
-    logger.error({ err }, 'Failed to initialize Redis extension — continuing without it');
-    return null;
-  }
-}
-
-const redisExtension = buildRedisExtension();
+// Single-instance Hocuspocus — no Redis pub/sub. If we ever need multi-node
+// collab, reintroduce a dedicated broker here; Redis was removed from the
+// stack entirely.
 
 const server = new Server({
   // No authentication required — accept all connections
@@ -36,7 +20,6 @@ const server = new Server({
   },
 
   extensions: [
-    ...(redisExtension ? [redisExtension] : []),
     new Database({
       fetch: async ({ documentName }) => {
         try {

@@ -9,7 +9,7 @@ import { and, eq } from 'drizzle-orm';
 import { createLogger } from '@notion/shared';
 import { db, notionNotifications } from './db.js';
 import { automations, blocks } from '../../../../slack/src/lib/db/schema';
-import { notificationQueue } from './queue.js';
+import { sseClients } from './sse-clients.js';
 
 const logger = createLogger('automation-engine');
 
@@ -191,22 +191,23 @@ async function executeAction(
     const { userId, message } = action.config;
 
     // Persist notification record (notion's extended notification shape)
-    await db.insert(notionNotifications).values({
-      userId,
-      type: 'automation',
-      title: 'Automation triggered',
-      body: message,
-      pageId: rowId,
-    });
+    const [notification] = await db
+      .insert(notionNotifications)
+      .values({
+        userId,
+        type: 'automation',
+        title: 'Automation triggered',
+        body: message,
+        pageId: rowId,
+      })
+      .returning();
 
-    // Enqueue for push delivery (best-effort)
-    await notificationQueue.add('automation_notification', {
-      userId,
-      type: 'automation',
-      title: 'Automation triggered',
-      body: message,
-      pageId: rowId,
-    });
+    // Push to subscribed SSE clients (formerly done via BullMQ worker)
+    const writers = sseClients.get(userId);
+    if (writers && writers.size > 0 && notification) {
+      const payload = `data: ${JSON.stringify(notification)}\n\n`;
+      for (const write of writers) write(payload);
+    }
 
     logger.info({ userId, rowId }, 'send_notification action executed');
   } else if (action.type === 'update_property') {
