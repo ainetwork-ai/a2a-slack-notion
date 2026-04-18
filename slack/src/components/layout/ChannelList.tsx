@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { Hash, Lock, Plus, ChevronDown, ChevronRight, ArrowUpDown, Clock, Archive, Folder, FolderOpen, FolderPlus, MoreHorizontal, X, Compass, Eye, EyeOff } from 'lucide-react';
+import { Hash, Lock, Plus, ChevronDown, ChevronRight, ArrowUpDown, Clock, Archive, Folder, FolderOpen, FolderPlus, MoreHorizontal, X, Compass } from 'lucide-react';
 import { useAppStore } from '@/lib/stores/app-store';
 import { cn } from '@/lib/utils';
 import useSWR from 'swr';
@@ -38,10 +38,6 @@ export default function ChannelList({ workspaceId }: ChannelListProps) {
   const { setCreateChannelOpen, setBrowseChannelsOpen } = useAppStore();
   const [collapsed, setCollapsed] = useState(false);
   const [sortAlpha, setSortAlpha] = useState(false);
-  const [unreadOnly, setUnreadOnly] = useState(() => {
-    if (typeof window === 'undefined') return false;
-    return localStorage.getItem('channelUnreadFilter') === 'true';
-  });
   const [archivedCollapsed, setArchivedCollapsed] = useState(true);
   const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(new Set());
   const [creatingFolder, setCreatingFolder] = useState(false);
@@ -73,21 +69,14 @@ export default function ChannelList({ workspaceId }: ChannelListProps) {
   const archivedChannels = Array.isArray(archivedData) ? archivedData : [];
   const folders = Array.isArray(foldersData) ? foldersData : [];
 
-  function toggleUnreadFilter() {
-    setUnreadOnly((v) => {
-      const next = !v;
-      localStorage.setItem('channelUnreadFilter', String(next));
-      return next;
-    });
-  }
-
   const sortedChannels = sortAlpha
     ? [...channels].sort((a, b) => a.name.localeCompare(b.name))
     : channels;
 
-  const visibleChannels = unreadOnly
-    ? sortedChannels.filter((c) => (c.unreadCount ?? 0) > 0)
-    : sortedChannels;
+  // Unread channels are emphasized inline (bold) — no filtering. Matches Slack:
+  // the sidebar always shows every channel the user belongs to; unreads just
+  // stand out via weight + red dot badge.
+  const visibleChannels = sortedChannels;
 
   // Separate channels into foldered and unfoldered
   const unfiledChannels = visibleChannels.filter((c) => !c.folderId);
@@ -246,16 +235,6 @@ export default function ChannelList({ workspaceId }: ChannelListProps) {
         </button>
         <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
           <button
-            onClick={toggleUnreadFilter}
-            className={cn(
-              'text-[#bcabbc] hover:text-white p-0.5 rounded transition-colors',
-              unreadOnly && 'text-white'
-            )}
-            title={unreadOnly ? 'Show all channels' : 'Show unread only'}
-          >
-            {unreadOnly ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-          </button>
-          <button
             onClick={() => setSortAlpha((v) => !v)}
             className={cn(
               'text-[#bcabbc] hover:text-white p-0.5 rounded transition-colors',
@@ -370,17 +349,17 @@ export default function ChannelList({ workspaceId }: ChannelListProps) {
             );
           })}
 
-          {/* Unfiled channels — collapse to 5 unless expanded or filtered */}
+          {/* Unfiled channels — collapse to 5 unless expanded */}
           {(() => {
             const COLLAPSE_THRESHOLD = 5;
-            const shouldCollapse = unfiledChannels.length > COLLAPSE_THRESHOLD && !showAllUnfiled && !unreadOnly;
+            const shouldCollapse = unfiledChannels.length > COLLAPSE_THRESHOLD && !showAllUnfiled;
             const visible = shouldCollapse ? unfiledChannels.slice(0, COLLAPSE_THRESHOLD) : unfiledChannels;
             return (
               <>
                 {visible.map((channel) => (
                   <ChannelItem key={channel.id} channel={channel} />
                 ))}
-                {unfiledChannels.length > COLLAPSE_THRESHOLD && !unreadOnly && (
+                {unfiledChannels.length > COLLAPSE_THRESHOLD && (
                   <button
                     onClick={() => setShowAllUnfiled((v) => !v)}
                     className="w-full flex items-center gap-2 px-2 py-1 rounded text-xs text-[#bcabbc]/80 hover:text-white hover:bg-white/5 transition-colors"
@@ -402,11 +381,7 @@ export default function ChannelList({ workspaceId }: ChannelListProps) {
             );
           })()}
 
-          {unreadOnly && channels.length > 0 && visibleChannels.length === 0 && (
-            <p className="text-xs text-slate-500 px-4 py-1.5">No unread channels</p>
-          )}
-
-          {!unreadOnly && channels.length === 0 && (
+          {channels.length === 0 && (
             <button
               onClick={() => setCreateChannelOpen(true)}
               className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm text-[#bcabbc] hover:text-white hover:bg-white/5 transition-colors"
