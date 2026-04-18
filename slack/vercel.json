@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "installCommand": "cd .. && rm -rf node_modules slack/node_modules && pnpm install --frozen-lockfile",
+  "installCommand": "cd .. && ls -la node_modules slack/node_modules 2>&1 | head -5 && rm -rfv node_modules slack/node_modules 2>&1 | head -5 && ls node_modules slack/node_modules 2>&1 | head -5 && pnpm install --frozen-lockfile --reporter=append-only 2>&1 | tail -20",
   "buildCommand": "cd .. && pnpm --filter slack-a2a build",
   "crons": [
     {
