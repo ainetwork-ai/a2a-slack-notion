@@ -1,0 +1,46 @@
+Total messages: 183 (Errors: 13, Warnings: 0)
+Returning 15 messages for level "error"
+
+[ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3004/api/channels/13f7fc07-cabc-47f6-b8ef-984bbd954118/messages:0
+[ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3004/api/typing?channelId=13f7fc07-cabc-47f6-b8ef-984bbd954118:0
+[ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3004/api/typing?channelId=13f7fc07-cabc-47f6-b8ef-984bbd954118:0
+[ERROR] WebSocket connection to 'ws://localhost:3004/_next/webpack-hmr?id=3cqGOKWAf1PWehWBG3TXm' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3004/_next/static/chunks/0g4t_next_dist_client_0pt-62z._.js:13299
+[ERROR] WebSocket connection to 'ws://localhost:3004/_next/webpack-hmr?id=6V35W2AuAZa8vVYF99sXo' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3004/_next/static/chunks/0g4t_next_dist_client_0pt-62z._.js:13299
+[ERROR] WebSocket connection to 'ws://localhost:3004/_next/webpack-hmr?id=3cqGOKWAf1PWehWBG3TXm' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3004/_next/static/chunks/0g4t_next_dist_client_0pt-62z._.js:13299
+[ERROR] WebSocket connection to 'ws://localhost:3004/_next/webpack-hmr?id=6V35W2AuAZa8vVYF99sXo' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3004/_next/static/chunks/0g4t_next_dist_client_0pt-62z._.js:13299
+[ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3004/api/dm:0
+[ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3004/api/typing?channelId=13f7fc07-cabc-47f6-b8ef-984bbd954118:0
+[ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3004/api/typing?channelId=13f7fc07-cabc-47f6-b8ef-984bbd954118:0
+[ERROR] WebSocket connection to 'ws://localhost:3004/_next/webpack-hmr?id=3cqGOKWAf1PWehWBG3TXm' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3004/_next/static/chunks/0g4t_next_dist_client_0pt-62z._.js:13299
+[ERROR] WebSocket connection to 'ws://localhost:3004/_next/webpack-hmr?id=6V35W2AuAZa8vVYF99sXo' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3004/_next/static/chunks/0g4t_next_dist_client_0pt-62z._.js:13299
+TypeError: (integrations ?? []).filter is not a function
+    at McpList (http://localhost:3004/_next/static/chunks/slack_src_components_layout_0mmp_di._.js:3880:53)
+    at Object.react_stack_bottom_frame (http://localhost:3004/_next/static/chunks/0g4t_next_dist_compiled_react-dom_1342o9u._.js:15037:24)
+    at renderWithHooks (http://localhost:3004/_next/static/chunks/0g4t_next_dist_compiled_react-dom_1342o9u._.js:4620:24)
+    at updateFunctionComponent (http://localhost:3004/_next/static/chunks/0g4t_next_dist_compiled_react-dom_1342o9u._.js:6081:21)
+    at beginWork (http://localhost:3004/_next/static/chunks/0g4t_next_dist_compiled_react-dom_1342o9u._.js:6691:24)
+    at runWithFiberInDEV (http://localhost:3004/_next/static/chunks/0g4t_next_dist_compiled_react-dom_1342o9u._.js:965:74)
+    at performUnitOfWork (http://localhost:3004/_next/static/chunks/0g4t_next_dist_compiled_react-dom_1342o9u._.js:9555:97)
+    at workLoopSync (http://localhost:3004/_next/static/chunks/0g4t_next_dist_compiled_react-dom_1342o9u._.js:9449:40)
+    at renderRootSync (http://localhost:3004/_next/static/chunks/0g4t_next_dist_compiled_react-dom_1342o9u._.js:9433:13)
+    at performWorkOnRoot (http://localhost:3004/_next/static/chunks/0g4t_next_dist_compiled_react-dom_1342o9u._.js:9098:47)
+    at performSyncWorkOnRoot (http://localhost:3004/_next/static/chunks/0g4t_next_dist_compiled_react-dom_1342o9u._.js:10263:9)
+    at flushSyncWorkAcrossRoots_impl (http://localhost:3004/_next/static/chunks/0g4t_next_dist_compiled_react-dom_1342o9u._.js:10179:316)
+    at processRootScheduleInMicrotask (http://localhost:3004/_next/static/chunks/0g4t_next_dist_compiled_react-dom_1342o9u._.js:10200:106)
+    at http://localhost:3004/_next/static/chunks/0g4t_next_dist_compiled_react-dom_1342o9u._.js:10274:158
+TypeError: (integrations ?? []).filter is not a function
+    at McpList (http://localhost:3004/_next/static/chunks/slack_src_components_layout_0mmp_di._.js:3880:53)
+    at Object.react_stack_bottom_frame (http://localhost:3004/_next/static/chunks/0g4t_next_dist_compiled_react-dom_1342o9u._.js:15037:24)
+    at renderWithHooks (http://localhost:3004/_next/static/chunks/0g4t_next_dist_compiled_react-dom_1342o9u._.js:4620:24)
+    at updateFunctionComponent (http://localhost:3004/_next/static/chunks/0g4t_next_dist_compiled_react-dom_1342o9u._.js:6081:21)
+    at beginWork (http://localhost:3004/_next/static/chunks/0g4t_next_dist_compiled_react-dom_1342o9u._.js:6691:24)
+    at runWithFiberInDEV (http://localhost:3004/_next/static/chunks/0g4t_next_dist_compiled_react-dom_1342o9u._.js:965:74)
+    at performUnitOfWork (http://localhost:3004/_next/static/chunks/0g4t_next_dist_compiled_react-dom_1342o9u._.js:9555:97)
+    at workLoopSync (http://localhost:3004/_next/static/chunks/0g4t_next_dist_compiled_react-dom_1342o9u._.js:9449:40)
+    at renderRootSync (http://localhost:3004/_next/static/chunks/0g4t_next_dist_compiled_react-dom_1342o9u._.js:9433:13)
+    at performWorkOnRoot (http://localhost:3004/_next/static/chunks/0g4t_next_dist_compiled_react-dom_1342o9u._.js:9098:47)
+    at performSyncWorkOnRoot (http://localhost:3004/_next/static/chunks/0g4t_next_dist_compiled_react-dom_1342o9u._.js:10263:9)
+    at flushSyncWorkAcrossRoots_impl (http://localhost:3004/_next/static/chunks/0g4t_next_dist_compiled_react-dom_1342o9u._.js:10179:316)
+    at processRootScheduleInMicrotask (http://localhost:3004/_next/static/chunks/0g4t_next_dist_compiled_react-dom_1342o9u._.js:10200:106)
+    at http://localhost:3004/_next/static/chunks/0g4t_next_dist_compiled_react-dom_1342o9u._.js:10274:158
+Transition was aborted because of invalid state

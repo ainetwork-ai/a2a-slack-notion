@@ -353,3 +353,47 @@ Internal relative imports (`./callout-view`, `./columns-view`, `./column-cell-vi
 ### Build check
 `cd slack && npx tsc --noEmit -p tsconfig.json` → clean (no errors on the new or edited files; full run is clean).
 
+
+---
+
+## Dogfood Round 2 — Notion editor feature parity (2026-04-17)
+
+Scope: Verify R1 fails are now fixed — (a) slash menu shows Callout / Toggle / 2 Columns / 3 Columns and inserts real working blocks; (b) McpList `(integrations ?? []).filter is not a function` error is gone.
+
+Auth: used `/api/auth/key-login` with generated dev key `38a1f187…d09cfc` → user `R2 Tester` (id `99f6880e-d689-45cd-9065-54a21c5a80e4`).
+
+### T1 — McpList error gone (smoke) — PASS
+- `GET /workspace` loads (redirects to `/login` first, then `/workspace` after key login).
+- After reaching `/workspace` and `/workspace/channel/canvas-test` (MCP Integrations section visible in sidebar — `Notion / Polymarket / News Search / Document Parser / Slack Workspace`), **zero** occurrences of `(integrations ?? []).filter` in 186-message console log. Only errors are dev-server HMR WebSocket noise (`ERR_CONNECTION_REFUSED ws://…/_next/webpack-hmr…`) and one `500` on `/api/channels/.../bookmarks` which is unrelated to scope.
+
+### T2 — Canvas panel with pageId — PASS
+- Opened `#canvas-test` → Canvas panel auto-mounted with `#canvas-test canvas 4` (pageId `8b7c56b7-c2d6-4fa0-860e-7fc681be671e`). Confirmed via `document.querySelectorAll('iframe')` returning src=`http://localhost:3004/notion-embed/pages/8b7c56b7-c2d6-4fa0-860e-7fc681be671e`.
+- Screenshot: `/mnt/newdata/git/slack-a2a/dogfood-output-iframe-r2/r2-01-panel-open.png`.
+
+### T3 — Slash menu items present — PASS
+- Navigated directly to `/notion-embed/pages/8b7c56b7-c2d6-4fa0-860e-7fc681be671e` for reliable keyboard interaction.
+- Pressing `/` opens menu with 19 items including **Callout** (Highlight important information), **Toggle List** (Collapsible toggle block), **2 Columns** (Two-column layout), **3 Columns** (Three-column layout). Snapshot evidence: menu items at refs `e242/e249/e256/e263`.
+- Screenshot: `/mnt/newdata/git/slack-a2a/dogfood-output-iframe-r2/r2-02-slash-menu-with-callout.png`.
+
+### T4 — Insert Callout — PASS
+- Clicked Callout menu item. DOM verified: `<div emoji="💡" data-type="callout"><p>…</p></div>` inserted. Typed "Callout" inside — text entered and persisted. `emoji` attribute matches spec exactly.
+- Screenshot: `/mnt/newdata/git/slack-a2a/dogfood-output-iframe-r2/r2-03-callout-inserted.png`.
+- Console: 0 errors post-insertion.
+
+### T5 — Insert Toggle — PASS
+- Typed `/tog` → filter collapses to only "Toggle List" → click inserts `<details open="true" data-type="toggle">`. Typed "Tog" inside summary. Toggle collapse verified by toggling `details.open` in JS (before=true, after=false) — native HTML `<details>` semantics work.
+- Screenshot: `/mnt/newdata/git/slack-a2a/dogfood-output-iframe-r2/r2-04-toggle-inserted.png`.
+
+### T6 — Insert 2 Columns — PASS
+- Typed `/col` → menu filtered to Toggle/2 Columns/3 Columns (toggle left in because it matched). Clicked 2 Columns.
+- DOM: `<div data-type="columns"><div data-type="column-cell">…</div><div data-type="column-cell">…</div></div>` — two cells confirmed via `children.length === 2`.
+- Screenshot: `/mnt/newdata/git/slack-a2a/dogfood-output-iframe-r2/r2-05-columns-inserted.png`.
+
+### T7 — Console clean — PASS
+- Full console (all levels) dumped to `/mnt/newdata/git/slack-a2a/dogfood-output-iframe-r2/console-r2-full.txt` (184 messages, 0 errors, 0 warnings).
+- Error-only dump: `/mnt/newdata/git/slack-a2a/dogfood-output-iframe-r2/console-r2.txt` — 0 error-level messages.
+- Zero hits for: `integrations.*filter`, `CalloutView`, `ColumnsView`, `ToggleView`, `SlashCommand`, `extensions`, `uncaught`.
+
+### Outcome
+PASS — Round 2 verifies F9 (slash menu additions: Callout / Toggle List / 2 Columns / 3 Columns — all insert real blocks with spec-correct DOM and emoji attributes) and F10 (McpList no longer throws on `.filter`). Feature parity with spec `2026-04-17-notion-canvas-iframe-design.md` confirmed for the gaps R1 flagged.
+

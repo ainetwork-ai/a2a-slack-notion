@@ -1,69 +1,91 @@
 {
-  "_notice": "FICTIONAL SYNTHETIC DATA FOR DEMO PURPOSES. Any resemblance to real Iranian, Iraqi, or other state facilities, equipment, or personnel is coincidental. Figures, IDs, and relationships are invented to illustrate TEE-mediated sealed Q&A.",
-  "dataset_id": "sealed_centrifuge_telemetry_v1",
-  "controller": "Example State Nuclear Authority (fictional)",
-  "period": { "from": "2025-01-01", "to": "2025-12-31" },
+  "_notice": "FICTIONAL SYNTHETIC DATA FOR DEMO PURPOSES. A non-profit civil-society group conducted an anonymous sentiment survey with everyday Iranian civilians across 6 provinces over 6 months of 2025. All names, phone numbers, provinces, and occupations are sealed inside the enclave; only aggregate counts and percentages may leave. Numbers are invented to illustrate TEE-mediated sealed Q&A. No real person or organization is represented.",
+  "dataset_id": "iran_civilian_peace_sentiment_v1",
+  "controller": "Non-profit civil-society coalition (fictional)",
+  "period": { "from": "2025-01-01", "to": "2025-06-30" },
   "schema": {
-    "facility_id": "internal identifier (NEVER DISCLOSE)",
-    "centrifuge_id": "internal identifier (NEVER DISCLOSE)",
-    "cascade_group": "internal grouping (NEVER DISCLOSE)",
+    "respondent_id": "internal identifier (NEVER DISCLOSE)",
+    "province": "internal grouping (NEVER DISCLOSE)",
+    "occupation": "internal grouping (NEVER DISCLOSE)",
+    "phone_hash": "one-way hash — never returned (NEVER DISCLOSE)",
     "month": "YYYY-MM aggregation",
-    "peak_enrichment_pct": "highest U-235 enrichment observed that month",
-    "output_kg_uf6": "UF6 gas produced that month (kg)",
-    "output_kg_heu_equivalent": "estimated U-235 mass extracted that month (kg)",
-    "maintenance_hours": "downtime hours that month",
-    "operator_personnel_count": "assigned staff (NEVER DISCLOSE)"
+    "wants_peace": "0/1 — does the respondent want the war to end",
+    "supports_ceasefire": "0/1 — would accept an immediate ceasefire",
+    "supports_end_of_war": "0/1 — wants negotiated end to the broader conflict",
+    "afraid_for_family": "0/1 — reports personal safety fear",
+    "blames_own_government": "0/1 — internal answer (NEVER DISCLOSE)",
+    "is_civilian": "always 1 (service members excluded)"
   },
-  "facilities": [
-    { "facility_id": "FAC-A", "display_region": "redacted", "centrifuge_count": 180 },
-    { "facility_id": "FAC-B", "display_region": "redacted", "centrifuge_count": 142 },
-    { "facility_id": "FAC-C", "display_region": "redacted", "centrifuge_count": 86 }
-  ],
   "monthly_records": [
-    { "facility_id": "FAC-A", "cascade_group": "G-1", "month": "2025-01", "peak_enrichment_pct": 4.8, "output_kg_uf6": 612.3, "output_kg_heu_equivalent": 4.1, "maintenance_hours": 18, "operator_personnel_count": 22 },
-    { "facility_id": "FAC-A", "cascade_group": "G-1", "month": "2025-02", "peak_enrichment_pct": 4.9, "output_kg_uf6": 598.7, "output_kg_heu_equivalent": 4.0, "maintenance_hours": 14, "operator_personnel_count": 22 },
-    { "facility_id": "FAC-A", "cascade_group": "G-1", "month": "2025-03", "peak_enrichment_pct": 5.0, "output_kg_uf6": 620.1, "output_kg_heu_equivalent": 4.2, "maintenance_hours": 16, "operator_personnel_count": 22 },
-    { "facility_id": "FAC-A", "cascade_group": "G-1", "month": "2025-04", "peak_enrichment_pct": 4.7, "output_kg_uf6": 605.4, "output_kg_heu_equivalent": 4.1, "maintenance_hours": 20, "operator_personnel_count": 22 },
-    { "facility_id": "FAC-A", "cascade_group": "G-1", "month": "2025-05", "peak_enrichment_pct": 4.8, "output_kg_uf6": 609.8, "output_kg_heu_equivalent": 4.1, "maintenance_hours": 12, "operator_personnel_count": 22 },
-    { "facility_id": "FAC-A", "cascade_group": "G-1", "month": "2025-06", "peak_enrichment_pct": 4.9, "output_kg_uf6": 617.2, "output_kg_heu_equivalent": 4.2, "maintenance_hours": 15, "operator_personnel_count": 22 },
-    { "facility_id": "FAC-A", "cascade_group": "G-2", "month": "2025-01", "peak_enrichment_pct": 3.6, "output_kg_uf6": 455.0, "output_kg_heu_equivalent": 2.3, "maintenance_hours": 22, "operator_personnel_count": 18 },
-    { "facility_id": "FAC-A", "cascade_group": "G-2", "month": "2025-06", "peak_enrichment_pct": 3.7, "output_kg_uf6": 468.1, "output_kg_heu_equivalent": 2.4, "maintenance_hours": 17, "operator_personnel_count": 18 },
-    { "facility_id": "FAC-B", "cascade_group": "G-3", "month": "2025-01", "peak_enrichment_pct": 19.8, "output_kg_uf6": 82.5, "output_kg_heu_equivalent": 3.1, "maintenance_hours": 34, "operator_personnel_count": 16 },
-    { "facility_id": "FAC-B", "cascade_group": "G-3", "month": "2025-02", "peak_enrichment_pct": 19.9, "output_kg_uf6": 80.0, "output_kg_heu_equivalent": 3.0, "maintenance_hours": 28, "operator_personnel_count": 16 },
-    { "facility_id": "FAC-B", "cascade_group": "G-3", "month": "2025-03", "peak_enrichment_pct": 19.7, "output_kg_uf6": 78.3, "output_kg_heu_equivalent": 2.9, "maintenance_hours": 31, "operator_personnel_count": 16 },
-    { "facility_id": "FAC-B", "cascade_group": "G-3", "month": "2025-04", "peak_enrichment_pct": 19.8, "output_kg_uf6": 81.7, "output_kg_heu_equivalent": 3.1, "maintenance_hours": 25, "operator_personnel_count": 16 },
-    { "facility_id": "FAC-B", "cascade_group": "G-3", "month": "2025-05", "peak_enrichment_pct": 19.9, "output_kg_uf6": 79.4, "output_kg_heu_equivalent": 3.0, "maintenance_hours": 29, "operator_personnel_count": 16 },
-    { "facility_id": "FAC-B", "cascade_group": "G-3", "month": "2025-06", "peak_enrichment_pct": 19.8, "output_kg_uf6": 82.2, "output_kg_heu_equivalent": 3.1, "maintenance_hours": 33, "operator_personnel_count": 16 },
-    { "facility_id": "FAC-C", "cascade_group": "G-4", "month": "2025-01", "peak_enrichment_pct": 4.5, "output_kg_uf6": 312.0, "output_kg_heu_equivalent": 1.9, "maintenance_hours": 24, "operator_personnel_count": 12 },
-    { "facility_id": "FAC-C", "cascade_group": "G-4", "month": "2025-02", "peak_enrichment_pct": 4.6, "output_kg_uf6": 308.5, "output_kg_heu_equivalent": 1.8, "maintenance_hours": 21, "operator_personnel_count": 12 },
-    { "facility_id": "FAC-C", "cascade_group": "G-4", "month": "2025-03", "peak_enrichment_pct": 4.7, "output_kg_uf6": 315.2, "output_kg_heu_equivalent": 1.9, "maintenance_hours": 19, "operator_personnel_count": 12 },
-    { "facility_id": "FAC-C", "cascade_group": "G-4", "month": "2025-04", "peak_enrichment_pct": 4.5, "output_kg_uf6": 310.8, "output_kg_heu_equivalent": 1.9, "maintenance_hours": 23, "operator_personnel_count": 12 },
-    { "facility_id": "FAC-C", "cascade_group": "G-4", "month": "2025-05", "peak_enrichment_pct": 4.6, "output_kg_uf6": 313.5, "output_kg_heu_equivalent": 1.9, "maintenance_hours": 20, "operator_personnel_count": 12 },
-    { "facility_id": "FAC-C", "cascade_group": "G-4", "month": "2025-06", "peak_enrichment_pct": 4.7, "output_kg_uf6": 316.9, "output_kg_heu_equivalent": 1.9, "maintenance_hours": 22, "operator_personnel_count": 12 }
+    { "respondent_id": "R001", "province": "Tehran", "occupation": "teacher", "month": "2025-01", "wants_peace": 1, "supports_ceasefire": 1, "supports_end_of_war": 1, "afraid_for_family": 1, "blames_own_government": 1, "is_civilian": 1 },
+    { "respondent_id": "R002", "province": "Isfahan", "occupation": "shopkeeper", "month": "2025-01", "wants_peace": 1, "supports_ceasefire": 1, "supports_end_of_war": 1, "afraid_for_family": 1, "blames_own_government": 0, "is_civilian": 1 },
+    { "respondent_id": "R003", "province": "Shiraz", "occupation": "nurse", "month": "2025-01", "wants_peace": 1, "supports_ceasefire": 1, "supports_end_of_war": 1, "afraid_for_family": 1, "blames_own_government": 1, "is_civilian": 1 },
+    { "respondent_id": "R004", "province": "Mashhad", "occupation": "driver", "month": "2025-01", "wants_peace": 1, "supports_ceasefire": 0, "supports_end_of_war": 1, "afraid_for_family": 1, "blames_own_government": 0, "is_civilian": 1 },
+    { "respondent_id": "R005", "province": "Tabriz", "occupation": "student", "month": "2025-01", "wants_peace": 1, "supports_ceasefire": 1, "supports_end_of_war": 1, "afraid_for_family": 0, "blames_own_government": 1, "is_civilian": 1 },
+    { "respondent_id": "R006", "province": "Kerman", "occupation": "farmer", "month": "2025-01", "wants_peace": 1, "supports_ceasefire": 1, "supports_end_of_war": 0, "afraid_for_family": 1, "blames_own_government": 0, "is_civilian": 1 },
+
+    { "respondent_id": "R007", "province": "Tehran", "occupation": "engineer", "month": "2025-02", "wants_peace": 1, "supports_ceasefire": 1, "supports_end_of_war": 1, "afraid_for_family": 1, "blames_own_government": 1, "is_civilian": 1 },
+    { "respondent_id": "R008", "province": "Isfahan", "occupation": "doctor", "month": "2025-02", "wants_peace": 1, "supports_ceasefire": 1, "supports_end_of_war": 1, "afraid_for_family": 1, "blames_own_government": 1, "is_civilian": 1 },
+    { "respondent_id": "R009", "province": "Shiraz", "occupation": "teacher", "month": "2025-02", "wants_peace": 1, "supports_ceasefire": 1, "supports_end_of_war": 1, "afraid_for_family": 1, "blames_own_government": 1, "is_civilian": 1 },
+    { "respondent_id": "R010", "province": "Mashhad", "occupation": "cleric-adjacent", "month": "2025-02", "wants_peace": 1, "supports_ceasefire": 0, "supports_end_of_war": 0, "afraid_for_family": 0, "blames_own_government": 0, "is_civilian": 1 },
+    { "respondent_id": "R011", "province": "Tabriz", "occupation": "shopkeeper", "month": "2025-02", "wants_peace": 1, "supports_ceasefire": 1, "supports_end_of_war": 1, "afraid_for_family": 1, "blames_own_government": 1, "is_civilian": 1 },
+    { "respondent_id": "R012", "province": "Kerman", "occupation": "nurse", "month": "2025-02", "wants_peace": 1, "supports_ceasefire": 1, "supports_end_of_war": 1, "afraid_for_family": 1, "blames_own_government": 0, "is_civilian": 1 },
+
+    { "respondent_id": "R013", "province": "Tehran", "occupation": "student", "month": "2025-03", "wants_peace": 1, "supports_ceasefire": 1, "supports_end_of_war": 1, "afraid_for_family": 1, "blames_own_government": 1, "is_civilian": 1 },
+    { "respondent_id": "R014", "province": "Isfahan", "occupation": "driver", "month": "2025-03", "wants_peace": 1, "supports_ceasefire": 1, "supports_end_of_war": 1, "afraid_for_family": 1, "blames_own_government": 0, "is_civilian": 1 },
+    { "respondent_id": "R015", "province": "Shiraz", "occupation": "farmer", "month": "2025-03", "wants_peace": 1, "supports_ceasefire": 1, "supports_end_of_war": 1, "afraid_for_family": 1, "blames_own_government": 1, "is_civilian": 1 },
+    { "respondent_id": "R016", "province": "Mashhad", "occupation": "engineer", "month": "2025-03", "wants_peace": 1, "supports_ceasefire": 1, "supports_end_of_war": 1, "afraid_for_family": 1, "blames_own_government": 1, "is_civilian": 1 },
+    { "respondent_id": "R017", "province": "Tabriz", "occupation": "teacher", "month": "2025-03", "wants_peace": 1, "supports_ceasefire": 1, "supports_end_of_war": 1, "afraid_for_family": 1, "blames_own_government": 1, "is_civilian": 1 },
+    { "respondent_id": "R018", "province": "Kerman", "occupation": "shopkeeper", "month": "2025-03", "wants_peace": 1, "supports_ceasefire": 0, "supports_end_of_war": 1, "afraid_for_family": 0, "blames_own_government": 0, "is_civilian": 1 },
+
+    { "respondent_id": "R019", "province": "Tehran", "occupation": "doctor", "month": "2025-04", "wants_peace": 1, "supports_ceasefire": 1, "supports_end_of_war": 1, "afraid_for_family": 1, "blames_own_government": 1, "is_civilian": 1 },
+    { "respondent_id": "R020", "province": "Isfahan", "occupation": "student", "month": "2025-04", "wants_peace": 1, "supports_ceasefire": 1, "supports_end_of_war": 1, "afraid_for_family": 1, "blames_own_government": 1, "is_civilian": 1 },
+    { "respondent_id": "R021", "province": "Shiraz", "occupation": "engineer", "month": "2025-04", "wants_peace": 1, "supports_ceasefire": 1, "supports_end_of_war": 1, "afraid_for_family": 1, "blames_own_government": 1, "is_civilian": 1 },
+    { "respondent_id": "R022", "province": "Mashhad", "occupation": "farmer", "month": "2025-04", "wants_peace": 1, "supports_ceasefire": 1, "supports_end_of_war": 1, "afraid_for_family": 1, "blames_own_government": 0, "is_civilian": 1 },
+    { "respondent_id": "R023", "province": "Tabriz", "occupation": "driver", "month": "2025-04", "wants_peace": 1, "supports_ceasefire": 1, "supports_end_of_war": 1, "afraid_for_family": 0, "blames_own_government": 1, "is_civilian": 1 },
+    { "respondent_id": "R024", "province": "Kerman", "occupation": "nurse", "month": "2025-04", "wants_peace": 1, "supports_ceasefire": 1, "supports_end_of_war": 1, "afraid_for_family": 1, "blames_own_government": 1, "is_civilian": 1 },
+
+    { "respondent_id": "R025", "province": "Tehran", "occupation": "shopkeeper", "month": "2025-05", "wants_peace": 1, "supports_ceasefire": 1, "supports_end_of_war": 1, "afraid_for_family": 1, "blames_own_government": 1, "is_civilian": 1 },
+    { "respondent_id": "R026", "province": "Isfahan", "occupation": "teacher", "month": "2025-05", "wants_peace": 1, "supports_ceasefire": 1, "supports_end_of_war": 1, "afraid_for_family": 1, "blames_own_government": 1, "is_civilian": 1 },
+    { "respondent_id": "R027", "province": "Shiraz", "occupation": "student", "month": "2025-05", "wants_peace": 1, "supports_ceasefire": 1, "supports_end_of_war": 1, "afraid_for_family": 0, "blames_own_government": 1, "is_civilian": 1 },
+    { "respondent_id": "R028", "province": "Mashhad", "occupation": "doctor", "month": "2025-05", "wants_peace": 1, "supports_ceasefire": 1, "supports_end_of_war": 1, "afraid_for_family": 1, "blames_own_government": 1, "is_civilian": 1 },
+    { "respondent_id": "R029", "province": "Tabriz", "occupation": "farmer", "month": "2025-05", "wants_peace": 1, "supports_ceasefire": 1, "supports_end_of_war": 1, "afraid_for_family": 1, "blames_own_government": 0, "is_civilian": 1 },
+    { "respondent_id": "R030", "province": "Kerman", "occupation": "engineer", "month": "2025-05", "wants_peace": 1, "supports_ceasefire": 0, "supports_end_of_war": 1, "afraid_for_family": 1, "blames_own_government": 0, "is_civilian": 1 },
+
+    { "respondent_id": "R031", "province": "Tehran", "occupation": "nurse", "month": "2025-06", "wants_peace": 1, "supports_ceasefire": 1, "supports_end_of_war": 1, "afraid_for_family": 1, "blames_own_government": 1, "is_civilian": 1 },
+    { "respondent_id": "R032", "province": "Isfahan", "occupation": "driver", "month": "2025-06", "wants_peace": 1, "supports_ceasefire": 1, "supports_end_of_war": 1, "afraid_for_family": 1, "blames_own_government": 0, "is_civilian": 1 },
+    { "respondent_id": "R033", "province": "Shiraz", "occupation": "shopkeeper", "month": "2025-06", "wants_peace": 1, "supports_ceasefire": 1, "supports_end_of_war": 1, "afraid_for_family": 1, "blames_own_government": 1, "is_civilian": 1 },
+    { "respondent_id": "R034", "province": "Mashhad", "occupation": "student", "month": "2025-06", "wants_peace": 1, "supports_ceasefire": 1, "supports_end_of_war": 1, "afraid_for_family": 1, "blames_own_government": 1, "is_civilian": 1 },
+    { "respondent_id": "R035", "province": "Tabriz", "occupation": "doctor", "month": "2025-06", "wants_peace": 1, "supports_ceasefire": 1, "supports_end_of_war": 1, "afraid_for_family": 1, "blames_own_government": 1, "is_civilian": 1 },
+    { "respondent_id": "R036", "province": "Kerman", "occupation": "teacher", "month": "2025-06", "wants_peace": 1, "supports_ceasefire": 1, "supports_end_of_war": 1, "afraid_for_family": 1, "blames_own_government": 0, "is_civilian": 1 }
   ],
+  "summary_stats": {
+    "total_respondents": 36,
+    "percent_wants_peace": 100.0,
+    "percent_supports_ceasefire": 91.7,
+    "percent_supports_end_of_war": 94.4,
+    "percent_afraid_for_family": 86.1
+  },
   "disclosure_policy_v1": {
     "allowed_question_categories": [
       "aggregate_totals_over_period",
-      "min_max_across_records",
+      "percentage_of_respondents_holding_a_view",
       "counts_above_or_below_threshold",
-      "yes_no_threshold_compliance",
-      "monthly_totals_across_all_facilities",
-      "highest_enrichment_observed_anywhere"
+      "yes_no_whether_majority_holds_a_view",
+      "monthly_totals_across_all_provinces",
+      "trends_in_sentiment_over_time"
     ],
     "disallowed_question_categories": [
-      "specific_facility_id_disclosure",
-      "specific_cascade_group_disclosure",
-      "personnel_count_or_identity",
-      "exact_dates_below_monthly_granularity",
-      "equipment_supplier_or_origin",
-      "geographic_coordinates_or_region",
-      "any_raw_record_return"
+      "which_respondent_said_what",
+      "province_level_breakdown_that_could_re_identify",
+      "occupation_level_breakdown_that_could_re_identify",
+      "phone_hashes_or_any_contact_info",
+      "who_blames_whom_for_the_war",
+      "any_raw_row_of_the_dataset"
     ],
     "numeric_rounding": {
-      "enrichment_percent": 1,
-      "output_kg": 1,
+      "percentages": 1,
       "counts": 0
-    },
-    "refusal_template": "This question is blocked by disclosure rule '{{rule}}'. A policy-compliant reformulation could be: '{{suggestion}}'. No data was read."
+    }
   }
 }

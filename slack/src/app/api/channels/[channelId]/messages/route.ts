@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { users, channels, channelMembers, messages, reactions, mentions, files, notifications, outgoingWebhooks, workflows } from "@/lib/db/schema";
+import { users, channels, channelMembers, messages, reactions, mentions, files, notifications, outgoingWebhooks, workflows, workspaceMembers } from "@/lib/db/schema";
 import { eq, and, desc, lt, sql, inArray, or, ilike, isNull } from "drizzle-orm";
 import { requireAuth } from "@/lib/auth/middleware";
 import { NextRequest, NextResponse } from "next/server";
@@ -25,14 +25,15 @@ export async function GET(
     }
     const channelId = channel.id;
 
-    const [membership] = await db
-      .select()
-      .from(channelMembers)
-      .where(and(eq(channelMembers.channelId, channelId), eq(channelMembers.userId, user.id)))
-      .limit(1);
-
-    if (!membership) {
-      return NextResponse.json({ error: "Not a member" }, { status: 403 });
+    if (channel.workspaceId) {
+      const [wm] = await db
+        .select()
+        .from(workspaceMembers)
+        .where(and(eq(workspaceMembers.workspaceId, channel.workspaceId), eq(workspaceMembers.userId, user.id)))
+        .limit(1);
+      if (!wm) {
+        return NextResponse.json({ error: "Not a workspace member" }, { status: 403 });
+      }
     }
 
     const { searchParams } = new URL(request.url);

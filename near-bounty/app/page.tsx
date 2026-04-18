@@ -23,11 +23,11 @@ interface AttestationBadge {
 }
 
 const STARTER_QUESTIONS = [
-  "Did they cross the red line toward bomb-grade material this year?",
-  "How close did they get to weapons-grade?",
-  "How much near-weapons-grade material was made in the first half of 2025?",
-  "How many months did they stay in the danger zone?",
-  "How big is the biggest facility?",
+  "Do ordinary Iranian civilians want the war to end?",
+  "What share of respondents would accept an immediate ceasefire?",
+  "How many say they're afraid for their family's safety?",
+  "Has support for peace grown between January and June?",
+  "Is the desire for peace a majority view across the survey?",
 ];
 
 export default function Page() {
@@ -88,15 +88,18 @@ export default function Page() {
             Sealed Witness · demo
           </p>
           <h1 className="mt-2 font-serif text-3xl leading-tight text-[color:var(--color-ink)] sm:text-4xl">
-            Ask the source. Don't expose them.
+            Ask ordinary Iranians about peace. Keep every single one of them safe.
           </h1>
           <p className="mt-3 text-[color:var(--color-ink-soft)]">
-            A source has locked a year of sensitive records from Iran's nuclear program inside a
-            hardware safe. Ask what you want to know. You get a straight answer and a cryptographic
-            receipt — and the raw records never leave the safe.
+            A non-profit civil-society coalition has sealed an anonymous survey of everyday Iranian
+            civilians — teachers, nurses, students, shopkeepers — across six provinces. Ask what
+            you want to know about their views on peace, ceasefire, and ending the war. You get a
+            straight answer and a cryptographic receipt. The raw responses never leave the hardware
+            enclave, so no respondent can be identified or retaliated against.
           </p>
           <p className="mt-2 text-xs text-[color:var(--color-ink-muted)]">
-            All data in this demo is made up. No real facility or person is represented.
+            All respondents, provinces, and numbers in this demo are synthetic. No real person is
+            represented. The TEE and attestation are real.
           </p>
         </header>
 
@@ -267,11 +270,11 @@ function PolicyPanel() {
   return (
     <div className="sticky top-8 space-y-4 rounded-2xl border border-[color:var(--color-line)] bg-[color:var(--color-paper-elevated)] p-5 text-sm">
       <div>
-        <h2 className="font-serif text-lg text-[color:var(--color-ink)]">What's inside the safe</h2>
+        <h2 className="font-serif text-lg text-[color:var(--color-ink)]">What's inside the enclave</h2>
         <p className="mt-1 text-[color:var(--color-ink-soft)]">
-          A year of monthly records from three sites: how much material was made, and how pure
-          (enriched) it was. The site names and the people who work there stay hidden — the
-          hardware never lets them out.
+          An anonymous survey of 36 Iranian civilians — 6 provinces, 6 months of 2025 — on peace,
+          ceasefire, and ending the war. Names, provinces, and occupations stay locked inside the
+          hardware; only aggregate counts and percentages can leave.
         </p>
       </div>
       <div>
@@ -279,11 +282,11 @@ function PolicyPanel() {
           You can ask
         </h3>
         <ul className="mt-1 list-disc pl-5 text-[color:var(--color-ink-soft)]">
-          <li>Totals over the year</li>
-          <li>Highest or lowest observed</li>
-          <li>How many months crossed a line</li>
-          <li>Yes / no: did they break a limit?</li>
-          <li>The single most alarming number</li>
+          <li>Share of respondents holding a view</li>
+          <li>How many support a ceasefire</li>
+          <li>Yes / no: does a majority want peace?</li>
+          <li>Trend across the six months</li>
+          <li>Total respondents over the period</li>
         </ul>
       </div>
       <div>
@@ -291,18 +294,19 @@ function PolicyPanel() {
           You can't ask (will be refused)
         </h3>
         <ul className="mt-1 list-disc pl-5 text-[color:var(--color-ink-soft)]">
-          <li>Which specific site did what</li>
-          <li>Names or headcounts of people</li>
-          <li>Exact locations</li>
-          <li>Who sold them the equipment</li>
-          <li>Any raw row from the records</li>
+          <li>Which specific respondent said what</li>
+          <li>Province-level breakdowns</li>
+          <li>Occupation-level breakdowns</li>
+          <li>Phone hashes or any contact info</li>
+          <li>Any raw row from the survey</li>
         </ul>
       </div>
       <div className="rounded-lg bg-[color:var(--color-paper)] p-3 text-xs text-[color:var(--color-ink-muted)]">
         <p className="font-medium text-[color:var(--color-ink-soft)]">Why this matters</p>
         <p className="mt-1">
-          The source keeps control of the raw records. The journalist still gets answers they can
-          verify. Neither side has to trust the other — the hardware is the referee.
+          Iranian civilians are just as tired of war as anyone else. This protocol lets the world
+          hear them without ever exposing any single person. The hardware is the referee — the
+          survey operator can't see the answers either.
         </p>
       </div>
     </div>

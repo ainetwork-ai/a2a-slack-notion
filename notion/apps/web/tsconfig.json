@@ -11,7 +11,9 @@
     "paths": {
       "@/*": ["./src/*"],
       "@notion/shared": ["../../packages/shared/src"],
-      "@notion/shared/*": ["../../packages/shared/src/*"]
+      "@notion/shared/*": ["../../packages/shared/src/*"],
+      "@slack-db": ["../../../slack/src/lib/db"],
+      "@slack-db/*": ["../../../slack/src/lib/db/*"]
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],

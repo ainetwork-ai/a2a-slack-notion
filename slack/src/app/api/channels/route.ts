@@ -25,19 +25,21 @@ export async function GET(request: NextRequest) {
       role: channelMembers.role,
       folderId: channelMembers.folderId,
     })
-    .from(channelMembers)
-    .innerJoin(channels, eq(channelMembers.channelId, channels.id))
+    .from(channels)
+    .leftJoin(
+      channelMembers,
+      and(
+        eq(channelMembers.channelId, channels.id),
+        eq(channelMembers.userId, user.id)
+      )
+    )
     .where(
       workspaceId
         ? and(
-            eq(channelMembers.userId, user.id),
             eq(channels.workspaceId, workspaceId),
             eq(channels.isArchived, archivedOnly)
           )
-        : and(
-            eq(channelMembers.userId, user.id),
-            eq(channels.isArchived, archivedOnly)
-          )
+        : eq(channels.isArchived, archivedOnly)
     )
     .orderBy(desc(channels.updatedAt));
 
@@ -45,6 +47,9 @@ export async function GET(request: NextRequest) {
 
   const channelsWithUnread = await Promise.all(
     memberships.map(async ({ channel, lastReadAt, role, folderId }) => {
+      if (!lastReadAt) {
+        return { ...channel, unreadCount: 0, role, lastReadAt, folderId };
+      }
       const [{ count }] = await db
         .select({ count: sql<number>`count(*)::int` })
         .from(messages)
