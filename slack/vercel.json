@@ -1,7 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "installCommand": "cd .. && npx -y pnpm@10.33.0 install --force --reporter=append-only",
-  "buildCommand": "cd .. && pnpm --filter slack-a2a build",
+  "buildCommand": "cd .. && npx -y pnpm@10.33.0 --filter slack-a2a build",
   "crons": [
     {
       "path": "/api/cron/cleanup-share-links",
