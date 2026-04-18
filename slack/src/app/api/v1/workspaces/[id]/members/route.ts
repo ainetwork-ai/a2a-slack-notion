@@ -5,13 +5,15 @@ import {
   workspaceMembers,
   users,
 } from '@/lib/db/schema';
-import { getDefaultUser } from '@/lib/notion/auth';
+import { requireAuth } from '@/lib/auth/middleware';
 
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const user = await getDefaultUser();
+  const auth = await requireAuth();
+  if ('error' in auth) return auth.error;
+  const user = auth.user;
   const { id: workspaceId } = await params;
 
   const membership = await db
