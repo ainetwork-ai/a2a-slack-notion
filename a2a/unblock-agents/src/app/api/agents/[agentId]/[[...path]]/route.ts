@@ -67,6 +67,7 @@ export async function GET(
     const card: AgentCard = {
       ...agent.card,
       url: `${baseUrl}/api/agents/${agentId}`,
+      iconUrl: `${baseUrl}/agents/${agentId.replace(/^unblock-/, '')}.png`,
     };
     return withCors(card);
   }
@@ -98,6 +99,7 @@ export async function POST(
   const card: AgentCard = {
     ...agent.card,
     url: `${baseUrl}/api/agents/${agentId}`,
+    iconUrl: `${baseUrl}/agents/${agentId.replace(/^unblock-/, '')}.png`,
   };
 
   const executor = new UnblockExecutor(agent);
