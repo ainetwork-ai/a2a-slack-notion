@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "installCommand": "cd .. && pnpm install --frozen-lockfile --force",
+  "installCommand": "cd .. && pnpm install --frozen-lockfile",
   "buildCommand": "cd .. && pnpm --filter slack-a2a build",
   "crons": [
     {
