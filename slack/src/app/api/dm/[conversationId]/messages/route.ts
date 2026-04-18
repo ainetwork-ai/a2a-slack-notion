@@ -234,12 +234,19 @@ export async function POST(
 
       // External A2A agent
       if (member.a2aUrl) {
+        const skillId =
+          metadata && typeof metadata === "object" && typeof (metadata as { skillId?: unknown }).skillId === "string"
+            ? (metadata as { skillId: string }).skillId
+            : undefined;
         sendToAgent({
           agentId: member.userId,
           text: content,
           conversationId,
-        }).catch(() => {
-          // Fire-and-forget
+          skillId,
+          messageId: message.id,
+          senderName: user.displayName,
+        }).catch((err) => {
+          console.error(`[dm-message] sendToAgent failed for ${member.displayName}:`, err);
         });
       }
     }

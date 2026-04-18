@@ -382,15 +382,23 @@ export async function POST(
             }))
           );
 
-          // Send to agent users asynchronously
+          // Send to agent users asynchronously. Pass skillId from metadata so
+          // skill-invocations from the composer actually reach the agent with the hint.
+          const skillId =
+            metadata && typeof metadata === "object" && typeof (metadata as { skillId?: unknown }).skillId === "string"
+              ? (metadata as { skillId: string }).skillId
+              : undefined;
           const agentUsers = mentionedUsers.filter((u) => u.isAgent);
           for (const agent of agentUsers) {
             sendToAgent({
               agentId: agent.id,
               text: content,
               channelId,
-            }).catch(() => {
-              // Async fire-and-forget, don't block response
+              skillId,
+              messageId: message.id,
+              senderName: user.displayName,
+            }).catch((err) => {
+              console.error(`[channel-message] sendToAgent failed for ${agent.displayName}:`, err);
             });
           }
         }

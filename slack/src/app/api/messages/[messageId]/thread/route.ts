@@ -3,6 +3,7 @@ import { users, channels, channelMembers, messages, reactions, mentions, files, 
 import { eq, and, desc, lt, sql, inArray, or, ilike } from "drizzle-orm";
 import { requireAuth } from "@/lib/auth/middleware";
 import { NextRequest, NextResponse } from "next/server";
+import { sendToAgent } from "@/lib/a2a/message-bridge";
 
 export async function GET(
   _request: NextRequest,
@@ -91,7 +92,7 @@ export async function POST(
   }
 
   const body = await request.json();
-  const { content } = body;
+  const { content, metadata } = body;
 
   if (!content || typeof content !== "string") {
     return NextResponse.json({ error: "Content is required" }, { status: 400 });
@@ -105,6 +106,7 @@ export async function POST(
       parentId: messageId,
       userId: user.id,
       content,
+      metadata: metadata || null,
     })
     .returning();
 
@@ -113,6 +115,70 @@ export async function POST(
     .update(messages)
     .set({ threadCount: sql`${messages.threadCount} + 1`, updatedAt: new Date() })
     .where(eq(messages.id, messageId));
+
+  // Parse @mentions + dispatch to agent(s). Thread replies previously
+  // skipped this, so @agent mentions in a thread never triggered a response.
+  {
+    const broadcastPattern = /@(channel|here|everyone)\b/i;
+    if (!broadcastPattern.test(content)) {
+      const mentionPattern = /@(\S+)/g;
+      const mentionedNames: string[] = [];
+      let m: RegExpExecArray | null;
+      while ((m = mentionPattern.exec(content)) !== null) {
+        const token = m[1];
+        mentionedNames.push(token);
+        const firstWord = token.split(/[(,]/)[0];
+        if (firstWord && firstWord !== token) mentionedNames.push(firstWord);
+      }
+
+      if (mentionedNames.length > 0) {
+        const mentionedUsers = await db
+          .select()
+          .from(users)
+          .where(
+            or(
+              inArray(users.displayName, mentionedNames),
+              ...mentionedNames.map((n) => ilike(users.displayName, `${n}%`))
+            )
+          );
+
+        if (mentionedUsers.length > 0) {
+          // Store mention rows + notifications
+          await db.insert(mentions).values(
+            mentionedUsers.map((u) => ({ messageId: reply.id, userId: u.id }))
+          );
+          const mentionedIds = new Set(mentionedUsers.map((u) => u.id));
+          const notifyIds = Array.from(mentionedIds).filter((id) => id !== user.id);
+          if (notifyIds.length > 0) {
+            await db.insert(notifications).values(
+              notifyIds.map((userId) => ({ userId, messageId: reply.id, type: "mention" }))
+            );
+          }
+
+          // Fire-and-forget agent dispatches. Pass skillId from metadata so
+          // skill-invocation replies actually reach the agent with the hint.
+          const skillId =
+            metadata && typeof metadata === "object" && typeof (metadata as { skillId?: unknown }).skillId === "string"
+              ? (metadata as { skillId: string }).skillId
+              : undefined;
+          const agentUsers = mentionedUsers.filter((u) => u.isAgent);
+          for (const agent of agentUsers) {
+            sendToAgent({
+              agentId: agent.id,
+              text: content,
+              channelId: parent.channelId ?? undefined,
+              conversationId: parent.conversationId ?? undefined,
+              skillId,
+              messageId: reply.id,
+              senderName: user.displayName,
+            }).catch((err) => {
+              console.error(`[thread-reply] sendToAgent failed for ${agent.displayName}:`, err);
+            });
+          }
+        }
+      }
+    }
+  }
 
   // Auto-subscribe the replier to the thread
   await db

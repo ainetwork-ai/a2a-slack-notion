@@ -60,6 +60,10 @@ export default function MessageInput({
   const [emojiIndex, setEmojiIndex] = useState(0);
   const [skillSuggestions, setSkillSuggestions] = useState<Array<{ name: string; description: string; skillId: string }>>([]);
   const [skillIndex, setSkillIndex] = useState(0);
+  // Tracks the last skill picked from the dropdown so we can attach skillId to
+  // the outgoing metadata. Cleared once the content is edited away from the
+  // picked phrase or after a successful send.
+  const [pendingSkillInvocation, setPendingSkillInvocation] = useState<{ phrase: string; skillId: string } | null>(null);
   const [ephemeralMessage, setEphemeralMessage] = useState<string | null>(null);
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -226,14 +230,19 @@ export default function MessageInput({
     setIsSending(true);
     try {
       await stopTyping();
+      // Attach skillId if the content still starts with the invoked skill phrase.
+      const skillMeta = pendingSkillInvocation && trimmed.startsWith(pendingSkillInvocation.phrase)
+        ? { skillId: pendingSkillInvocation.skillId }
+        : {};
       if (pendingFile) {
         const messageContent = replaceShortcodes(trimmed || `[${pendingFile.fileName}](${pendingFile.url})`);
-        await onSend(messageContent, { fileUrl: pendingFile.url, fileName: pendingFile.fileName, mimeType: pendingFile.mimeType });
+        await onSend(messageContent, { fileUrl: pendingFile.url, fileName: pendingFile.fileName, mimeType: pendingFile.mimeType, ...skillMeta });
         setPendingFile(null);
       } else {
-        await onSend(replaceShortcodes(trimmed));
+        await onSend(replaceShortcodes(trimmed), Object.keys(skillMeta).length ? skillMeta : undefined);
       }
       setContent('');
+      setPendingSkillInvocation(null);
       if (textareaRef.current) textareaRef.current.style.height = 'auto';
 
       // Item 1: Check for @mentions of non-members in channel messages
@@ -458,6 +467,7 @@ export default function MessageInput({
         e.preventDefault();
         const skill = skillSuggestions[skillIndex];
         setContent(skill.name + ' ');
+        setPendingSkillInvocation({ phrase: skill.name, skillId: skill.skillId });
         setSkillSuggestions([]);
         setTimeout(() => {
           textareaRef.current?.focus();
@@ -763,6 +773,7 @@ export default function MessageInput({
               key={skill.skillId}
               onClick={() => {
                 setContent(skill.name + ' ');
+                setPendingSkillInvocation({ phrase: skill.name, skillId: skill.skillId });
                 setSkillSuggestions([]);
                 setTimeout(() => {
                   textareaRef.current?.focus();
